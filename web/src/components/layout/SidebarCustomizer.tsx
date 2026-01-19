@@ -58,6 +58,7 @@ const KNOWN_ROUTES: KnownRoute[] = [
   { href: '/events', name: 'Events', description: 'Real-time cluster events, warnings, and audit logs', icon: 'Activity', category: 'Core Dashboards' },
   { href: '/security', name: 'Security', description: 'Security policies, RBAC, vulnerabilities, and compliance', icon: 'Shield', category: 'Core Dashboards' },
   { href: '/gitops', name: 'GitOps', description: 'ArgoCD, Flux, Helm releases, and deployment drift detection', icon: 'GitBranch', category: 'Core Dashboards' },
+  { href: '/gpu-reservations', name: 'GPU Reservations', description: 'Schedule and manage GPU reservations with calendar and quota management', icon: 'Zap', category: 'Core Dashboards' },
   // Applications
   { href: '/apps', name: 'Applications', description: 'Application deployments and status across clusters', icon: 'Boxes', category: 'Applications' },
   // Resource Pages

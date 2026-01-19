@@ -12,6 +12,7 @@ import { Compute } from './components/compute/Compute'
 import { Network } from './components/network/Network'
 import { Security } from './components/security/Security'
 import { GitOps } from './components/gitops/GitOps'
+import { GPUReservations } from './components/gpu/GPUReservations'
 import { CardHistory } from './components/history/CardHistory'
 import { CardHistoryEntry } from './hooks/useCardHistory'
 import { UserManagementPage } from './pages/UserManagement'
@@ -196,6 +197,18 @@ function App() {
               <OnboardedRoute>
                 <Layout>
                   <GitOps />
+                </Layout>
+              </OnboardedRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/gpu-reservations"
+          element={
+            <ProtectedRoute>
+              <OnboardedRoute>
+                <Layout>
+                  <GPUReservations />
                 </Layout>
               </OnboardedRoute>
             </ProtectedRoute>
