@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Pencil, X, Check, Loader2, Hourglass, WifiOff, ChevronRight, CheckCircle, AlertTriangle, ChevronDown, HardDrive, Network, FolderOpen, Plus, Trash2, Box, Layers, Server, List, GitBranch, Eye, Terminal, FileText, Info, Activity, Briefcase, Lock, Settings, LayoutGrid, Wrench } from 'lucide-react'
 import { useClusters, useClusterHealth, usePodIssues, useDeploymentIssues, useGPUNodes, useNamespaceStats, useNodes, usePods, useDeployments, useServices, useJobs, useHPAs, useConfigMaps, useSecrets, usePodLogs, ClusterInfo, refreshSingleCluster } from '../../hooks/useMCP'
 import { AddCardModal } from '../dashboard/AddCardModal'
@@ -1376,8 +1377,24 @@ export function Clusters() {
     deleteClusterGroup,
     selectClusterGroup,
   } = useGlobalFilters()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [selectedCluster, setSelectedCluster] = useState<string | null>(null)
-  const [filter, setFilter] = useState<'all' | 'healthy' | 'unhealthy' | 'unreachable'>('all')
+
+  // Read filter from URL, default to 'all'
+  const urlStatus = searchParams.get('status')
+  const initialFilter = (urlStatus === 'healthy' || urlStatus === 'unhealthy' || urlStatus === 'unreachable') ? urlStatus : 'all'
+  const [filter, setFilterState] = useState<'all' | 'healthy' | 'unhealthy' | 'unreachable'>(initialFilter)
+
+  // Sync filter with URL
+  const setFilter = useCallback((newFilter: 'all' | 'healthy' | 'unhealthy' | 'unreachable') => {
+    setFilterState(newFilter)
+    if (newFilter === 'all') {
+      searchParams.delete('status')
+    } else {
+      searchParams.set('status', newFilter)
+    }
+    setSearchParams(searchParams, { replace: true })
+  }, [searchParams, setSearchParams])
   const [sortBy, setSortBy] = useState<'name' | 'nodes' | 'pods' | 'health'>('name')
   const [sortAsc, setSortAsc] = useState(true)
   const [renamingCluster, setRenamingCluster] = useState<string | null>(null)

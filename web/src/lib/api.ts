@@ -14,19 +14,16 @@ class ApiClient {
 
   async get<T = any>(path: string, options?: { headers?: Record<string, string> }): Promise<{ data: T }> {
     const headers = { ...this.getHeaders(), ...options?.headers }
-    console.log(`[API] GET ${path}`, { hasAuth: !!headers['Authorization'] })
     const response = await fetch(`${API_BASE}${path}`, {
       method: 'GET',
       headers,
     })
     if (!response.ok) {
       const errorText = await response.text().catch(() => '')
-      console.error(`[API] Error ${response.status}: ${errorText}`)
       if (response.status === 401) {
-        // Clear invalid token
         console.warn('[API] Unauthorized - token may be expired')
       }
-      throw new Error(`API error: ${response.status}`)
+      throw new Error(errorText || `API error: ${response.status}`)
     }
     const data = await response.json()
     return { data }

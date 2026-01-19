@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import * as Icons from 'lucide-react'
-import { Plus, Pencil, ChevronLeft, ChevronRight, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react'
+import { Plus, Pencil, ChevronLeft, ChevronRight, CheckCircle2, AlertTriangle, WifiOff } from 'lucide-react'
 import { cn } from '../../lib/cn'
 import { SnoozedCards } from './SnoozedCards'
 import { SidebarCustomizer } from './SidebarCustomizer'
@@ -14,9 +14,31 @@ export function Sidebar() {
   const { clusters } = useClusters()
   const [isCustomizerOpen, setIsCustomizerOpen] = useState(false)
   const dashboardContext = useDashboardContextOptional()
+  const navigate = useNavigate()
+  const location = useLocation()
 
-  const healthyClusters = clusters.filter((c) => c.healthy).length
-  const unhealthyClusters = clusters.filter((c) => !c.healthy).length
+  // Cluster status counts
+  const healthyClusters = clusters.filter((c) => c.healthy === true && c.reachable !== false).length
+  const unhealthyClusters = clusters.filter((c) => c.healthy === false && c.reachable !== false).length
+  const unreachableClusters = clusters.filter((c) => c.reachable === false).length
+
+  // Handle Add Card click - navigate to dashboard first if not there
+  const handleAddCardClick = () => {
+    if (location.pathname !== '/') {
+      navigate('/')
+      // Use setTimeout to allow navigation to complete before opening modal
+      setTimeout(() => {
+        dashboardContext?.openAddCardModal()
+      }, 100)
+    } else {
+      dashboardContext?.openAddCardModal()
+    }
+  }
+
+  // Navigate to clusters page with status filter
+  const handleClusterStatusClick = (status: 'healthy' | 'unhealthy' | 'unreachable') => {
+    navigate(`/clusters?status=${status}`)
+  }
 
   const renderIcon = (iconName: string, className?: string) => {
     const IconComponent = (Icons as unknown as Record<string, React.ComponentType<{ className?: string }>>)[iconName]
@@ -75,7 +97,7 @@ export function Sidebar() {
         {!config.collapsed && (
           <div className="mt-6">
             <button
-              onClick={() => dashboardContext?.openAddCardModal()}
+              onClick={handleAddCardClick}
               className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-dashed border-border text-muted-foreground hover:text-foreground hover:border-purple-500/50 hover:bg-purple-500/10 transition-all duration-200"
             >
               <Plus className="w-4 h-4" />
@@ -91,27 +113,36 @@ export function Sidebar() {
               Cluster Status
             </h4>
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
+              <button
+                onClick={() => handleClusterStatusClick('healthy')}
+                className="w-full flex items-center justify-between hover:bg-secondary/50 rounded px-1 py-0.5 transition-colors"
+              >
                 <span className="flex items-center gap-1.5 text-sm text-foreground">
                   <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />
                   Healthy
                 </span>
                 <span className="text-sm font-medium text-green-400">{healthyClusters}</span>
-              </div>
-              <div className="flex items-center justify-between">
+              </button>
+              <button
+                onClick={() => handleClusterStatusClick('unhealthy')}
+                className="w-full flex items-center justify-between hover:bg-secondary/50 rounded px-1 py-0.5 transition-colors"
+              >
                 <span className="flex items-center gap-1.5 text-sm text-foreground">
-                  <AlertTriangle className="w-3.5 h-3.5 text-yellow-400" />
-                  Warning
+                  <AlertTriangle className="w-3.5 h-3.5 text-orange-400" />
+                  Unhealthy
                 </span>
-                <span className="text-sm font-medium text-yellow-400">0</span>
-              </div>
-              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-orange-400">{unhealthyClusters}</span>
+              </button>
+              <button
+                onClick={() => handleClusterStatusClick('unreachable')}
+                className="w-full flex items-center justify-between hover:bg-secondary/50 rounded px-1 py-0.5 transition-colors"
+              >
                 <span className="flex items-center gap-1.5 text-sm text-foreground">
-                  <XCircle className="w-3.5 h-3.5 text-red-400" />
-                  Critical
+                  <WifiOff className="w-3.5 h-3.5 text-yellow-400" />
+                  Unreachable
                 </span>
-                <span className="text-sm font-medium text-red-400">{unhealthyClusters}</span>
-              </div>
+                <span className="text-sm font-medium text-yellow-400">{unreachableClusters}</span>
+              </button>
             </div>
           </div>
         )}

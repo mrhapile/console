@@ -61,21 +61,34 @@ export function NamespaceManager() {
     setLoading(true)
     setError(null)
 
-    try {
-      const allNamespaces: NamespaceDetails[] = []
-      for (const cluster of adminClusters) {
-        const response = await api.get(`/namespaces?cluster=${cluster}`)
-        if (response.data) {
-          allNamespaces.push(...response.data)
+    const allNamespaces: NamespaceDetails[] = []
+    const failedClusters: string[] = []
+
+    // Fetch namespaces from each cluster in parallel, collecting successes and failures
+    await Promise.all(
+      adminClusters.map(async (cluster) => {
+        try {
+          const response = await api.get(`/namespaces?cluster=${cluster}`)
+          if (response.data && Array.isArray(response.data)) {
+            allNamespaces.push(...response.data)
+          }
+        } catch (err) {
+          // Don't fail completely, just note which clusters failed
+          failedClusters.push(cluster)
         }
-      }
-      setNamespaces(allNamespaces)
-    } catch (err) {
-      console.error('Failed to fetch namespaces:', err)
-      setError('Failed to fetch namespaces')
-    } finally {
-      setLoading(false)
+      })
+    )
+
+    setNamespaces(allNamespaces)
+
+    if (failedClusters.length > 0 && allNamespaces.length === 0) {
+      setError(`Failed to fetch namespaces from: ${failedClusters.join(', ')}`)
+    } else if (failedClusters.length > 0) {
+      // Partial success - show warning but don't set as error
+      console.warn(`Some clusters failed: ${failedClusters.join(', ')}`)
     }
+
+    setLoading(false)
   }, [adminClusters])
 
   const fetchAccess = useCallback(async (namespace: NamespaceDetails) => {
