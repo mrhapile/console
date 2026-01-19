@@ -33,11 +33,14 @@ interface NamespaceAccessEntry {
   roleKind: string
 }
 
+// Cache for namespace data per cluster - persists across filter changes
+const namespaceCache = new Map<string, NamespaceDetails[]>()
+
 export function NamespaceManager() {
   const { clusters, isLoading: clustersLoading } = useClusters()
   const { selectedClusters, isAllClustersSelected } = useGlobalFilters()
   // Note: We don't check permissions upfront - the API will return auth errors for inaccessible clusters
-  const [namespaces, setNamespaces] = useState<NamespaceDetails[]>([])
+  const [allNamespaces, setAllNamespaces] = useState<NamespaceDetails[]>([])
   const [loading, setLoading] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedNamespace, setSelectedNamespace] = useState<NamespaceDetails | null>(null)
@@ -45,11 +48,15 @@ export function NamespaceManager() {
   const [accessLoading, setAccessLoading] = useState(false)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showGrantAccessModal, setShowGrantAccessModal] = useState(false)
+  const [namespaceToDelete, setNamespaceToDelete] = useState<NamespaceDetails | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   // Track if we've fetched to prevent infinite loops
   const hasFetchedRef = useRef(false)
   const lastFetchKeyRef = useRef<string>('')
+
+  // Get all available clusters
+  const allClusterNames = useMemo(() => clusters.map(c => c.name), [clusters])
 
   // Get target clusters based on global filter selection
   // We don't check permissions upfront - let the API handle auth errors per-cluster
@@ -59,46 +66,96 @@ export function NamespaceManager() {
       : selectedClusters
   }, [clusters, selectedClusters, isAllClustersSelected])
 
-  // Create a stable key for dependency tracking
-  const targetClustersKey = useMemo(() => [...targetClusters].sort().join(','), [targetClusters])
 
+  // Filter namespaces from cache based on selected clusters (no refetch needed)
+  const namespaces = useMemo(() => {
+    return allNamespaces.filter(ns => targetClusters.includes(ns.cluster))
+  }, [allNamespaces, targetClusters])
+
+  // Fetch namespaces from all available clusters and cache them
+  // Filter changes will just filter the cached data without refetching
   const fetchNamespaces = useCallback(async (force = false) => {
-    // Prevent infinite loops - only fetch if key changed or forced
-    if (!force && lastFetchKeyRef.current === targetClustersKey && hasFetchedRef.current) {
+    // Determine which clusters to fetch
+    const clustersToFetch = force
+      ? allClusterNames // Force refresh fetches all clusters
+      : allClusterNames.filter(c => !namespaceCache.has(c)) // Only fetch uncached clusters
+
+    // If nothing to fetch and we have cache, use cached data
+    if (clustersToFetch.length === 0 && !force) {
+      // Build allNamespaces from cache
+      const cachedNamespaces: NamespaceDetails[] = []
+      for (const cluster of allClusterNames) {
+        const cached = namespaceCache.get(cluster)
+        if (cached) cachedNamespaces.push(...cached)
+      }
+      setAllNamespaces(cachedNamespaces)
       return
     }
 
-    if (targetClusters.length === 0) {
-      setNamespaces([])
+    // Prevent infinite loops
+    const fetchKey = [...clustersToFetch].sort().join(',')
+    if (!force && lastFetchKeyRef.current === fetchKey && hasFetchedRef.current) {
+      return
+    }
+
+    if (allClusterNames.length === 0) {
+      setAllNamespaces([])
       return
     }
 
     hasFetchedRef.current = true
-    lastFetchKeyRef.current = targetClustersKey
+    lastFetchKeyRef.current = fetchKey
     setLoading(true)
     setError(null)
 
-    const allNamespaces: NamespaceDetails[] = []
     const failedClusters: string[] = []
 
-    // Fetch namespaces from each cluster in parallel, collecting successes and failures
+    // Fetch namespaces from clusters that need fetching
     await Promise.all(
-      targetClusters.map(async (cluster) => {
+      clustersToFetch.map(async (cluster) => {
         try {
-          const response = await api.get(`/namespaces?cluster=${encodeURIComponent(cluster)}`)
-          if (response.data && Array.isArray(response.data)) {
-            allNamespaces.push(...response.data)
-          }
+          // Use MCP pods endpoint to get namespace information
+          const response = await api.get<{ pods: Array<{ namespace: string; status: string }> }>(
+            `/api/mcp/pods?cluster=${encodeURIComponent(cluster)}&limit=1000`
+          )
+
+          // Extract unique namespaces from pods
+          const nsSet = new Set<string>()
+          response.data.pods?.forEach(pod => {
+            if (pod.namespace) nsSet.add(pod.namespace)
+          })
+
+          // Convert to NamespaceDetails and cache
+          const clusterNamespaces: NamespaceDetails[] = []
+          nsSet.forEach(ns => {
+            clusterNamespaces.push({
+              name: ns,
+              cluster,
+              status: 'Active',
+              createdAt: new Date().toISOString(),
+            })
+          })
+          namespaceCache.set(cluster, clusterNamespaces)
         } catch (err) {
           // Don't fail completely, just note which clusters failed
           failedClusters.push(cluster)
+          // Still cache empty array to prevent repeated failed fetches
+          if (!namespaceCache.has(cluster)) {
+            namespaceCache.set(cluster, [])
+          }
         }
       })
     )
 
-    setNamespaces(allNamespaces)
+    // Build allNamespaces from cache (includes both new and existing cached data)
+    const newAllNamespaces: NamespaceDetails[] = []
+    for (const cluster of allClusterNames) {
+      const cached = namespaceCache.get(cluster)
+      if (cached) newAllNamespaces.push(...cached)
+    }
+    setAllNamespaces(newAllNamespaces)
 
-    if (failedClusters.length > 0 && allNamespaces.length === 0) {
+    if (failedClusters.length > 0 && newAllNamespaces.length === 0) {
       setError(`Failed to fetch namespaces from: ${failedClusters.join(', ')}`)
     } else if (failedClusters.length > 0) {
       // Partial success - show warning but don't set as error
@@ -106,7 +163,7 @@ export function NamespaceManager() {
     }
 
     setLoading(false)
-  }, [targetClusters, targetClustersKey])
+  }, [allClusterNames])
 
   const fetchAccess = useCallback(async (namespace: NamespaceDetails) => {
     setAccessLoading(true)
@@ -121,15 +178,15 @@ export function NamespaceManager() {
     }
   }, [])
 
-  // Fetch namespaces when admin clusters change
+  // Initial fetch when clusters are loaded - fetches ALL clusters to populate cache
+  // Subsequent filter changes will just filter cached data, no refetch needed
   useEffect(() => {
-    // Only fetch if we have clusters and haven't fetched this key yet
-    // Also skip if clusters are still loading (empty)
-    if (targetClustersKey && clusters.length > 0 && targetClustersKey !== lastFetchKeyRef.current) {
+    // Only fetch if we have clusters loaded
+    if (clusters.length > 0) {
       fetchNamespaces()
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [targetClustersKey, clusters.length])
+  }, [clusters.length])
 
   useEffect(() => {
     if (selectedNamespace) {
@@ -156,19 +213,25 @@ export function NamespaceManager() {
   )
 
   const handleDeleteNamespace = async (ns: NamespaceDetails) => {
-    if (!confirm(`Are you sure you want to delete namespace "${ns.name}" from cluster "${ns.cluster}"? This action cannot be undone.`)) {
-      return
-    }
+    setNamespaceToDelete(ns)
+  }
+
+  const confirmDeleteNamespace = async () => {
+    if (!namespaceToDelete) return
 
     try {
-      await api.delete(`/namespaces/${ns.name}?cluster=${ns.cluster}`)
-      fetchNamespaces()
-      if (selectedNamespace?.name === ns.name && selectedNamespace?.cluster === ns.cluster) {
+      await api.delete(`/namespaces/${namespaceToDelete.name}?cluster=${namespaceToDelete.cluster}`)
+      // Clear cache for this cluster and refresh
+      namespaceCache.delete(namespaceToDelete.cluster)
+      fetchNamespaces(true)
+      if (selectedNamespace?.name === namespaceToDelete.name && selectedNamespace?.cluster === namespaceToDelete.cluster) {
         setSelectedNamespace(null)
       }
+      setNamespaceToDelete(null)
     } catch (err) {
       console.error('Failed to delete namespace:', err)
       setError('Failed to delete namespace')
+      setNamespaceToDelete(null)
     }
   }
 
@@ -387,9 +450,11 @@ export function NamespaceManager() {
         <CreateNamespaceModal
           clusters={targetClusters}
           onClose={() => setShowCreateModal(false)}
-          onCreated={() => {
+          onCreated={(cluster: string) => {
             setShowCreateModal(false)
-            fetchNamespaces()
+            // Clear cache for this cluster and refresh
+            namespaceCache.delete(cluster)
+            fetchNamespaces(true)
           }}
         />
       )}
@@ -398,11 +463,21 @@ export function NamespaceManager() {
       {showGrantAccessModal && selectedNamespace && (
         <GrantAccessModal
           namespace={selectedNamespace}
+          existingAccess={accessEntries}
           onClose={() => setShowGrantAccessModal(false)}
           onGranted={() => {
             setShowGrantAccessModal(false)
             fetchAccess(selectedNamespace)
           }}
+        />
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {namespaceToDelete && (
+        <DeleteConfirmModal
+          namespace={namespaceToDelete}
+          onClose={() => setNamespaceToDelete(null)}
+          onConfirm={confirmDeleteNamespace}
         />
       )}
     </div>
@@ -465,10 +540,104 @@ function NamespaceCard({ namespace, isSelected, onSelect, onDelete, isSystem }: 
   )
 }
 
+// Common users/groups for namespace access
+const AVAILABLE_USERS = [
+  'admin@example.com',
+  'developer@example.com',
+  'operator@example.com',
+  'viewer@example.com',
+  'ci-bot@example.com',
+]
+
+const AVAILABLE_GROUPS = [
+  'developers',
+  'operators',
+  'viewers',
+  'platform-team',
+  'sre-team',
+]
+
+interface DeleteConfirmModalProps {
+  namespace: NamespaceDetails
+  onClose: () => void
+  onConfirm: () => void
+}
+
+function DeleteConfirmModal({ namespace, onClose, onConfirm }: DeleteConfirmModalProps) {
+  const [confirmText, setConfirmText] = useState('')
+  const [deleting, setDeleting] = useState(false)
+
+  const canDelete = confirmText === namespace.name
+
+  const handleDelete = async () => {
+    if (!canDelete) return
+    setDeleting(true)
+    await onConfirm()
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="glass rounded-xl p-6 w-full max-w-md">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
+            <Trash2 className="w-5 h-5 text-red-400" />
+          </div>
+          <div>
+            <h2 className="text-xl font-semibold text-white">Delete Namespace</h2>
+            <p className="text-sm text-muted-foreground">This action cannot be undone</p>
+          </div>
+        </div>
+
+        <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30">
+          <p className="text-sm text-red-300">
+            You are about to delete namespace <strong>"{namespace.name}"</strong> from cluster <strong>"{namespace.cluster}"</strong>.
+            This will permanently delete all resources within the namespace.
+          </p>
+        </div>
+
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-muted-foreground mb-1">
+            Type <span className="text-red-400 font-mono">{namespace.name}</span> to confirm
+          </label>
+          <input
+            type="text"
+            value={confirmText}
+            onChange={(e) => setConfirmText(e.target.value)}
+            placeholder="Enter namespace name"
+            className="w-full px-3 py-2 rounded-lg bg-secondary border border-border text-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-red-500/50"
+          />
+        </div>
+
+        <div className="flex justify-end gap-3">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-lg text-muted-foreground hover:text-white transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleDelete}
+            disabled={!canDelete || deleting}
+            className="px-4 py-2 rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {deleting ? 'Deleting...' : 'Delete Namespace'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 interface CreateNamespaceModalProps {
   clusters: string[]
   onClose: () => void
-  onCreated: () => void
+  onCreated: (cluster: string) => void
+}
+
+interface InitialAccessEntry {
+  type: 'User' | 'Group'
+  name: string
+  role: 'cluster-admin' | 'admin' | 'edit' | 'view'
 }
 
 function CreateNamespaceModal({ clusters, onClose, onCreated }: CreateNamespaceModalProps) {
@@ -477,6 +646,31 @@ function CreateNamespaceModal({ clusters, onClose, onCreated }: CreateNamespaceM
   const [teamLabel, setTeamLabel] = useState('')
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [initialAccess, setInitialAccess] = useState<InitialAccessEntry[]>([])
+  const [showUserDropdown, setShowUserDropdown] = useState(false)
+  const [showGroupDropdown, setShowGroupDropdown] = useState(false)
+
+  const addUserAccess = (user: string) => {
+    if (!initialAccess.some(a => a.type === 'User' && a.name === user)) {
+      setInitialAccess([...initialAccess, { type: 'User', name: user, role: 'edit' }])
+    }
+    setShowUserDropdown(false)
+  }
+
+  const addGroupAccess = (group: string) => {
+    if (!initialAccess.some(a => a.type === 'Group' && a.name === group)) {
+      setInitialAccess([...initialAccess, { type: 'Group', name: group, role: 'edit' }])
+    }
+    setShowGroupDropdown(false)
+  }
+
+  const removeAccess = (index: number) => {
+    setInitialAccess(initialAccess.filter((_, i) => i !== index))
+  }
+
+  const updateAccessRole = (index: number, role: 'cluster-admin' | 'admin' | 'edit' | 'view') => {
+    setInitialAccess(initialAccess.map((a, i) => i === index ? { ...a, role } : a))
+  }
 
   const handleCreate = async () => {
     if (!name || !cluster) return
@@ -494,8 +688,9 @@ function CreateNamespaceModal({ clusters, onClose, onCreated }: CreateNamespaceM
         cluster,
         name,
         labels: Object.keys(labels).length > 0 ? labels : undefined,
+        initialAccess: initialAccess.length > 0 ? initialAccess : undefined,
       })
-      onCreated()
+      onCreated(cluster)
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to create namespace'
       setError(errorMessage)
@@ -504,9 +699,17 @@ function CreateNamespaceModal({ clusters, onClose, onCreated }: CreateNamespaceM
     }
   }
 
+  const availableUsers = AVAILABLE_USERS.filter(
+    u => !initialAccess.some(a => a.type === 'User' && a.name === u)
+  )
+
+  const availableGroups = AVAILABLE_GROUPS.filter(
+    g => !initialAccess.some(a => a.type === 'Group' && a.name === g)
+  )
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="glass rounded-xl p-6 w-full max-w-md">
+      <div className="glass rounded-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-semibold text-white">Create Namespace</h2>
           <button onClick={onClose} className="text-muted-foreground hover:text-white">
@@ -558,6 +761,118 @@ function CreateNamespaceModal({ clusters, onClose, onCreated }: CreateNamespaceM
               className="w-full px-3 py-2 rounded-lg bg-secondary border border-border text-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-500/50"
             />
           </div>
+
+          {/* Initial Access Section */}
+          <div>
+            <label className="block text-sm font-medium text-muted-foreground mb-2">
+              Grant Initial Access (optional)
+            </label>
+
+            {/* Add User/Group buttons */}
+            <div className="flex gap-2 mb-3">
+              <div className="relative">
+                <button
+                  onClick={() => setShowUserDropdown(!showUserDropdown)}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 transition-colors text-sm"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  Add User
+                </button>
+                {showUserDropdown && availableUsers.length > 0 && (
+                  <div className="absolute z-10 top-full left-0 mt-1 w-48 bg-card border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                    {availableUsers.map(user => (
+                      <button
+                        key={user}
+                        onClick={() => addUserAccess(user)}
+                        className="w-full px-3 py-2 text-left text-sm text-white hover:bg-secondary/50 transition-colors"
+                      >
+                        {user}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="relative">
+                <button
+                  onClick={() => setShowGroupDropdown(!showGroupDropdown)}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 transition-colors text-sm"
+                >
+                  <Shield className="w-4 h-4" />
+                  Add Group
+                </button>
+                {showGroupDropdown && availableGroups.length > 0 && (
+                  <div className="absolute z-10 top-full left-0 mt-1 w-48 bg-card border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                    {availableGroups.map(group => (
+                      <button
+                        key={group}
+                        onClick={() => addGroupAccess(group)}
+                        className="w-full px-3 py-2 text-left text-sm text-white hover:bg-secondary/50 transition-colors"
+                      >
+                        {group}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Close dropdowns overlay */}
+            {(showUserDropdown || showGroupDropdown) && (
+              <button
+                onClick={() => {
+                  setShowUserDropdown(false)
+                  setShowGroupDropdown(false)
+                }}
+                className="fixed inset-0 z-0"
+                aria-label="Close dropdown"
+              />
+            )}
+
+            {/* Selected access list */}
+            {initialAccess.length > 0 && (
+              <div className="space-y-2">
+                {initialAccess.map((entry, index) => (
+                  <div
+                    key={`${entry.type}-${entry.name}`}
+                    className="flex items-center justify-between p-2 rounded-lg bg-secondary/30"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs px-1.5 py-0.5 rounded ${
+                        entry.type === 'User' ? 'bg-blue-500/20 text-blue-400' : 'bg-purple-500/20 text-purple-400'
+                      }`}>
+                        {entry.type}
+                      </span>
+                      <span className="text-sm text-white">{entry.name}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={entry.role}
+                        onChange={(e) => updateAccessRole(index, e.target.value as 'cluster-admin' | 'admin' | 'edit' | 'view')}
+                        className="px-2 py-1 text-xs rounded bg-secondary border border-border text-white"
+                      >
+                        <option value="cluster-admin">Full Admin</option>
+                        <option value="admin">Admin</option>
+                        <option value="edit">Edit</option>
+                        <option value="view">View</option>
+                      </select>
+                      <button
+                        onClick={() => removeAccess(index)}
+                        className="p-1 rounded text-muted-foreground hover:text-red-400 hover:bg-red-500/10"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {initialAccess.length === 0 && (
+              <p className="text-xs text-muted-foreground">
+                No initial access configured. You can add users/groups after creation.
+              </p>
+            )}
+          </div>
         </div>
 
         <div className="flex justify-end gap-3 mt-6">
@@ -582,17 +897,57 @@ function CreateNamespaceModal({ clusters, onClose, onCreated }: CreateNamespaceM
 
 interface GrantAccessModalProps {
   namespace: NamespaceDetails
+  existingAccess: NamespaceAccessEntry[]
   onClose: () => void
   onGranted: () => void
 }
 
-function GrantAccessModal({ namespace, onClose, onGranted }: GrantAccessModalProps) {
+// Common users/groups discovered from RBAC (these would ideally come from cluster role bindings)
+const COMMON_SUBJECTS = {
+  User: [
+    'admin@example.com',
+    'developer@example.com',
+    'operator@example.com',
+    'viewer@example.com',
+    'ci-bot@example.com',
+  ],
+  Group: [
+    'system:authenticated',
+    'system:cluster-admins',
+    'developers',
+    'operators',
+    'viewers',
+    'platform-team',
+    'sre-team',
+  ],
+  ServiceAccount: [
+    'default',
+    'deployer',
+    'argocd-application-controller',
+    'flux-reconciler',
+    'prometheus',
+  ],
+}
+
+function GrantAccessModal({ namespace, existingAccess, onClose, onGranted }: GrantAccessModalProps) {
   const [subjectKind, setSubjectKind] = useState<'User' | 'Group' | 'ServiceAccount'>('User')
   const [subjectName, setSubjectName] = useState('')
   const [subjectNS, setSubjectNS] = useState('')
   const [role, setRole] = useState('admin')
   const [granting, setGranting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showDropdown, setShowDropdown] = useState(false)
+
+  // Filter out subjects that already have access
+  const existingSubjectNames = new Set(
+    existingAccess
+      .filter(e => e.subjectKind === subjectKind)
+      .map(e => e.subjectName)
+  )
+
+  const availableSubjects = COMMON_SUBJECTS[subjectKind].filter(
+    name => !existingSubjectNames.has(name)
+  )
 
   const handleGrant = async () => {
     if (!subjectName) return
@@ -615,6 +970,11 @@ function GrantAccessModal({ namespace, onClose, onGranted }: GrantAccessModalPro
     } finally {
       setGranting(false)
     }
+  }
+
+  const selectSubject = (name: string) => {
+    setSubjectName(name)
+    setShowDropdown(false)
   }
 
   return (
@@ -641,7 +1001,10 @@ function GrantAccessModal({ namespace, onClose, onGranted }: GrantAccessModalPro
             <label className="block text-sm font-medium text-muted-foreground mb-1">Subject Type</label>
             <select
               value={subjectKind}
-              onChange={(e) => setSubjectKind(e.target.value as 'User' | 'Group' | 'ServiceAccount')}
+              onChange={(e) => {
+                setSubjectKind(e.target.value as 'User' | 'Group' | 'ServiceAccount')
+                setSubjectName('') // Clear selection when type changes
+              }}
               className="w-full px-3 py-2 rounded-lg bg-secondary border border-border text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
             >
               <option value="User">User</option>
@@ -650,17 +1013,50 @@ function GrantAccessModal({ namespace, onClose, onGranted }: GrantAccessModalPro
             </select>
           </div>
 
-          <div>
+          <div className="relative">
             <label className="block text-sm font-medium text-muted-foreground mb-1">
               {subjectKind === 'User' ? 'Username / Email' : subjectKind === 'Group' ? 'Group Name' : 'Service Account Name'}
             </label>
-            <input
-              type="text"
-              value={subjectName}
-              onChange={(e) => setSubjectName(e.target.value)}
-              placeholder={subjectKind === 'User' ? 'alice@example.com' : subjectKind === 'Group' ? 'developers' : 'my-service-account'}
-              className="w-full px-3 py-2 rounded-lg bg-secondary border border-border text-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-            />
+            <div className="relative">
+              <input
+                type="text"
+                value={subjectName}
+                onChange={(e) => setSubjectName(e.target.value)}
+                onFocus={() => setShowDropdown(true)}
+                placeholder={subjectKind === 'User' ? 'Select or type a user...' : subjectKind === 'Group' ? 'Select or type a group...' : 'Select or type a service account...'}
+                className="w-full px-3 py-2 rounded-lg bg-secondary border border-border text-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+              />
+              {showDropdown && availableSubjects.length > 0 && (
+                <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                  {availableSubjects
+                    .filter(name => !subjectName || name.toLowerCase().includes(subjectName.toLowerCase()))
+                    .map(name => (
+                      <button
+                        key={name}
+                        onClick={() => selectSubject(name)}
+                        className="w-full px-3 py-2 text-left text-sm text-white hover:bg-secondary/50 transition-colors"
+                      >
+                        {name}
+                      </button>
+                    ))}
+                  {subjectName && !availableSubjects.some(n => n.toLowerCase() === subjectName.toLowerCase()) && (
+                    <button
+                      onClick={() => selectSubject(subjectName)}
+                      className="w-full px-3 py-2 text-left text-sm text-blue-400 hover:bg-secondary/50 transition-colors border-t border-border"
+                    >
+                      Use "{subjectName}"
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+            {showDropdown && (
+              <button
+                onClick={() => setShowDropdown(false)}
+                className="fixed inset-0 z-0"
+                aria-label="Close dropdown"
+              />
+            )}
           </div>
 
           {subjectKind === 'ServiceAccount' && (
@@ -683,10 +1079,14 @@ function GrantAccessModal({ namespace, onClose, onGranted }: GrantAccessModalPro
               onChange={(e) => setRole(e.target.value)}
               className="w-full px-3 py-2 rounded-lg bg-secondary border border-border text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
             >
-              <option value="admin">Admin (full access)</option>
-              <option value="edit">Edit (create/update/delete resources)</option>
+              <option value="cluster-admin">Namespace Admin - Full Access (all resources, RBAC, secrets)</option>
+              <option value="admin">Admin (all resources except RBAC)</option>
+              <option value="edit">Edit (create/update/delete, no secrets/RBAC)</option>
               <option value="view">View (read-only)</option>
             </select>
+            <p className="text-xs text-muted-foreground mt-1">
+              These roles are scoped to this namespace only - not cluster-wide.
+            </p>
           </div>
         </div>
 
