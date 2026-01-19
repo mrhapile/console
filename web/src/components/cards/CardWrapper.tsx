@@ -1,5 +1,5 @@
 import { ReactNode, useState, useEffect, useCallback } from 'react'
-import { Maximize2, MoreVertical, Clock, X, Settings, Replace, Trash2, MessageCircle, RefreshCw } from 'lucide-react'
+import { Maximize2, MoreVertical, Clock, X, Settings, Replace, Trash2, MessageCircle, RefreshCw, MoveHorizontal, ChevronRight } from 'lucide-react'
 import { cn } from '../../lib/cn'
 import { useSnoozedCards } from '../../hooks/useSnoozedCards'
 import { ChatMessage } from './CardChat'
@@ -23,6 +23,15 @@ interface PendingSwap {
   swapAt: Date
 }
 
+// Card width options (in grid columns out of 12)
+const WIDTH_OPTIONS = [
+  { value: 3, label: 'Small', description: '1/4 width' },
+  { value: 4, label: 'Medium', description: '1/3 width' },
+  { value: 6, label: 'Large', description: '1/2 width' },
+  { value: 8, label: 'Wide', description: '2/3 width' },
+  { value: 12, label: 'Full', description: 'Full width' },
+]
+
 interface CardWrapperProps {
   cardId?: string
   cardType: string
@@ -37,12 +46,16 @@ interface CardWrapperProps {
   lastUpdated?: Date | null
   /** Whether this card uses demo/mock data instead of real data */
   isDemoData?: boolean
+  /** Current card width in grid columns (1-12) */
+  cardWidth?: number
   onSwap?: (newType: string) => void
   onSwapCancel?: () => void
   onConfigure?: () => void
   onReplace?: () => void
   onRemove?: () => void
   onRefresh?: () => void
+  /** Callback when card width is changed */
+  onWidthChange?: (newWidth: number) => void
   onChatMessage?: (message: string) => Promise<ChatMessage>
   onChatMessagesChange?: (messages: ChatMessage[]) => void
   children: ReactNode
@@ -130,12 +143,14 @@ export function CardWrapper({
   isRefreshing,
   lastUpdated,
   isDemoData,
+  cardWidth,
   onSwap,
   onSwapCancel,
   onConfigure,
   onReplace,
   onRemove,
   onRefresh,
+  onWidthChange,
   onChatMessage,
   onChatMessagesChange,
   children,
@@ -143,6 +158,7 @@ export function CardWrapper({
   const [isExpanded, setIsExpanded] = useState(false)
   const [showSummary, setShowSummary] = useState(false)
   const [showMenu, setShowMenu] = useState(false)
+  const [showResizeMenu, setShowResizeMenu] = useState(false)
   const [_timeRemaining, setTimeRemaining] = useState<number | null>(null)
   // Chat state reserved for future use
   // const [isChatOpen, setIsChatOpen] = useState(false)
@@ -198,6 +214,13 @@ export function CardWrapper({
       onSwap(pendingSwap.newType)
     }
   }, [pendingSwap, onSwap])
+
+  // Close resize submenu when main menu closes
+  useEffect(() => {
+    if (!showMenu) {
+      setShowResizeMenu(false)
+    }
+  }, [showMenu])
 
   // Silence unused variable warnings for future chat implementation
   void messages
@@ -297,6 +320,45 @@ export function CardWrapper({
                     <Settings className="w-4 h-4" />
                     Configure
                   </button>
+                  {/* Resize submenu */}
+                  {onWidthChange && (
+                    <div className="relative">
+                      <button
+                        onClick={() => setShowResizeMenu(!showResizeMenu)}
+                        className="w-full px-4 py-2 text-left text-sm text-muted-foreground hover:text-foreground hover:bg-secondary/50 flex items-center justify-between"
+                        title="Change card width"
+                      >
+                        <span className="flex items-center gap-2">
+                          <MoveHorizontal className="w-4 h-4" />
+                          Resize
+                        </span>
+                        <ChevronRight className={cn('w-4 h-4 transition-transform', showResizeMenu && 'rotate-90')} />
+                      </button>
+                      {showResizeMenu && (
+                        <div className="absolute left-full top-0 ml-1 w-36 glass rounded-lg py-1 z-20">
+                          {WIDTH_OPTIONS.map((option) => (
+                            <button
+                              key={option.value}
+                              onClick={() => {
+                                onWidthChange(option.value)
+                                setShowResizeMenu(false)
+                                setShowMenu(false)
+                              }}
+                              className={cn(
+                                'w-full px-3 py-2 text-left text-sm flex items-center justify-between',
+                                cardWidth === option.value
+                                  ? 'text-purple-400 bg-purple-500/10'
+                                  : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
+                              )}
+                            >
+                              <span>{option.label}</span>
+                              <span className="text-xs opacity-60">{option.description}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                   <button
                     onClick={() => {
                       setShowMenu(false)

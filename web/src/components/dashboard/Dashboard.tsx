@@ -390,6 +390,30 @@ export function Dashboard() {
     setIsReplaceCardOpen(true)
   }, [])
 
+  const handleWidthChange = useCallback(async (cardId: string, newWidth: number) => {
+    setLocalCards((prev) =>
+      prev.map((c) =>
+        c.id === cardId
+          ? { ...c, position: { ...c.position, w: newWidth } }
+          : c
+      )
+    )
+
+    // Persist width change to backend
+    if (dashboard?.id && !cardId.startsWith('demo-') && !cardId.startsWith('new-') && !cardId.startsWith('rec-') && !cardId.startsWith('template-') && !cardId.startsWith('restored-') && !cardId.startsWith('ai-')) {
+      try {
+        const card = localCards.find((c) => c.id === cardId)
+        if (card) {
+          await api.put(`/api/cards/${cardId}`, {
+            position: { ...card.position, w: newWidth }
+          })
+        }
+      } catch (error) {
+        console.error('Failed to update card width:', error)
+      }
+    }
+  }, [dashboard, localCards])
+
   const handleCardReplaced = useCallback((oldCardId: string, newCardType: string, newTitle?: string, newConfig?: Record<string, unknown>) => {
     // Find the old card to get its previous type
     const oldCard = localCards.find((c) => c.id === oldCardId)
@@ -598,6 +622,7 @@ export function Dashboard() {
                 onConfigure={() => handleConfigureCard(card)}
                 onReplace={() => handleReplaceCard(card)}
                 onRemove={() => handleRemoveCard(card.id)}
+                onWidthChange={(newWidth) => handleWidthChange(card.id, newWidth)}
                 isDragging={activeId === card.id}
               />
             ))}
@@ -661,10 +686,11 @@ interface SortableCardProps {
   onConfigure: () => void
   onReplace: () => void
   onRemove: () => void
+  onWidthChange: (newWidth: number) => void
   isDragging: boolean
 }
 
-function SortableCard({ card, onConfigure, onReplace, onRemove, isDragging }: SortableCardProps) {
+function SortableCard({ card, onConfigure, onReplace, onRemove, onWidthChange, isDragging }: SortableCardProps) {
   const {
     attributes,
     listeners,
@@ -691,9 +717,11 @@ function SortableCard({ card, onConfigure, onReplace, onRemove, isDragging }: So
         lastSummary={card.last_summary}
         title={card.title}
         isDemoData={DEMO_DATA_CARDS.has(card.card_type)}
+        cardWidth={card.position.w}
         onConfigure={onConfigure}
         onReplace={onReplace}
         onRemove={onRemove}
+        onWidthChange={onWidthChange}
         dragHandle={
           <button
             {...attributes}
