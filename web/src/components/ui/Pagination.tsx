@@ -1,4 +1,46 @@
+import { useState, useMemo, useCallback } from 'react'
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
+
+// Hook for managing pagination state
+export function usePagination<T>(items: T[], defaultPerPage: number = 5) {
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage, setItemsPerPage] = useState(defaultPerPage)
+
+  const totalItems = items.length
+  const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage))
+
+  // Reset to page 1 if current page is out of bounds
+  const safePage = Math.min(currentPage, totalPages)
+  if (safePage !== currentPage) {
+    setCurrentPage(safePage)
+  }
+
+  const paginatedItems = useMemo(() => {
+    const start = (safePage - 1) * itemsPerPage
+    return items.slice(start, start + itemsPerPage)
+  }, [items, safePage, itemsPerPage])
+
+  const goToPage = useCallback((page: number) => {
+    setCurrentPage(Math.max(1, Math.min(page, totalPages)))
+  }, [totalPages])
+
+  const setPerPage = useCallback((perPage: number) => {
+    setItemsPerPage(perPage)
+    setCurrentPage(1) // Reset to first page when changing page size
+  }, [])
+
+  return {
+    paginatedItems,
+    currentPage: safePage,
+    totalPages,
+    totalItems,
+    itemsPerPage,
+    goToPage,
+    setPerPage,
+    // Convenience: whether pagination is needed
+    needsPagination: totalItems > itemsPerPage,
+  }
+}
 
 interface PaginationProps {
   currentPage: number

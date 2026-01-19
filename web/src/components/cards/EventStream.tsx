@@ -5,6 +5,7 @@ import { useDrillDownActions } from '../../hooks/useDrillDown'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { ClusterBadge } from '../ui/ClusterBadge'
 import { CardControls, SortDirection } from '../ui/CardControls'
+import { Pagination, usePagination } from '../ui/Pagination'
 import { LimitedAccessWarning } from '../ui/LimitedAccessWarning'
 
 type SortByOption = 'time' | 'count' | 'type'
@@ -16,15 +17,15 @@ const SORT_OPTIONS = [
 ]
 
 export function EventStream() {
-  const [limit, setLimit] = useState<number | 'unlimited'>(5)
+  const [itemsPerPage, setItemsPerPage] = useState<number | 'unlimited'>(5)
   const [sortBy, setSortBy] = useState<SortByOption>('time')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
-  const effectiveLimit = limit === 'unlimited' ? 1000 : limit
-  const { events: rawEvents, isLoading, error, refetch } = useEvents(undefined, undefined, effectiveLimit)
+  // Fetch more events from API to enable pagination
+  const { events: rawEvents, isLoading, error, refetch } = useEvents(undefined, undefined, 100)
   const { filterByCluster } = useGlobalFilters()
 
   // Filter and sort events
-  const events = useMemo(() => {
+  const filteredAndSorted = useMemo(() => {
     const filtered = filterByCluster(rawEvents)
     const sorted = [...filtered].sort((a, b) => {
       let result = 0
@@ -35,6 +36,18 @@ export function EventStream() {
     })
     return sorted
   }, [rawEvents, sortBy, sortDirection, filterByCluster])
+
+  // Use pagination hook
+  const effectivePerPage = itemsPerPage === 'unlimited' ? 1000 : itemsPerPage
+  const {
+    paginatedItems: events,
+    currentPage,
+    totalPages,
+    totalItems,
+    itemsPerPage: perPage,
+    goToPage,
+    needsPagination,
+  } = usePagination(filteredAndSorted, effectivePerPage)
   const { drillToEvents, drillToPod, drillToDeployment } = useDrillDownActions()
 
   const handleEventClick = (event: typeof events[0]) => {
@@ -77,8 +90,8 @@ export function EventStream() {
         <span className="text-sm font-medium text-muted-foreground">Recent Events</span>
         <div className="flex items-center gap-2">
           <CardControls
-            limit={limit}
-            onLimitChange={setLimit}
+            limit={itemsPerPage}
+            onLimitChange={setItemsPerPage}
             sortBy={sortBy}
             sortOptions={SORT_OPTIONS}
             onSortChange={setSortBy}
@@ -96,7 +109,7 @@ export function EventStream() {
       </div>
 
       {/* Event list */}
-      <div className="flex-1 space-y-2 overflow-y-auto">
+      <div className="flex-1 space-y-2 overflow-y-auto min-h-0">
         {events.length === 0 ? (
           <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
             No recent events
@@ -139,6 +152,20 @@ export function EventStream() {
           })
         )}
       </div>
+
+      {/* Pagination */}
+      {needsPagination && itemsPerPage !== 'unlimited' && (
+        <div className="pt-2 border-t border-border/50 mt-2">
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={totalItems}
+            itemsPerPage={perPage}
+            onPageChange={goToPage}
+            showItemsPerPage={false}
+          />
+        </div>
+      )}
 
       <LimitedAccessWarning hasError={!!error} className="mt-2" />
     </div>

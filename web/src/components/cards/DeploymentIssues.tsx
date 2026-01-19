@@ -5,6 +5,7 @@ import { useDrillDownActions } from '../../hooks/useDrillDown'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { ClusterBadge } from '../ui/ClusterBadge'
 import { CardControls, SortDirection } from '../ui/CardControls'
+import { Pagination, usePagination } from '../ui/Pagination'
 import { Skeleton } from '../ui/Skeleton'
 import { LimitedAccessWarning } from '../ui/LimitedAccessWarning'
 
@@ -35,9 +36,10 @@ export function DeploymentIssues({ config }: DeploymentIssuesProps) {
   const { filterByCluster } = useGlobalFilters()
   const [sortBy, setSortBy] = useState<SortByOption>('status')
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
-  const [limit, setLimit] = useState<number | 'unlimited'>(5)
+  const [itemsPerPage, setItemsPerPage] = useState<number | 'unlimited'>(5)
 
-  const issues = useMemo(() => {
+  // Filter and sort issues
+  const filteredAndSorted = useMemo(() => {
     const filtered = filterByCluster(rawIssues)
     const sorted = [...filtered].sort((a, b) => {
       let result = 0
@@ -46,9 +48,20 @@ export function DeploymentIssues({ config }: DeploymentIssuesProps) {
       else if (sortBy === 'cluster') result = (a.cluster || '').localeCompare(b.cluster || '')
       return sortDirection === 'asc' ? result : -result
     })
-    if (limit === 'unlimited') return sorted
-    return sorted.slice(0, limit)
-  }, [rawIssues, sortBy, sortDirection, limit, filterByCluster])
+    return sorted
+  }, [rawIssues, sortBy, sortDirection, filterByCluster])
+
+  // Use pagination hook
+  const effectivePerPage = itemsPerPage === 'unlimited' ? 1000 : itemsPerPage
+  const {
+    paginatedItems: issues,
+    currentPage,
+    totalPages,
+    totalItems,
+    itemsPerPage: perPage,
+    goToPage,
+    needsPagination,
+  } = usePagination(filteredAndSorted, effectivePerPage)
 
   const handleDeploymentClick = (issue: DeploymentIssue) => {
     drillToDeployment(issue.cluster || 'default', issue.namespace, issue.name, {
@@ -128,8 +141,8 @@ export function DeploymentIssues({ config }: DeploymentIssuesProps) {
         </div>
         <div className="flex items-center gap-2">
           <CardControls
-            limit={limit}
-            onLimitChange={setLimit}
+            limit={itemsPerPage}
+            onLimitChange={setItemsPerPage}
             sortBy={sortBy}
             sortOptions={SORT_OPTIONS}
             onSortChange={setSortBy}
@@ -147,7 +160,7 @@ export function DeploymentIssues({ config }: DeploymentIssuesProps) {
       </div>
 
       {/* Issues list */}
-      <div className="flex-1 space-y-3 overflow-y-auto">
+      <div className="flex-1 space-y-3 overflow-y-auto min-h-0">
         {issues.map((issue, idx) => {
           const { icon: Icon, tooltip: iconTooltip } = getIssueIcon(issue.reason || '')
 
@@ -188,6 +201,20 @@ export function DeploymentIssues({ config }: DeploymentIssuesProps) {
           )
         })}
       </div>
+
+      {/* Pagination */}
+      {needsPagination && itemsPerPage !== 'unlimited' && (
+        <div className="pt-2 border-t border-border/50 mt-2">
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={totalItems}
+            itemsPerPage={perPage}
+            onPageChange={goToPage}
+            showItemsPerPage={false}
+          />
+        </div>
+      )}
 
       <LimitedAccessWarning hasError={!!error} className="mt-2" />
     </div>

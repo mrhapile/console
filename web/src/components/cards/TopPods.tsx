@@ -3,6 +3,7 @@ import { RefreshCw, Loader2, AlertTriangle } from 'lucide-react'
 import { usePods } from '../../hooks/useMCP'
 import { ClusterBadge } from '../ui/ClusterBadge'
 import { CardControls } from '../ui/CardControls'
+import { Pagination, usePagination } from '../ui/Pagination'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 
 type SortByOption = 'restarts' | 'name'
@@ -25,7 +26,7 @@ export function TopPods({ config }: TopPodsProps) {
   const cluster = config?.cluster
   const namespace = config?.namespace
   const [sortBy, setSortBy] = useState<SortByOption>(config?.sortBy || 'restarts')
-  const [limit, setLimit] = useState<number | 'unlimited'>(config?.limit || 5)
+  const [itemsPerPage, setItemsPerPage] = useState<number | 'unlimited'>(config?.limit || 5)
 
   const {
     selectedClusters: globalSelectedClusters,
@@ -33,12 +34,11 @@ export function TopPods({ config }: TopPodsProps) {
     customFilter,
   } = useGlobalFilters()
 
-  // Fetch more pods to allow client-side filtering
-  const fetchLimit = limit === 'unlimited' ? 1000 : Math.max(limit * 3, 50)
-  const { pods: rawPods, isLoading, error, refetch } = usePods(cluster, namespace, sortBy, fetchLimit)
+  // Fetch more pods to allow client-side filtering and pagination
+  const { pods: rawPods, isLoading, error, refetch } = usePods(cluster, namespace, sortBy, 100)
 
-  // Apply global filters
-  const pods = useMemo(() => {
+  // Apply global filters (without limit - pagination handles that)
+  const filteredPods = useMemo(() => {
     let filtered = rawPods
 
     // Filter by global cluster selection (if card doesn't have a specific cluster configured)
@@ -56,10 +56,20 @@ export function TopPods({ config }: TopPodsProps) {
       )
     }
 
-    // Apply limit
-    const effectiveLimit = limit === 'unlimited' ? 1000 : limit
-    return filtered.slice(0, effectiveLimit)
-  }, [rawPods, cluster, globalSelectedClusters, isAllClustersSelected, customFilter, limit])
+    return filtered
+  }, [rawPods, cluster, globalSelectedClusters, isAllClustersSelected, customFilter])
+
+  // Use pagination hook
+  const effectivePerPage = itemsPerPage === 'unlimited' ? 1000 : itemsPerPage
+  const {
+    paginatedItems: pods,
+    currentPage,
+    totalPages,
+    totalItems,
+    itemsPerPage: perPage,
+    goToPage,
+    needsPagination,
+  } = usePagination(filteredPods, effectivePerPage)
 
   if (isLoading && pods.length === 0) {
     return (
@@ -87,8 +97,8 @@ export function TopPods({ config }: TopPodsProps) {
         <span className="text-sm font-medium text-muted-foreground">Top Pods</span>
         <div className="flex items-center gap-2">
           <CardControls
-            limit={limit}
-            onLimitChange={setLimit}
+            limit={itemsPerPage}
+            onLimitChange={setItemsPerPage}
             sortBy={sortBy}
             sortOptions={SORT_OPTIONS}
             onSortChange={setSortBy}
@@ -109,15 +119,17 @@ export function TopPods({ config }: TopPodsProps) {
           No pods found
         </div>
       ) : (
-        <div className="flex-1 space-y-2 overflow-y-auto">
-          {pods.map((pod, index) => (
+        <div className="flex-1 space-y-2 overflow-y-auto min-h-0">
+          {pods.map((pod, index) => {
+            const displayIndex = (currentPage - 1) * perPage + index + 1
+            return (
             <div
               key={`${pod.cluster}-${pod.namespace}-${pod.name}`}
               className="group p-2 rounded-lg bg-secondary/30 border border-border/50 hover:border-border transition-colors"
             >
               <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center gap-2 min-w-0 flex-1">
-                  <span className="text-xs text-muted-foreground w-5">{index + 1}.</span>
+                  <span className="text-xs text-muted-foreground w-5">{displayIndex}.</span>
                   <span className="text-sm font-medium text-foreground truncate" title={pod.name}>
                     {pod.name}
                   </span>
@@ -170,7 +182,21 @@ export function TopPods({ config }: TopPodsProps) {
                 <span className="flex-shrink-0">{pod.age}</span>
               </div>
             </div>
-          ))}
+          )})}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {needsPagination && itemsPerPage !== 'unlimited' && (
+        <div className="pt-2 border-t border-border/50 mt-2">
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={totalItems}
+            itemsPerPage={perPage}
+            onPageChange={goToPage}
+            showItemsPerPage={false}
+          />
         </div>
       )}
     </div>

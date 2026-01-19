@@ -5,6 +5,7 @@ import { useDrillDownActions } from '../../hooks/useDrillDown'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { ClusterBadge } from '../ui/ClusterBadge'
 import { CardControls, SortDirection } from '../ui/CardControls'
+import { Pagination, usePagination } from '../ui/Pagination'
 import { LimitedAccessWarning } from '../ui/LimitedAccessWarning'
 
 type SortByOption = 'status' | 'name' | 'restarts' | 'cluster'
@@ -44,9 +45,10 @@ export function PodIssues() {
   const { filterByCluster, filterByStatus, customFilter } = useGlobalFilters()
   const [sortBy, setSortBy] = useState<SortByOption>('status')
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
-  const [limit, setLimit] = useState<number | 'unlimited'>(5)
+  const [itemsPerPage, setItemsPerPage] = useState<number | 'unlimited'>(5)
 
-  const issues = useMemo(() => {
+  // Filter and sort issues
+  const filteredAndSorted = useMemo(() => {
     // Apply global filters
     let filtered = filterByCluster(rawIssues)
     filtered = filterByStatus(filtered)
@@ -70,9 +72,20 @@ export function PodIssues() {
       else if (sortBy === 'cluster') result = (a.cluster || '').localeCompare(b.cluster || '')
       return sortDirection === 'asc' ? result : -result
     })
-    if (limit === 'unlimited') return sorted
-    return sorted.slice(0, limit)
-  }, [rawIssues, sortBy, sortDirection, limit, filterByCluster, filterByStatus, customFilter])
+    return sorted
+  }, [rawIssues, sortBy, sortDirection, filterByCluster, filterByStatus, customFilter])
+
+  // Use pagination hook
+  const effectivePerPage = itemsPerPage === 'unlimited' ? 1000 : itemsPerPage
+  const {
+    paginatedItems: issues,
+    currentPage,
+    totalPages,
+    totalItems,
+    itemsPerPage: perPage,
+    goToPage,
+    needsPagination,
+  } = usePagination(filteredAndSorted, effectivePerPage)
 
   if (isLoading) {
     return (
@@ -130,8 +143,8 @@ export function PodIssues() {
         </div>
         <div className="flex items-center gap-2">
           <CardControls
-            limit={limit}
-            onLimitChange={setLimit}
+            limit={itemsPerPage}
+            onLimitChange={setItemsPerPage}
             sortBy={sortBy}
             sortOptions={SORT_OPTIONS}
             onSortChange={setSortBy}
@@ -149,7 +162,7 @@ export function PodIssues() {
       </div>
 
       {/* Issues list */}
-      <div className="flex-1 space-y-2 overflow-y-auto">
+      <div className="flex-1 space-y-2 overflow-y-auto min-h-0">
         {issues.map((issue: PodIssue, idx: number) => {
           const { icon: Icon, tooltip: iconTooltip } = getIssueIcon(issue.status)
           const colors = getStatusColors(issue.status)
@@ -197,6 +210,20 @@ export function PodIssues() {
           )
         })}
       </div>
+
+      {/* Pagination */}
+      {needsPagination && itemsPerPage !== 'unlimited' && (
+        <div className="pt-2 border-t border-border/50 mt-2">
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={totalItems}
+            itemsPerPage={perPage}
+            onPageChange={goToPage}
+            showItemsPerPage={false}
+          />
+        </div>
+      )}
 
       <LimitedAccessWarning hasError={!!error} className="mt-2" />
     </div>
