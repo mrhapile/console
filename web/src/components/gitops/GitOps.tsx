@@ -152,16 +152,19 @@ export function GitOps() {
     // Increment version to invalidate any in-progress fetches
     const currentVersion = ++fetchVersionRef.current
 
-    setIsLoading(true)
-    setError(null)
-    // Only clear releases on initial load, not on refresh - this prevents stats from resetting to 0
     if (!isRefresh) {
+      setIsLoading(true)
       setReleases([])
     }
+    setError(null)
 
     const token = localStorage.getItem('token')
     const headers: HeadersInit = token ? { 'Authorization': `Bearer ${token}` } : {}
     let hasReceivedData = false
+
+    // For refresh, collect all releases and replace at once to avoid duplicates
+    // For initial load, update progressively for better UX
+    const collectedReleases: Release[] = []
 
     // Fetch each type and update state as data arrives (gradual loading)
     const fetchAndAddReleases = async (
@@ -181,11 +184,19 @@ export function GitOps() {
           if (result.ok && result.data) {
             const newReleases = processData(result.data)
             if (newReleases.length > 0) {
-              setReleases(prev => [...prev, ...newReleases])
+              if (isRefresh) {
+                // Collect releases for batch update on refresh
+                collectedReleases.push(...newReleases)
+              } else {
+                // Progressive update on initial load
+                setReleases(prev => [...prev, ...newReleases])
+              }
               if (!hasReceivedData) {
                 hasReceivedData = true
-                setIsLoading(false)
-                setLastUpdated(new Date())
+                if (!isRefresh) {
+                  setIsLoading(false)
+                  setLastUpdated(new Date())
+                }
               }
             }
           }
@@ -217,8 +228,17 @@ export function GitOps() {
     // Wait for fast endpoints, don't block on operators
     await Promise.all([helmPromise, kustomizePromise])
 
-    // If we still have no data after fast endpoints, mark loading complete
-    if (!hasReceivedData && fetchVersionRef.current === currentVersion) {
+    // For refresh, replace all releases at once after fast endpoints complete
+    if (isRefresh && fetchVersionRef.current === currentVersion) {
+      // Wait a bit for operators to potentially complete
+      await Promise.race([operatorsPromise, new Promise(resolve => setTimeout(resolve, 2000))])
+
+      if (fetchVersionRef.current === currentVersion && collectedReleases.length > 0) {
+        setReleases(collectedReleases)
+        setLastUpdated(new Date())
+      }
+    } else if (!hasReceivedData && fetchVersionRef.current === currentVersion) {
+      // If we still have no data after fast endpoints, mark loading complete
       setIsLoading(false)
       setLastUpdated(new Date())
     }
