@@ -40,6 +40,44 @@ const CARD_TYPE_LABELS: Record<string, string> = {
   security_issues: 'Security Issues',
 }
 
+// Known routes with descriptions
+interface KnownRoute {
+  href: string
+  name: string
+  description: string
+  icon: string
+  category: string
+}
+
+const KNOWN_ROUTES: KnownRoute[] = [
+  // Core Dashboards
+  { href: '/', name: 'Main Dashboard', description: 'Customizable overview with cluster health, workloads, and events', icon: 'LayoutDashboard', category: 'Core Dashboards' },
+  { href: '/clusters', name: 'Clusters', description: 'Detailed cluster management, health monitoring, and node status', icon: 'Server', category: 'Core Dashboards' },
+  { href: '/workloads', name: 'Workloads', description: 'Deployments, pods, services, and application status across clusters', icon: 'Box', category: 'Core Dashboards' },
+  { href: '/compute', name: 'Compute', description: 'CPU, memory, and GPU resource utilization and capacity', icon: 'Cpu', category: 'Core Dashboards' },
+  { href: '/events', name: 'Events', description: 'Real-time cluster events, warnings, and audit logs', icon: 'Activity', category: 'Core Dashboards' },
+  { href: '/security', name: 'Security', description: 'Security policies, RBAC, vulnerabilities, and compliance', icon: 'Shield', category: 'Core Dashboards' },
+  { href: '/gitops', name: 'GitOps', description: 'ArgoCD, Flux, Helm releases, and deployment drift detection', icon: 'GitBranch', category: 'Core Dashboards' },
+  // Applications
+  { href: '/apps', name: 'Applications', description: 'Application deployments and status across clusters', icon: 'Boxes', category: 'Applications' },
+  // Resource Pages
+  { href: '/namespaces', name: 'Namespaces', description: 'Namespace management and resource allocation', icon: 'FolderTree', category: 'Resources' },
+  { href: '/nodes', name: 'Nodes', description: 'Cluster node health and resource usage', icon: 'HardDrive', category: 'Resources' },
+  { href: '/pods', name: 'Pods', description: 'Pod status and container details', icon: 'Package', category: 'Resources' },
+  { href: '/deployments', name: 'Deployments', description: 'Deployment management and scaling', icon: 'Rocket', category: 'Resources' },
+  { href: '/services', name: 'Services', description: 'Service discovery and networking', icon: 'Network', category: 'Resources' },
+  // Operations
+  { href: '/operators', name: 'Operators', description: 'OLM operators and subscriptions management', icon: 'Cog', category: 'Operations' },
+  { href: '/helm', name: 'Helm Releases', description: 'Helm chart releases and versions', icon: 'Ship', category: 'Operations' },
+  { href: '/logs', name: 'Logs', description: 'Aggregated container and cluster logs', icon: 'FileText', category: 'Operations' },
+  // Settings
+  { href: '/settings', name: 'Settings', description: 'Console configuration and preferences', icon: 'Settings', category: 'Settings' },
+  { href: '/users', name: 'Users', description: 'User management and access control', icon: 'Users', category: 'Settings' },
+]
+
+// Group routes by category
+const ROUTE_CATEGORIES = [...new Set(KNOWN_ROUTES.map(r => r.category))]
+
 function formatCardType(type: string): string {
   return CARD_TYPE_LABELS[type] || type.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }
@@ -68,6 +106,8 @@ export function SidebarCustomizer({ isOpen, onClose }: SidebarCustomizerProps) {
   const [newItemHref, setNewItemHref] = useState('')
   const [newItemTarget, setNewItemTarget] = useState<'primary' | 'secondary'>('primary')
   const [showAddForm, setShowAddForm] = useState(false)
+  const [selectedKnownRoute, setSelectedKnownRoute] = useState<string>('custom')
+  const [showRouteDropdown, setShowRouteDropdown] = useState(false)
   const [expandedSection, setExpandedSection] = useState<string | null>('primary')
   const [dashboardsWithCards, setDashboardsWithCards] = useState<Dashboard[]>([])
   const [isLoadingDashboards, setIsLoadingDashboards] = useState(false)
@@ -114,7 +154,28 @@ export function SidebarCustomizer({ isOpen, onClose }: SidebarCustomizerProps) {
 
     setNewItemName('')
     setNewItemHref('')
+    setNewItemIcon('Zap')
+    setSelectedKnownRoute('custom')
     setShowAddForm(false)
+  }
+
+  // Handle selecting a known route
+  const handleSelectKnownRoute = (routeHref: string) => {
+    if (routeHref === 'custom') {
+      setSelectedKnownRoute('custom')
+      setNewItemName('')
+      setNewItemHref('')
+      setNewItemIcon('Zap')
+    } else {
+      const route = KNOWN_ROUTES.find(r => r.href === routeHref)
+      if (route) {
+        setSelectedKnownRoute(routeHref)
+        setNewItemName(route.name)
+        setNewItemHref(route.href)
+        setNewItemIcon(route.icon)
+      }
+    }
+    setShowRouteDropdown(false)
   }
 
   const handleGenerateFromBehavior = async () => {
@@ -246,6 +307,92 @@ export function SidebarCustomizer({ isOpen, onClose }: SidebarCustomizerProps) {
           {showAddForm && (
             <div className="mb-6 p-4 rounded-lg bg-secondary/30 border border-border/50">
               <h3 className="text-sm font-medium text-foreground mb-3">Add New Menu Item</h3>
+
+              {/* Route Selection - Dropdown with descriptions */}
+              <div className="mb-4">
+                <label className="text-xs text-muted-foreground mb-1 block">Select a Dashboard Route</label>
+                <div className="relative">
+                  <button
+                    onClick={() => setShowRouteDropdown(!showRouteDropdown)}
+                    className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg bg-secondary border border-border text-sm text-left"
+                  >
+                    {selectedKnownRoute === 'custom' ? (
+                      <span className="text-muted-foreground">Custom URL (enter manually below)</span>
+                    ) : (
+                      <span className="text-foreground">
+                        {KNOWN_ROUTES.find(r => r.href === selectedKnownRoute)?.name}
+                        <span className="text-muted-foreground ml-2">({selectedKnownRoute})</span>
+                      </span>
+                    )}
+                    <ChevronDown className={cn('w-4 h-4 text-muted-foreground transition-transform', showRouteDropdown && 'rotate-180')} />
+                  </button>
+
+                  {showRouteDropdown && (
+                    <div className="absolute top-full left-0 right-0 mt-1 py-2 rounded-lg bg-card border border-border shadow-xl z-50 max-h-[300px] overflow-y-auto">
+                      {/* Custom option */}
+                      <button
+                        onClick={() => handleSelectKnownRoute('custom')}
+                        className={cn(
+                          'w-full px-3 py-2 text-left hover:bg-secondary/50 transition-colors',
+                          selectedKnownRoute === 'custom' && 'bg-purple-500/10'
+                        )}
+                      >
+                        <div className="flex items-center gap-2">
+                          {renderIcon('Edit3', 'w-4 h-4 text-muted-foreground')}
+                          <span className={cn('text-sm font-medium', selectedKnownRoute === 'custom' ? 'text-purple-400' : 'text-foreground')}>
+                            Custom URL
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground pl-6 mt-0.5">Enter a custom route path manually</p>
+                      </button>
+
+                      {/* Known routes grouped by category */}
+                      {ROUTE_CATEGORIES.map(category => (
+                        <div key={category}>
+                          <div className="px-3 py-1.5 text-xs text-muted-foreground font-medium uppercase tracking-wider bg-secondary/30 sticky top-0">
+                            {category}
+                          </div>
+                          {KNOWN_ROUTES.filter(r => r.category === category).map(route => {
+                            const isAlreadyAdded = config.primaryNav.some(item => item.href === route.href) ||
+                                                    config.secondaryNav.some(item => item.href === route.href)
+                            return (
+                              <button
+                                key={route.href}
+                                onClick={() => handleSelectKnownRoute(route.href)}
+                                disabled={isAlreadyAdded}
+                                className={cn(
+                                  'w-full px-3 py-2 text-left transition-colors',
+                                  isAlreadyAdded
+                                    ? 'opacity-50 cursor-not-allowed'
+                                    : 'hover:bg-secondary/50',
+                                  selectedKnownRoute === route.href && 'bg-purple-500/10'
+                                )}
+                              >
+                                <div className="flex items-center gap-2">
+                                  {renderIcon(route.icon, 'w-4 h-4 text-muted-foreground')}
+                                  <span className={cn(
+                                    'text-sm font-medium',
+                                    selectedKnownRoute === route.href ? 'text-purple-400' : 'text-foreground'
+                                  )}>
+                                    {route.name}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground ml-auto">{route.href}</span>
+                                  {isAlreadyAdded && (
+                                    <span className="text-xs px-1.5 py-0.5 rounded bg-green-500/20 text-green-400">Added</span>
+                                  )}
+                                </div>
+                                <p className="text-xs text-muted-foreground pl-6 mt-0.5">{route.description}</p>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Name and URL fields */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs text-muted-foreground">Name</label>
@@ -262,7 +409,10 @@ export function SidebarCustomizer({ isOpen, onClose }: SidebarCustomizerProps) {
                   <input
                     type="text"
                     value={newItemHref}
-                    onChange={(e) => setNewItemHref(e.target.value)}
+                    onChange={(e) => {
+                      setNewItemHref(e.target.value)
+                      setSelectedKnownRoute('custom') // Switch to custom when manually editing
+                    }}
                     placeholder="/my-page"
                     className="w-full mt-1 px-3 py-2 rounded-lg bg-secondary border border-border text-foreground text-sm"
                   />
@@ -291,16 +441,31 @@ export function SidebarCustomizer({ isOpen, onClose }: SidebarCustomizerProps) {
                   </select>
                 </div>
               </div>
+
+              {/* Note about custom routes */}
+              {selectedKnownRoute === 'custom' && (
+                <p className="text-xs text-muted-foreground mt-3 p-2 rounded bg-yellow-500/10 border border-yellow-500/20">
+                  <strong>Note:</strong> Custom routes must exist in the application. Routes are compiled into the application at build time and cannot be dynamically loaded from external sources.
+                </p>
+              )}
+
               <div className="flex justify-end gap-2 mt-4">
                 <button
-                  onClick={() => setShowAddForm(false)}
+                  onClick={() => {
+                    setShowAddForm(false)
+                    setSelectedKnownRoute('custom')
+                    setNewItemName('')
+                    setNewItemHref('')
+                    setNewItemIcon('Zap')
+                  }}
                   className="px-3 py-1.5 rounded-lg text-sm text-muted-foreground hover:text-foreground"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleAddItem}
-                  className="px-3 py-1.5 rounded-lg bg-purple-500 text-white text-sm hover:bg-purple-600"
+                  disabled={!newItemName || !newItemHref}
+                  className="px-3 py-1.5 rounded-lg bg-purple-500 text-white text-sm hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Add Item
                 </button>

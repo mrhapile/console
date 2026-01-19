@@ -1,9 +1,10 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { StatusIndicator } from '../charts/StatusIndicator'
+import { DonutChart, BarChart } from '../charts'
 import { useToast } from '../ui/Toast'
 import { ClusterBadge } from '../ui/ClusterBadge'
-import { RefreshCw, Box, Loader2, Package, Ship, Layers, Cog, ChevronDown, ExternalLink } from 'lucide-react'
+import { RefreshCw, Box, Loader2, Package, Ship, Layers, Cog, ChevronDown, ExternalLink, GitBranch, Clock, ArrowRight, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react'
 import { cn } from '../../lib/cn'
 
 // Release types
@@ -46,11 +47,14 @@ interface Operator {
 type Release = HelmRelease | Kustomization | Operator
 
 // Type icons and labels
-const TYPE_CONFIG: Record<ReleaseType, { icon: typeof Ship; label: string; color: string }> = {
-  helm: { icon: Ship, label: 'Helm', color: 'text-blue-400 bg-blue-500/20' },
-  kustomize: { icon: Layers, label: 'Kustomize', color: 'text-purple-400 bg-purple-500/20' },
-  operator: { icon: Cog, label: 'Operator', color: 'text-orange-400 bg-orange-500/20' },
+const TYPE_CONFIG: Record<ReleaseType, { icon: typeof Ship; label: string; color: string; chartColor: string }> = {
+  helm: { icon: Ship, label: 'Helm', color: 'text-blue-400 bg-blue-500/20', chartColor: '#3b82f6' },
+  kustomize: { icon: Layers, label: 'Kustomize', color: 'text-purple-400 bg-purple-500/20', chartColor: '#9333ea' },
+  operator: { icon: Cog, label: 'Operator', color: 'text-orange-400 bg-orange-500/20', chartColor: '#f97316' },
 }
+
+// View tabs
+type ViewTab = 'overview' | 'releases' | 'timeline'
 
 function getTimeAgo(timestamp: string | undefined): string {
   if (!timestamp) return 'Unknown'
@@ -89,6 +93,7 @@ export function GitOps() {
     filterByStatus: globalFilterByStatus,
     customFilter,
   } = useGlobalFilters()
+  const [activeTab, setActiveTab] = useState<ViewTab>('overview')
   const [typeFilter, setTypeFilter] = useState<ReleaseType | 'all'>('all')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [releases, setReleases] = useState<Release[]>([])
@@ -261,14 +266,57 @@ export function GitOps() {
     const kustomizations = globalFilteredReleases.filter(r => r.type === 'kustomize')
     const operators = globalFilteredReleases.filter(r => r.type === 'operator')
 
+    const deployed = globalFilteredReleases.filter(r => r.status === 'deployed' || r.status === 'Ready' || r.status === 'Succeeded').length
+    const failed = globalFilteredReleases.filter(r => r.status === 'failed' || r.status === 'Failed').length
+    const pending = globalFilteredReleases.filter(r =>
+      r.status?.toLowerCase().includes('pending') ||
+      r.status?.toLowerCase().includes('progressing')
+    ).length
+    const other = globalFilteredReleases.length - deployed - failed - pending
+
     return {
       total: globalFilteredReleases.length,
       helm: helmReleases.length,
       kustomize: kustomizations.length,
       operators: operators.length,
-      deployed: globalFilteredReleases.filter(r => r.status === 'deployed' || r.status === 'Ready' || r.status === 'Succeeded').length,
-      failed: globalFilteredReleases.filter(r => r.status === 'failed' || r.status === 'Failed').length,
+      deployed,
+      failed,
+      pending,
+      other,
+      // Chart data for status distribution
+      statusChartData: [
+        { name: 'Deployed', value: deployed, color: '#22c55e' },
+        { name: 'Failed', value: failed, color: '#ef4444' },
+        { name: 'Pending', value: pending, color: '#3b82f6' },
+        { name: 'Other', value: other, color: '#6b7280' },
+      ].filter(d => d.value > 0),
+      // Chart data for type distribution
+      typeChartData: [
+        { name: 'Helm', value: helmReleases.length, color: TYPE_CONFIG.helm.chartColor },
+        { name: 'Kustomize', value: kustomizations.length, color: TYPE_CONFIG.kustomize.chartColor },
+        { name: 'Operators', value: operators.length, color: TYPE_CONFIG.operator.chartColor },
+      ].filter(d => d.value > 0),
     }
+  }, [globalFilteredReleases])
+
+  // Get recent changes (sorted by timestamp)
+  const recentChanges = useMemo(() => {
+    return [...globalFilteredReleases]
+      .filter(r => {
+        if (r.type === 'helm') return (r as HelmRelease).updated
+        if (r.type === 'kustomize') return (r as Kustomization).lastApplied
+        return false
+      })
+      .sort((a, b) => {
+        const aTime = a.type === 'helm'
+          ? new Date((a as HelmRelease).updated).getTime()
+          : new Date((a as Kustomization).lastApplied).getTime()
+        const bTime = b.type === 'helm'
+          ? new Date((b as HelmRelease).updated).getTime()
+          : new Date((b as Kustomization).lastApplied).getTime()
+        return bTime - aTime
+      })
+      .slice(0, 10)
   }, [globalFilteredReleases])
 
   const getStatusColor = (status: string) => {
@@ -378,7 +426,10 @@ export function GitOps() {
     <div className="pt-16">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">GitOps Releases</h1>
+          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+            <GitBranch className="w-6 h-6 text-purple-400" />
+            GitOps Releases
+          </h1>
           <p className="text-muted-foreground">Helm, Kustomize, and Operator deployments across your clusters</p>
         </div>
         <button
@@ -391,40 +442,244 @@ export function GitOps() {
         </button>
       </div>
 
-      {/* Stats Overview */}
+      {/* Tabs */}
+      <div className="flex gap-2 mb-6 border-b border-border pb-2">
+        {(['overview', 'releases', 'timeline'] as ViewTab[]).map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={cn(
+              'px-4 py-2 rounded-t-lg text-sm font-medium transition-colors capitalize',
+              activeTab === tab
+                ? 'bg-purple-500/20 text-purple-400 border-b-2 border-purple-500'
+                : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
+            )}
+          >
+            {tab === 'overview' && <span className="flex items-center gap-2"><Package className="w-4 h-4" /> Overview</span>}
+            {tab === 'releases' && <span className="flex items-center gap-2"><Box className="w-4 h-4" /> All Releases</span>}
+            {tab === 'timeline' && <span className="flex items-center gap-2"><Clock className="w-4 h-4" /> Timeline</span>}
+          </button>
+        ))}
+      </div>
+
+      {/* Stats Overview - shown on all tabs */}
       <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
-        <div className="glass p-4 rounded-lg">
+        <div className="glass p-4 rounded-lg cursor-pointer hover:bg-secondary/30 transition-colors" onClick={() => { setTypeFilter('all'); setActiveTab('releases') }}>
           <div className="text-3xl font-bold text-foreground">{stats.total}</div>
           <div className="text-sm text-muted-foreground">Total</div>
         </div>
-        <div className="glass p-4 rounded-lg">
+        <div className="glass p-4 rounded-lg cursor-pointer hover:bg-secondary/30 transition-colors" onClick={() => { setTypeFilter('helm'); setActiveTab('releases') }}>
           <div className="text-3xl font-bold text-blue-400">{stats.helm}</div>
           <div className="text-sm text-muted-foreground flex items-center gap-1">
             <Ship className="w-3 h-3" /> Helm
           </div>
         </div>
-        <div className="glass p-4 rounded-lg">
+        <div className="glass p-4 rounded-lg cursor-pointer hover:bg-secondary/30 transition-colors" onClick={() => { setTypeFilter('kustomize'); setActiveTab('releases') }}>
           <div className="text-3xl font-bold text-purple-400">{stats.kustomize}</div>
           <div className="text-sm text-muted-foreground flex items-center gap-1">
             <Layers className="w-3 h-3" /> Kustomize
           </div>
         </div>
-        <div className="glass p-4 rounded-lg">
+        <div className="glass p-4 rounded-lg cursor-pointer hover:bg-secondary/30 transition-colors" onClick={() => { setTypeFilter('operator'); setActiveTab('releases') }}>
           <div className="text-3xl font-bold text-orange-400">{stats.operators}</div>
           <div className="text-sm text-muted-foreground flex items-center gap-1">
             <Cog className="w-3 h-3" /> Operators
           </div>
         </div>
-        <div className="glass p-4 rounded-lg">
+        <div className="glass p-4 rounded-lg cursor-pointer hover:bg-secondary/30 transition-colors" onClick={() => { setStatusFilter('deployed'); setActiveTab('releases') }}>
           <div className="text-3xl font-bold text-green-400">{stats.deployed}</div>
-          <div className="text-sm text-muted-foreground">Deployed</div>
+          <div className="text-sm text-muted-foreground flex items-center gap-1">
+            <CheckCircle2 className="w-3 h-3" /> Deployed
+          </div>
         </div>
-        <div className="glass p-4 rounded-lg">
+        <div className="glass p-4 rounded-lg cursor-pointer hover:bg-secondary/30 transition-colors" onClick={() => { setStatusFilter('failed'); setActiveTab('releases') }}>
           <div className="text-3xl font-bold text-red-400">{stats.failed}</div>
-          <div className="text-sm text-muted-foreground">Failed</div>
+          <div className="text-sm text-muted-foreground flex items-center gap-1">
+            <XCircle className="w-3 h-3" /> Failed
+          </div>
         </div>
       </div>
 
+      {/* Overview Tab Content */}
+      {activeTab === 'overview' && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          {/* Status Distribution Chart */}
+          <div className="glass p-4 rounded-lg">
+            <h3 className="text-lg font-semibold text-foreground mb-4">Status Distribution</h3>
+            {stats.statusChartData.length > 0 ? (
+              <DonutChart
+                data={stats.statusChartData}
+                size={160}
+                thickness={25}
+                centerValue={stats.total}
+                centerLabel="Total"
+              />
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">No releases to display</div>
+            )}
+          </div>
+
+          {/* Type Distribution Chart */}
+          <div className="glass p-4 rounded-lg">
+            <h3 className="text-lg font-semibold text-foreground mb-4">Release Types</h3>
+            {stats.typeChartData.length > 0 ? (
+              <BarChart
+                data={stats.typeChartData}
+                height={160}
+                horizontal
+                showGrid={false}
+              />
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">No releases to display</div>
+            )}
+          </div>
+
+          {/* Recent Activity */}
+          <div className="glass p-4 rounded-lg lg:col-span-2">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-foreground">Recent Activity</h3>
+              <button
+                onClick={() => setActiveTab('timeline')}
+                className="text-sm text-purple-400 hover:text-purple-300 flex items-center gap-1"
+              >
+                View all <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+            {recentChanges.length > 0 ? (
+              <div className="space-y-3">
+                {recentChanges.slice(0, 5).map((release, index) => {
+                  const TypeIcon = TYPE_CONFIG[release.type].icon
+                  const time = release.type === 'helm'
+                    ? (release as HelmRelease).updated
+                    : (release as Kustomization).lastApplied
+                  return (
+                    <div key={`recent-${index}`} className="flex items-center gap-3 text-sm">
+                      <StatusIndicator status={getHealthStatus(release.status)} size="sm" />
+                      <TypeIcon className={cn('w-4 h-4', TYPE_CONFIG[release.type].color.split(' ')[0])} />
+                      <span className="font-medium text-foreground">{release.name}</span>
+                      <span className="text-muted-foreground">{release.namespace}</span>
+                      {release.cluster && <ClusterBadge cluster={release.cluster} size="sm" />}
+                      <span className="ml-auto text-muted-foreground">{getTimeAgo(time)}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">No recent activity</div>
+            )}
+          </div>
+
+          {/* Quick Actions */}
+          <div className="glass p-4 rounded-lg lg:col-span-2">
+            <h3 className="text-lg font-semibold text-foreground mb-4">Quick Filters</h3>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => { setStatusFilter('failed'); setActiveTab('releases') }}
+                className="px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 text-sm flex items-center gap-2"
+              >
+                <AlertTriangle className="w-4 h-4" />
+                View Failed Releases ({stats.failed})
+              </button>
+              <button
+                onClick={() => { setStatusFilter('pending'); setActiveTab('releases') }}
+                className="px-3 py-1.5 rounded-lg bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 text-sm flex items-center gap-2"
+              >
+                <Clock className="w-4 h-4" />
+                View Pending ({stats.pending})
+              </button>
+              <button
+                onClick={() => { setTypeFilter('helm'); setActiveTab('releases') }}
+                className="px-3 py-1.5 rounded-lg bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 text-sm flex items-center gap-2"
+              >
+                <Ship className="w-4 h-4" />
+                Helm Charts Only
+              </button>
+              <button
+                onClick={() => { setTypeFilter('kustomize'); setActiveTab('releases') }}
+                className="px-3 py-1.5 rounded-lg bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 text-sm flex items-center gap-2"
+              >
+                <Layers className="w-4 h-4" />
+                Kustomizations Only
+              </button>
+              <button
+                onClick={() => { setTypeFilter('operator'); setActiveTab('releases') }}
+                className="px-3 py-1.5 rounded-lg bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 text-sm flex items-center gap-2"
+              >
+                <Cog className="w-4 h-4" />
+                Operators Only
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Timeline Tab Content */}
+      {activeTab === 'timeline' && (
+        <div className="glass p-4 rounded-lg mb-6">
+          <h3 className="text-lg font-semibold text-foreground mb-4">Deployment Timeline</h3>
+          {recentChanges.length > 0 ? (
+            <div className="relative">
+              {/* Timeline line */}
+              <div className="absolute left-6 top-0 bottom-0 w-0.5 bg-border" />
+
+              <div className="space-y-6">
+                {recentChanges.map((release, index) => {
+                  const TypeIcon = TYPE_CONFIG[release.type].icon
+                  const time = release.type === 'helm'
+                    ? (release as HelmRelease).updated
+                    : (release as Kustomization).lastApplied
+                  const date = new Date(time)
+
+                  return (
+                    <div key={`timeline-${index}`} className="relative flex gap-4 pl-12">
+                      {/* Timeline dot */}
+                      <div className={cn(
+                        'absolute left-4 w-4 h-4 rounded-full border-2 border-background',
+                        getHealthStatus(release.status) === 'healthy' ? 'bg-green-500' :
+                        getHealthStatus(release.status) === 'error' ? 'bg-red-500' : 'bg-blue-500'
+                      )} />
+
+                      <div className="flex-1 glass p-4 rounded-lg">
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <TypeIcon className={cn('w-5 h-5', TYPE_CONFIG[release.type].color.split(' ')[0])} />
+                            <span className="font-semibold text-foreground">{release.name}</span>
+                            <span className={cn('text-xs px-2 py-0.5 rounded capitalize', getStatusColor(release.status))}>
+                              {release.status}
+                            </span>
+                          </div>
+                          <span className="text-sm text-muted-foreground">
+                            {date.toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <Box className="w-3 h-3" />
+                            {release.namespace}
+                          </span>
+                          {release.cluster && <ClusterBadge cluster={release.cluster} size="sm" />}
+                          {release.type === 'helm' && (
+                            <span className="font-mono text-xs">{(release as HelmRelease).chart}</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-12 text-muted-foreground">
+              <Clock className="w-12 h-12 mx-auto mb-4 opacity-50" />
+              <p>No deployment history available</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Releases Tab Content */}
+      {activeTab === 'releases' && (
+        <>
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-4 mb-6">
         {/* Type filter dropdown */}
@@ -587,6 +842,8 @@ export function GitOps() {
           </div>
         </div>
       </div>
+        </>
+      )}
     </div>
   )
 }
