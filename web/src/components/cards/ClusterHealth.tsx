@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Server, CheckCircle, XCircle, WifiOff, Cpu, RefreshCw, Loader2 } from 'lucide-react'
+import { Server, CheckCircle, XCircle, WifiOff, Cpu, RefreshCw, Loader2, ExternalLink } from 'lucide-react'
 import { useClusters, useGPUNodes, ClusterInfo } from '../../hooks/useMCP'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { CardControls, SortDirection } from '../ui/CardControls'
@@ -8,6 +8,69 @@ import { RefreshIndicator } from '../ui/RefreshIndicator'
 import { ClusterStatusDot, getClusterState, ClusterState } from '../ui/ClusterStatusBadge'
 import { classifyError } from '../../lib/errorClassifier'
 import { ClusterDetailModal } from '../clusters/ClusterDetailModal'
+
+// Cloud provider detection and console links
+type CloudProvider = 'eks' | 'gke' | 'aks' | 'openshift' | 'rancher' | 'kind' | 'minikube' | 'k3s' | 'unknown'
+
+function detectCloudProvider(clusterName: string): CloudProvider {
+  const name = clusterName.toLowerCase()
+  if (name.includes('eks') || name.includes('aws') || name.match(/arn:aws:/)) return 'eks'
+  if (name.includes('gke') || name.includes('gcp') || name.match(/gke_/)) return 'gke'
+  if (name.includes('aks') || name.includes('azure') || name.match(/akscluster/)) return 'aks'
+  if (name.includes('openshift') || name.includes('ocp')) return 'openshift'
+  if (name.includes('rancher')) return 'rancher'
+  if (name.includes('kind-')) return 'kind'
+  if (name.includes('minikube')) return 'minikube'
+  if (name.includes('k3s')) return 'k3s'
+  return 'unknown'
+}
+
+function getProviderIcon(provider: CloudProvider): { icon: string; color: string; label: string } {
+  switch (provider) {
+    case 'eks': return { icon: '🟠', color: 'text-orange-400', label: 'AWS EKS' }
+    case 'gke': return { icon: '🔵', color: 'text-blue-400', label: 'Google GKE' }
+    case 'aks': return { icon: '🔷', color: 'text-cyan-400', label: 'Azure AKS' }
+    case 'openshift': return { icon: '🔴', color: 'text-red-400', label: 'OpenShift' }
+    case 'rancher': return { icon: '🟢', color: 'text-green-400', label: 'Rancher' }
+    case 'kind': return { icon: '🐳', color: 'text-blue-300', label: 'Kind' }
+    case 'minikube': return { icon: '🎯', color: 'text-purple-400', label: 'Minikube' }
+    case 'k3s': return { icon: '🌿', color: 'text-green-300', label: 'K3s' }
+    default: return { icon: '☸️', color: 'text-gray-400', label: 'Kubernetes' }
+  }
+}
+
+function getProviderConsoleUrl(provider: CloudProvider, clusterName: string, region?: string): string | null {
+  // Extract useful info from cluster name
+  const clusterShortName = clusterName.split('/').pop() || clusterName
+
+  switch (provider) {
+    case 'eks': {
+      // Try to extract region from name (e.g., "eks-us-west-2-prod")
+      const regionMatch = clusterName.match(/(us|eu|ap|sa|ca|me|af)-(north|south|east|west|central|northeast|southeast)-\d/)
+      const awsRegion = region || (regionMatch ? regionMatch[0] : 'us-east-1')
+      return `https://${awsRegion}.console.aws.amazon.com/eks/home?region=${awsRegion}#/clusters/${clusterShortName}`
+    }
+    case 'gke': {
+      // GKE clusters often have format: gke_project_region_name
+      const gkeMatch = clusterName.match(/gke_([^_]+)_([^_]+)_(.+)/)
+      if (gkeMatch) {
+        const [, project, location, name] = gkeMatch
+        return `https://console.cloud.google.com/kubernetes/clusters/details/${location}/${name}?project=${project}`
+      }
+      return `https://console.cloud.google.com/kubernetes/list/overview`
+    }
+    case 'aks': {
+      // AKS clusters - can't construct exact URL without resource group
+      return `https://portal.azure.com/#view/HubsExtension/BrowseResource/resourceType/Microsoft.ContainerService%2FmanagedClusters`
+    }
+    case 'openshift': {
+      // OpenShift console is at the API server domain
+      return null // Can't determine console URL without API server info
+    }
+    default:
+      return null
+  }
+}
 
 type SortByOption = 'status' | 'name' | 'nodes' | 'pods'
 
@@ -212,7 +275,29 @@ export function ClusterHealth() {
             >
               <div className="flex items-center gap-2" title={statusTooltip}>
                 <ClusterStatusDot state={clusterState} />
-                <span className="text-sm text-foreground">{cluster.name}</span>
+                {(() => {
+                  const provider = detectCloudProvider(cluster.name)
+                  const providerInfo = getProviderIcon(provider)
+                  const consoleUrl = getProviderConsoleUrl(provider, cluster.name)
+                  return (
+                    <>
+                      <span className="text-xs" title={providerInfo.label}>{providerInfo.icon}</span>
+                      <span className="text-sm text-foreground">{cluster.name}</span>
+                      {consoleUrl && (
+                        <a
+                          href={consoleUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="p-0.5 rounded hover:bg-secondary/50 text-muted-foreground hover:text-foreground transition-colors"
+                          title={`Open ${providerInfo.label} console`}
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      )}
+                    </>
+                  )
+                })()}
                 {clusterLoading && (
                   <span title="Checking health...">
                     <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { X, CheckCircle, AlertTriangle, WifiOff, Pencil, ChevronRight, ChevronDown, Layers, Server, Network, HardDrive, Box, FolderOpen, Loader2, Cpu, MemoryStick, Database, Wand2, Stethoscope, Wrench, Bot } from 'lucide-react'
+import { X, CheckCircle, AlertTriangle, WifiOff, Pencil, ChevronRight, ChevronDown, Layers, Server, Network, HardDrive, Box, FolderOpen, Loader2, Cpu, MemoryStick, Database, Wand2, Stethoscope, Wrench, Bot, ExternalLink } from 'lucide-react'
 import { useClusterHealth, usePodIssues, useDeploymentIssues, useGPUNodes, useNodes, useNamespaceStats, useDeployments } from '../../hooks/useMCP'
 import { useDrillDownActions } from '../../hooks/useDrillDown'
 import { useMissions } from '../../hooks/useMissions'
@@ -9,6 +9,60 @@ import { NodeListItem } from './NodeListItem'
 import { NodeDetailPanel } from './NodeDetailPanel'
 import { NamespaceResources } from './components'
 import { CPUDetailModal, MemoryDetailModal, StorageDetailModal, GPUDetailModal } from './ResourceDetailModals'
+
+// Cloud provider detection and console links
+type CloudProvider = 'eks' | 'gke' | 'aks' | 'openshift' | 'rancher' | 'kind' | 'minikube' | 'k3s' | 'unknown'
+
+function detectCloudProvider(clusterName: string): CloudProvider {
+  const name = clusterName.toLowerCase()
+  if (name.includes('eks') || name.includes('aws') || name.match(/arn:aws:/)) return 'eks'
+  if (name.includes('gke') || name.includes('gcp') || name.match(/gke_/)) return 'gke'
+  if (name.includes('aks') || name.includes('azure') || name.match(/akscluster/)) return 'aks'
+  if (name.includes('openshift') || name.includes('ocp')) return 'openshift'
+  if (name.includes('rancher')) return 'rancher'
+  if (name.includes('kind-')) return 'kind'
+  if (name.includes('minikube')) return 'minikube'
+  if (name.includes('k3s')) return 'k3s'
+  return 'unknown'
+}
+
+function getProviderInfo(provider: CloudProvider): { icon: string; color: string; label: string; bgColor: string } {
+  switch (provider) {
+    case 'eks': return { icon: '🟠', color: 'text-orange-400', bgColor: 'bg-orange-500/20', label: 'AWS EKS' }
+    case 'gke': return { icon: '🔵', color: 'text-blue-400', bgColor: 'bg-blue-500/20', label: 'Google GKE' }
+    case 'aks': return { icon: '🔷', color: 'text-cyan-400', bgColor: 'bg-cyan-500/20', label: 'Azure AKS' }
+    case 'openshift': return { icon: '🔴', color: 'text-red-400', bgColor: 'bg-red-500/20', label: 'OpenShift' }
+    case 'rancher': return { icon: '🟢', color: 'text-green-400', bgColor: 'bg-green-500/20', label: 'Rancher' }
+    case 'kind': return { icon: '🐳', color: 'text-blue-300', bgColor: 'bg-blue-500/20', label: 'Kind' }
+    case 'minikube': return { icon: '🎯', color: 'text-purple-400', bgColor: 'bg-purple-500/20', label: 'Minikube' }
+    case 'k3s': return { icon: '🌿', color: 'text-green-300', bgColor: 'bg-green-500/20', label: 'K3s' }
+    default: return { icon: '☸️', color: 'text-gray-400', bgColor: 'bg-gray-500/20', label: 'Kubernetes' }
+  }
+}
+
+function getProviderConsoleUrl(provider: CloudProvider, clusterName: string): string | null {
+  const clusterShortName = clusterName.split('/').pop() || clusterName
+
+  switch (provider) {
+    case 'eks': {
+      const regionMatch = clusterName.match(/(us|eu|ap|sa|ca|me|af)-(north|south|east|west|central|northeast|southeast)-\d/)
+      const awsRegion = regionMatch ? regionMatch[0] : 'us-east-1'
+      return `https://${awsRegion}.console.aws.amazon.com/eks/home?region=${awsRegion}#/clusters/${clusterShortName}`
+    }
+    case 'gke': {
+      const gkeMatch = clusterName.match(/gke_([^_]+)_([^_]+)_(.+)/)
+      if (gkeMatch) {
+        const [, project, location, name] = gkeMatch
+        return `https://console.cloud.google.com/kubernetes/clusters/details/${location}/${name}?project=${project}`
+      }
+      return `https://console.cloud.google.com/kubernetes/list/overview`
+    }
+    case 'aks':
+      return `https://portal.azure.com/#view/HubsExtension/BrowseResource/resourceType/Microsoft.ContainerService%2FmanagedClusters`
+    default:
+      return null
+  }
+}
 
 interface ClusterDetailModalProps {
   clusterName: string
@@ -161,6 +215,32 @@ After I approve, help me execute the repairs step by step.`,
               </span>
             )}
             <h2 className="text-xl font-semibold text-foreground">{clusterName.split('/').pop()}</h2>
+            {(() => {
+              const provider = detectCloudProvider(clusterName)
+              const providerInfo = getProviderInfo(provider)
+              const consoleUrl = getProviderConsoleUrl(provider, clusterName)
+              return (
+                <>
+                  <span
+                    className={`px-2 py-0.5 rounded text-xs font-medium ${providerInfo.bgColor} ${providerInfo.color}`}
+                    title={providerInfo.label}
+                  >
+                    {providerInfo.icon} {providerInfo.label}
+                  </span>
+                  {consoleUrl && (
+                    <a
+                      href={consoleUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+                      title={`Open ${providerInfo.label} console`}
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                    </a>
+                  )}
+                </>
+              )
+            })()}
             {onRename && (
               <button
                 onClick={() => onRename(clusterName)}
