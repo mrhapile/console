@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 import { Shield, Check, X, Loader2, AlertCircle } from 'lucide-react'
-import { useCanI, usePermissions } from '../../hooks/usePermissions'
+import { useCanI } from '../../hooks/usePermissions'
+import { useClusters } from '../../hooks/useMCP'
 
 const COMMON_VERBS = ['get', 'list', 'create', 'update', 'delete', 'watch', 'patch']
 
@@ -61,7 +62,8 @@ const COMMON_RESOURCES = [
 ]
 
 export function CanIChecker() {
-  const { clusters } = usePermissions()
+  const { clusters: rawClusters } = useClusters()
+  const clusters = rawClusters.map(c => c.name)
   const { checkPermission, checking, result, error, reset } = useCanI()
 
   const [cluster, setCluster] = useState('')
@@ -210,6 +212,31 @@ export function CanIChecker() {
           />
         </div>
 
+        {/* API Group - shown by default since it's required for accurate checks */}
+        <div>
+          <label htmlFor="group-input" className="block text-sm font-medium text-foreground mb-1">
+            API Group <span className="text-muted-foreground">(auto-detected for common resources)</span>
+          </label>
+          <input
+            id="group-input"
+            type="text"
+            value={group}
+            onChange={(e) => setGroup(e.target.value)}
+            placeholder={
+              resource !== 'custom' && RESOURCE_API_GROUPS[resource] !== undefined
+                ? `Auto: ${RESOURCE_API_GROUPS[resource] || '(core)'}`
+                : 'e.g., apps, rbac.authorization.k8s.io'
+            }
+            className="w-full p-2 rounded-lg bg-secondary border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500"
+            data-testid="can-i-group"
+          />
+          {resource !== 'custom' && RESOURCE_API_GROUPS[resource] !== undefined && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Auto-detected: <code className="px-1 py-0.5 rounded bg-secondary">{RESOURCE_API_GROUPS[resource] || '(core API)'}</code>
+            </p>
+          )}
+        </div>
+
         {/* Advanced Options */}
         <button
           type="button"
@@ -220,28 +247,15 @@ export function CanIChecker() {
         </button>
 
         {showAdvanced && (
-          <div>
-            <label htmlFor="group-input" className="block text-sm font-medium text-foreground mb-1">
-              API Group <span className="text-muted-foreground">(override auto-detected group)</span>
-            </label>
-            <input
-              id="group-input"
-              type="text"
-              value={group}
-              onChange={(e) => setGroup(e.target.value)}
-              placeholder={
-                resource !== 'custom' && RESOURCE_API_GROUPS[resource] !== undefined
-                  ? `Auto: ${RESOURCE_API_GROUPS[resource] || '(core)'}`
-                  : 'e.g., apps'
-              }
-              className="w-full p-2 rounded-lg bg-secondary border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500"
-              data-testid="can-i-group"
-            />
-            {resource !== 'custom' && RESOURCE_API_GROUPS[resource] !== undefined && (
-              <p className="mt-1 text-xs text-muted-foreground">
-                Auto-detected: <code className="px-1 py-0.5 rounded bg-secondary">{RESOURCE_API_GROUPS[resource] || '(core API)'}</code>
-              </p>
-            )}
+          <div className="text-xs text-muted-foreground p-3 bg-secondary/30 rounded-lg">
+            <p className="font-medium mb-2">Common API Groups:</p>
+            <ul className="space-y-1">
+              <li><code className="text-blue-400">""</code> - Core API (pods, services, secrets, configmaps, namespaces)</li>
+              <li><code className="text-blue-400">apps</code> - Deployments, StatefulSets, DaemonSets, ReplicaSets</li>
+              <li><code className="text-blue-400">rbac.authorization.k8s.io</code> - Roles, ClusterRoles, Bindings</li>
+              <li><code className="text-blue-400">batch</code> - Jobs, CronJobs</li>
+              <li><code className="text-blue-400">networking.k8s.io</code> - Ingresses, NetworkPolicies</li>
+            </ul>
           </div>
         )}
 

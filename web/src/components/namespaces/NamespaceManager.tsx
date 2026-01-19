@@ -13,7 +13,6 @@ import {
 } from 'lucide-react'
 import { useClusters } from '../../hooks/useMCP'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
-import { usePermissions } from '../../hooks/usePermissions'
 import { ClusterBadge } from '../ui/ClusterBadge'
 import { api } from '../../lib/api'
 
@@ -35,9 +34,9 @@ interface NamespaceAccessEntry {
 }
 
 export function NamespaceManager() {
-  const { clusters } = useClusters()
+  const { clusters, isLoading: clustersLoading } = useClusters()
   const { selectedClusters, isAllClustersSelected } = useGlobalFilters()
-  const { isClusterAdmin } = usePermissions()
+  // Note: We don't check permissions upfront - the API will return auth errors for inaccessible clusters
   const [namespaces, setNamespaces] = useState<NamespaceDetails[]>([])
   const [loading, setLoading] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -52,30 +51,30 @@ export function NamespaceManager() {
   const hasFetchedRef = useRef(false)
   const lastFetchKeyRef = useRef<string>('')
 
-  // Memoize to prevent unnecessary recalculations
-  const adminClusters = useMemo(() => {
-    const targetClusters = isAllClustersSelected
+  // Get target clusters based on global filter selection
+  // We don't check permissions upfront - let the API handle auth errors per-cluster
+  const targetClusters = useMemo(() => {
+    return isAllClustersSelected
       ? clusters.map(c => c.name)
       : selectedClusters
-    return targetClusters.filter(c => isClusterAdmin(c))
-  }, [clusters, selectedClusters, isAllClustersSelected, isClusterAdmin])
+  }, [clusters, selectedClusters, isAllClustersSelected])
 
   // Create a stable key for dependency tracking
-  const adminClustersKey = useMemo(() => [...adminClusters].sort().join(','), [adminClusters])
+  const targetClustersKey = useMemo(() => [...targetClusters].sort().join(','), [targetClusters])
 
   const fetchNamespaces = useCallback(async (force = false) => {
     // Prevent infinite loops - only fetch if key changed or forced
-    if (!force && lastFetchKeyRef.current === adminClustersKey && hasFetchedRef.current) {
+    if (!force && lastFetchKeyRef.current === targetClustersKey && hasFetchedRef.current) {
       return
     }
 
-    if (adminClusters.length === 0) {
+    if (targetClusters.length === 0) {
       setNamespaces([])
       return
     }
 
     hasFetchedRef.current = true
-    lastFetchKeyRef.current = adminClustersKey
+    lastFetchKeyRef.current = targetClustersKey
     setLoading(true)
     setError(null)
 
@@ -84,7 +83,7 @@ export function NamespaceManager() {
 
     // Fetch namespaces from each cluster in parallel, collecting successes and failures
     await Promise.all(
-      adminClusters.map(async (cluster) => {
+      targetClusters.map(async (cluster) => {
         try {
           const response = await api.get(`/namespaces?cluster=${encodeURIComponent(cluster)}`)
           if (response.data && Array.isArray(response.data)) {
@@ -107,7 +106,7 @@ export function NamespaceManager() {
     }
 
     setLoading(false)
-  }, [adminClusters, adminClustersKey])
+  }, [targetClusters, targetClustersKey])
 
   const fetchAccess = useCallback(async (namespace: NamespaceDetails) => {
     setAccessLoading(true)
@@ -126,11 +125,11 @@ export function NamespaceManager() {
   useEffect(() => {
     // Only fetch if we have clusters and haven't fetched this key yet
     // Also skip if clusters are still loading (empty)
-    if (adminClustersKey && clusters.length > 0 && adminClustersKey !== lastFetchKeyRef.current) {
+    if (targetClustersKey && clusters.length > 0 && targetClustersKey !== lastFetchKeyRef.current) {
       fetchNamespaces()
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [adminClustersKey, clusters.length])
+  }, [targetClustersKey, clusters.length])
 
   useEffect(() => {
     if (selectedNamespace) {
@@ -189,13 +188,27 @@ export function NamespaceManager() {
     }
   }
 
-  if (adminClusters.length === 0) {
+  // Show loading while clusters are being fetched
+  if (clustersLoading) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center p-6">
+        <RefreshCw className="w-16 h-16 text-blue-400 mb-4 animate-spin" />
+        <h2 className="text-xl font-semibold text-white mb-2">Loading Clusters...</h2>
+        <p className="text-muted-foreground text-center max-w-md">
+          Discovering available clusters.
+        </p>
+      </div>
+    )
+  }
+
+  // Show message if no clusters are selected
+  if (targetClusters.length === 0) {
     return (
       <div className="h-full flex flex-col items-center justify-center p-6">
         <AlertTriangle className="w-16 h-16 text-amber-400 mb-4" />
-        <h2 className="text-xl font-semibold text-white mb-2">Admin Access Required</h2>
+        <h2 className="text-xl font-semibold text-white mb-2">No Clusters Selected</h2>
         <p className="text-muted-foreground text-center max-w-md">
-          You need cluster-admin access to manage namespaces. Select a cluster where you have admin privileges.
+          Select one or more clusters using the filter in the navigation bar to manage namespaces.
         </p>
       </div>
     )
@@ -372,7 +385,7 @@ export function NamespaceManager() {
       {/* Create Namespace Modal */}
       {showCreateModal && (
         <CreateNamespaceModal
-          clusters={adminClusters}
+          clusters={targetClusters}
           onClose={() => setShowCreateModal(false)}
           onCreated={() => {
             setShowCreateModal(false)

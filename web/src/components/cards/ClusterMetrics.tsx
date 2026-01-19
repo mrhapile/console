@@ -41,7 +41,7 @@ function stringToSeed(str: string): number {
 }
 
 export function ClusterMetrics() {
-  const { clusters: rawClusters, isLoading } = useClusters()
+  const { clusters: rawClusters } = useClusters()
   const { selectedClusters, isAllClustersSelected } = useGlobalFilters()
   const [selectedMetric, setSelectedMetric] = useState<MetricType>('cpu')
 

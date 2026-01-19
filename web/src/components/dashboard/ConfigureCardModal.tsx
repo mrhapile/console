@@ -91,8 +91,134 @@ const CARD_BEHAVIORS: Record<string, Array<{ key: string; label: string; descrip
     { key: 'hideUnreachable', label: 'Hide unreachable', description: 'Hide clusters that cannot be contacted', default: false },
     { key: 'alertOnNewUpgrade', label: 'Alert on new upgrade', description: 'Notify when a new upgrade becomes available', default: false },
   ],
+  // GPU Cards
+  gpu_status: [
+    { key: 'autoRefresh', label: 'Auto-refresh', description: 'Update GPU status periodically', default: true },
+    { key: 'showUtilization', label: 'Show utilization', description: 'Display GPU utilization metrics', default: true },
+    { key: 'alertOnIdle', label: 'Alert on idle', description: 'Notify when GPUs are idle for extended periods', default: false },
+  ],
+  gpu_inventory: [
+    { key: 'autoRefresh', label: 'Auto-refresh', description: 'Update GPU inventory periodically', default: true },
+    { key: 'groupByType', label: 'Group by type', description: 'Group GPUs by model/type', default: true },
+    { key: 'showCapacity', label: 'Show capacity', description: 'Display total vs available capacity', default: true },
+  ],
+  gpu_overview: [
+    { key: 'autoRefresh', label: 'Auto-refresh', description: 'Update overview periodically', default: true },
+    { key: 'showTrends', label: 'Show trends', description: 'Display utilization trends', default: true },
+  ],
+  // Helm/Operator Cards
+  helm_release_status: [
+    { key: 'autoRefresh', label: 'Auto-refresh', description: 'Check release status periodically', default: true },
+    { key: 'showFailedOnly', label: 'Show failed only', description: 'Only display failed releases', default: false },
+    { key: 'alertOnFailure', label: 'Alert on failure', description: 'Notify when release fails', default: false },
+  ],
+  helm_history: [
+    { key: 'autoRefresh', label: 'Auto-refresh', description: 'Refresh history periodically', default: false },
+    { key: 'showAllRevisions', label: 'Show all revisions', description: 'Display complete revision history', default: false },
+  ],
+  helm_values_diff: [
+    { key: 'autoRefresh', label: 'Auto-refresh', description: 'Check for value changes periodically', default: false },
+    { key: 'highlightDiffs', label: 'Highlight differences', description: 'Visually highlight changed values', default: true },
+  ],
+  chart_versions: [
+    { key: 'autoRefresh', label: 'Auto-refresh', description: 'Check for new chart versions', default: true },
+    { key: 'alertOnNew', label: 'Alert on new version', description: 'Notify when new chart versions are available', default: false },
+  ],
+  operator_status: [
+    { key: 'autoRefresh', label: 'Auto-refresh', description: 'Check operator status periodically', default: true },
+    { key: 'showDegraded', label: 'Prioritize degraded', description: 'Show degraded operators first', default: true },
+    { key: 'alertOnDegraded', label: 'Alert on degraded', description: 'Notify when operator becomes degraded', default: false },
+  ],
+  operator_subscriptions: [
+    { key: 'autoRefresh', label: 'Auto-refresh', description: 'Check subscriptions periodically', default: true },
+    { key: 'showUpgradeable', label: 'Show upgradeable', description: 'Highlight operators with available updates', default: true },
+  ],
+  // GitOps Cards
+  argocd_applications: [
+    { key: 'autoRefresh', label: 'Auto-refresh', description: 'Poll for application status', default: true },
+    { key: 'showOutOfSync', label: 'Prioritize out-of-sync', description: 'Show out-of-sync applications first', default: true },
+    { key: 'alertOnSync', label: 'Alert on sync issues', description: 'Notify when applications go out of sync', default: false },
+  ],
+  argocd_health: [
+    { key: 'autoRefresh', label: 'Auto-refresh', description: 'Check ArgoCD health periodically', default: true },
+    { key: 'alertOnUnhealthy', label: 'Alert on unhealthy', description: 'Notify when ArgoCD becomes unhealthy', default: false },
+  ],
+  argocd_sync_status: [
+    { key: 'autoRefresh', label: 'Auto-refresh', description: 'Check sync status periodically', default: true },
+    { key: 'showHistory', label: 'Show history', description: 'Display recent sync history', default: true },
+  ],
+  kustomization_status: [
+    { key: 'autoRefresh', label: 'Auto-refresh', description: 'Check Flux kustomizations periodically', default: true },
+    { key: 'showFailed', label: 'Prioritize failed', description: 'Show failed kustomizations first', default: true },
+    { key: 'alertOnFailure', label: 'Alert on failure', description: 'Notify when reconciliation fails', default: false },
+  ],
+  gitops_drift: [
+    { key: 'autoRefresh', label: 'Auto-refresh', description: 'Check for drift periodically', default: true },
+    { key: 'showAllResources', label: 'Show all resources', description: 'Display all drifted resources', default: false },
+    { key: 'alertOnDrift', label: 'Alert on drift', description: 'Notify when drift is detected', default: true },
+  ],
+  // Namespace Cards
+  namespace_overview: [
+    { key: 'autoRefresh', label: 'Auto-refresh', description: 'Refresh namespace stats periodically', default: true },
+    { key: 'showQuotas', label: 'Show quotas', description: 'Display resource quota usage', default: true },
+  ],
+  namespace_events: [
+    { key: 'autoRefresh', label: 'Auto-refresh', description: 'Poll for new events', default: true },
+    { key: 'warningsOnly', label: 'Warnings only', description: 'Only show warning events', default: false },
+  ],
+  namespace_quotas: [
+    { key: 'autoRefresh', label: 'Auto-refresh', description: 'Update quota usage periodically', default: true },
+    { key: 'alertOnLimit', label: 'Alert near limit', description: 'Notify when approaching quota limits', default: false },
+  ],
+  namespace_rbac: [
+    { key: 'autoRefresh', label: 'Auto-refresh', description: 'Refresh RBAC bindings periodically', default: false },
+    { key: 'showServiceAccounts', label: 'Show service accounts', description: 'Include service account bindings', default: true },
+  ],
+  // Other Cards
+  resource_capacity: [
+    { key: 'autoRefresh', label: 'Auto-refresh', description: 'Update capacity metrics periodically', default: true },
+    { key: 'showTrend', label: 'Show trend', description: 'Display capacity trend over time', default: false },
+    { key: 'alertOnLow', label: 'Alert on low capacity', description: 'Notify when capacity is running low', default: false },
+  ],
+  top_pods: [
+    { key: 'autoRefresh', label: 'Auto-refresh', description: 'Update pod rankings periodically', default: true },
+    { key: 'sortByCPU', label: 'Sort by CPU', description: 'Rank pods by CPU usage', default: true },
+    { key: 'sortByMemory', label: 'Sort by memory', description: 'Rank pods by memory usage', default: false },
+  ],
+  cluster_network: [
+    { key: 'autoRefresh', label: 'Auto-refresh', description: 'Update network info periodically', default: true },
+    { key: 'showPolicies', label: 'Show network policies', description: 'Display active network policies', default: true },
+  ],
+  cluster_comparison: [
+    { key: 'autoRefresh', label: 'Auto-refresh', description: 'Refresh comparison periodically', default: true },
+    { key: 'highlightDiffs', label: 'Highlight differences', description: 'Visually highlight differences', default: true },
+  ],
+  cluster_costs: [
+    { key: 'autoRefresh', label: 'Auto-refresh', description: 'Update cost data periodically', default: true },
+    { key: 'showBreakdown', label: 'Show breakdown', description: 'Display cost breakdown by resource', default: true },
+    { key: 'alertOnSpike', label: 'Alert on spike', description: 'Notify on unusual cost increases', default: false },
+  ],
+  cluster_focus: [
+    { key: 'autoRefresh', label: 'Auto-refresh', description: 'Update focus view periodically', default: true },
+    { key: 'showAllMetrics', label: 'Show all metrics', description: 'Display comprehensive metrics', default: false },
+  ],
+  crd_health: [
+    { key: 'autoRefresh', label: 'Auto-refresh', description: 'Check CRD health periodically', default: true },
+    { key: 'showAllCRDs', label: 'Show all CRDs', description: 'Display all custom resources', default: false },
+    { key: 'alertOnIssue', label: 'Alert on issues', description: 'Notify when CRD issues detected', default: false },
+  ],
+  overlay_comparison: [
+    { key: 'autoRefresh', label: 'Auto-refresh', description: 'Refresh comparison periodically', default: false },
+    { key: 'showDiffs', label: 'Show differences', description: 'Highlight overlay differences', default: true },
+  ],
+  user_management: [
+    { key: 'autoRefresh', label: 'Auto-refresh', description: 'Refresh user list periodically', default: false },
+    { key: 'showInactive', label: 'Show inactive', description: 'Display inactive users', default: false },
+  ],
   default: [
     { key: 'autoRefresh', label: 'Auto-refresh', description: 'Automatically refresh this card', default: true },
+    { key: 'showDetails', label: 'Show details', description: 'Display detailed information', default: true },
+    { key: 'alertOnChange', label: 'Alert on change', description: 'Notify when significant changes occur', default: false },
   ],
 }
 
