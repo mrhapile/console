@@ -678,7 +678,7 @@ export function Navbar() {
                     <span
                       className={cn(
                         'absolute top-1 w-4 h-4 bg-white rounded-full transition-transform shadow-sm',
-                        isDemoMode ? 'translate-x-6' : 'translate-x-1'
+                        isDemoMode ? 'translate-x-1' : 'translate-x-6'
                       )}
                     />
                   </button>

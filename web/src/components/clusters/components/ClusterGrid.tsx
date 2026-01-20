@@ -81,14 +81,14 @@ export const ClusterGrid = memo(function ClusterGrid({
             <div className="relative glass p-5 rounded-lg h-full overflow-hidden">
             {/* Background provider icon - bottom left */}
             <div
-              className="absolute -bottom-4 -left-4 pointer-events-none"
+              className="absolute -bottom-2 -left-2 pointer-events-none"
               style={{
-                opacity: 0.12,
-                maskImage: 'linear-gradient(45deg, rgba(0,0,0,1) 0%, rgba(0,0,0,0.3) 70%)',
-                WebkitMaskImage: 'linear-gradient(45deg, rgba(0,0,0,1) 0%, rgba(0,0,0,0.3) 70%)',
+                opacity: 0.25,
+                maskImage: 'linear-gradient(45deg, rgba(0,0,0,1) 0%, rgba(0,0,0,0.4) 80%)',
+                WebkitMaskImage: 'linear-gradient(45deg, rgba(0,0,0,1) 0%, rgba(0,0,0,0.4) 80%)',
               }}
             >
-              <CloudProviderIcon provider={provider} size={120} />
+              <CloudProviderIcon provider={provider} size={100} />
             </div>
             <div className="flex items-start justify-between mb-4 relative z-10">
               <div className="flex items-center gap-3">
