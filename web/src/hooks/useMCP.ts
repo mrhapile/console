@@ -141,6 +141,47 @@ export interface GPUNode {
   gpuType: string
   gpuCount: number
   gpuAllocated: number
+  // Enhanced GPU info from NVIDIA GPU Feature Discovery
+  gpuMemoryMB?: number
+  gpuFamily?: string
+  cudaDriverVersion?: string
+  cudaRuntimeVersion?: string
+  migCapable?: boolean
+  migStrategy?: string
+  manufacturer?: string
+}
+
+// NVIDIA Operator Status types
+export interface OperatorComponent {
+  name: string
+  status: string
+  reason?: string
+}
+
+export interface GPUOperatorInfo {
+  installed: boolean
+  version?: string
+  state?: string
+  ready: boolean
+  components?: OperatorComponent[]
+  driverVersion?: string
+  cudaVersion?: string
+  namespace?: string
+}
+
+export interface NetworkOperatorInfo {
+  installed: boolean
+  version?: string
+  state?: string
+  ready: boolean
+  components?: OperatorComponent[]
+  namespace?: string
+}
+
+export interface NVIDIAOperatorStatus {
+  cluster: string
+  gpuOperator?: GPUOperatorInfo
+  networkOperator?: NetworkOperatorInfo
 }
 
 export interface NodeCondition {
@@ -312,11 +353,147 @@ interface ClusterCache {
   error: string | null
 }
 
-// Module-level shared state
+// Cache cluster distribution in localStorage to prevent logo flickering on page load
+const CLUSTER_DIST_CACHE_KEY = 'kubestellar-cluster-distributions'
+type DistributionCache = Record<string, { distribution: string; namespaces?: string[] }>
+
+function loadDistributionCache(): DistributionCache {
+  try {
+    const stored = localStorage.getItem(CLUSTER_DIST_CACHE_KEY)
+    if (stored) {
+      return JSON.parse(stored)
+    }
+  } catch {
+    // Ignore parse errors
+  }
+  return {}
+}
+
+function saveDistributionCache(cache: DistributionCache) {
+  try {
+    localStorage.setItem(CLUSTER_DIST_CACHE_KEY, JSON.stringify(cache))
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+// Apply cached distributions to cluster list
+function applyDistributionCache(clusters: ClusterInfo[]): ClusterInfo[] {
+  const distCache = loadDistributionCache()
+  return clusters.map(cluster => {
+    const cached = distCache[cluster.name]
+    if (cached && !cluster.distribution) {
+      return { ...cluster, distribution: cached.distribution, namespaces: cached.namespaces }
+    }
+    return cluster
+  })
+}
+
+// Update distribution cache when clusters are updated
+function updateDistributionCache(clusters: ClusterInfo[]) {
+  const distCache = loadDistributionCache()
+  let changed = false
+  clusters.forEach(cluster => {
+    if (cluster.distribution && (!distCache[cluster.name] || distCache[cluster.name].distribution !== cluster.distribution)) {
+      distCache[cluster.name] = { distribution: cluster.distribution, namespaces: cluster.namespaces }
+      changed = true
+    }
+  })
+  if (changed) {
+    saveDistributionCache(distCache)
+  }
+}
+
+// Full cluster cache in localStorage - preserves all fields including cpuCores, distribution, etc.
+const CLUSTER_CACHE_KEY = 'kubestellar-cluster-cache'
+
+function loadClusterCacheFromStorage(): ClusterInfo[] {
+  try {
+    const stored = localStorage.getItem(CLUSTER_CACHE_KEY)
+    if (stored) {
+      const parsed = JSON.parse(stored)
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed
+      }
+    }
+  } catch {
+    // Ignore parse errors
+  }
+  return []
+}
+
+function saveClusterCacheToStorage(clusters: ClusterInfo[]) {
+  try {
+    // Only save clusters with meaningful data
+    const toSave = clusters.filter(c => c.name).map(c => ({
+      name: c.name,
+      context: c.context,
+      server: c.server,
+      user: c.user,
+      healthy: c.healthy,
+      source: c.source,
+      nodeCount: c.nodeCount,
+      podCount: c.podCount,
+      cpuCores: c.cpuCores,
+      memoryBytes: c.memoryBytes,
+      memoryGB: c.memoryGB,
+      storageBytes: c.storageBytes,
+      storageGB: c.storageGB,
+      pvcCount: c.pvcCount,
+      pvcBoundCount: c.pvcBoundCount,
+      reachable: c.reachable,
+      lastSeen: c.lastSeen,
+      distribution: c.distribution,
+      namespaces: c.namespaces,
+    }))
+    localStorage.setItem(CLUSTER_CACHE_KEY, JSON.stringify(toSave))
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+// Merge stored cluster data with fresh cluster list (preserves cached metrics)
+// Uses cached value when new value is missing/zero (0 is treated as missing for metrics)
+function mergeWithStoredClusters(newClusters: ClusterInfo[]): ClusterInfo[] {
+  const stored = loadClusterCacheFromStorage()
+  const storedMap = new Map(stored.map(c => [c.name, c]))
+
+  return newClusters.map(cluster => {
+    const cached = storedMap.get(cluster.name)
+    if (cached) {
+      // Helper: use new value only if it's a positive number, else use cached
+      const pickMetric = (newVal: number | undefined, cachedVal: number | undefined) => {
+        if (newVal !== undefined && newVal > 0) return newVal
+        if (cachedVal !== undefined && cachedVal > 0) return cachedVal
+        return newVal // fallback to new value (could be 0 or undefined)
+      }
+
+      // Merge: use new data but preserve cached metrics if new data is missing/zero
+      return {
+        ...cluster,
+        cpuCores: pickMetric(cluster.cpuCores, cached.cpuCores),
+        memoryBytes: pickMetric(cluster.memoryBytes, cached.memoryBytes),
+        memoryGB: pickMetric(cluster.memoryGB, cached.memoryGB),
+        storageBytes: pickMetric(cluster.storageBytes, cached.storageBytes),
+        storageGB: pickMetric(cluster.storageGB, cached.storageGB),
+        nodeCount: pickMetric(cluster.nodeCount, cached.nodeCount),
+        podCount: pickMetric(cluster.podCount, cached.podCount),
+        pvcCount: cluster.pvcCount ?? cached.pvcCount, // pvcCount can be 0
+        pvcBoundCount: cluster.pvcBoundCount ?? cached.pvcBoundCount,
+        distribution: cluster.distribution || cached.distribution,
+        namespaces: cluster.namespaces?.length ? cluster.namespaces : cached.namespaces,
+      }
+    }
+    return cluster
+  })
+}
+
+// Module-level shared state - initialize from localStorage if available
+const storedClusters = loadClusterCacheFromStorage()
 let clusterCache: ClusterCache = {
-  clusters: [],
-  lastUpdated: null,
-  isLoading: true,
+  clusters: storedClusters,
+  lastUpdated: storedClusters.length > 0 ? new Date() : null,
+  isLoading: storedClusters.length === 0, // Don't show loading if we have cached data
   isRefreshing: false,
   error: null,
 }
@@ -344,17 +521,59 @@ function notifyClusterSubscribersDebounced() {
 
 // Update shared cluster cache
 function updateClusterCache(updates: Partial<ClusterCache>) {
+  // Apply cached distributions and merge with stored data to preserve metrics
+  if (updates.clusters) {
+    updates.clusters = mergeWithStoredClusters(updates.clusters)
+    updates.clusters = applyDistributionCache(updates.clusters)
+    // Save cluster data to localStorage
+    saveClusterCacheToStorage(updates.clusters)
+    updateDistributionCache(updates.clusters)
+  }
   clusterCache = { ...clusterCache, ...updates }
   notifyClusterSubscribers()
 }
 
 // Update a single cluster in the shared cache (debounced to prevent flashing)
 function updateSingleClusterInCache(clusterName: string, updates: Partial<ClusterInfo>) {
+  const updatedClusters = clusterCache.clusters.map(c => {
+    if (c.name !== clusterName) return c
+
+    // Merge updates with existing data
+    const merged = { ...c }
+
+    // For each update field, only apply if value is meaningful
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value === undefined) {
+        // Don't overwrite with undefined - keep existing value
+        return
+      }
+
+      // For numeric metrics, preserve positive cached values when new value is 0
+      const metricsKeys = ['cpuCores', 'memoryBytes', 'memoryGB', 'storageBytes', 'storageGB']
+      if (metricsKeys.includes(key) && typeof value === 'number' && value === 0) {
+        // Keep existing positive value if available
+        const existingValue = c[key as keyof ClusterInfo]
+        if (typeof existingValue === 'number' && existingValue > 0) {
+          return // Skip, keep existing positive value
+        }
+      }
+
+      // Apply the update
+      (merged as Record<string, unknown>)[key] = value
+    })
+
+    return merged
+  })
+
   clusterCache = {
     ...clusterCache,
-    clusters: clusterCache.clusters.map(c =>
-      c.name === clusterName ? { ...c, ...updates } : c
-    ),
+    clusters: updatedClusters,
+  }
+  // Persist all cluster data to localStorage
+  saveClusterCacheToStorage(updatedClusters)
+  // Persist distribution changes
+  if (updates.distribution) {
+    updateDistributionCache(updatedClusters)
   }
   // Use debounced notification to batch multiple cluster updates
   notifyClusterSubscribersDebounced()
@@ -436,44 +655,77 @@ async function fetchSingleClusterHealth(clusterName: string): Promise<ClusterHea
   return null
 }
 
+// Helper to detect distribution from namespace list
+function detectDistributionFromNamespaces(namespaces: string[]): string | undefined {
+  if (namespaces.some(ns => ns.startsWith('openshift-') || ns === 'openshift')) {
+    return 'openshift'
+  } else if (namespaces.some(ns => ns.startsWith('gke-') || ns === 'config-management-system')) {
+    return 'gke'
+  } else if (namespaces.some(ns => ns.startsWith('aws-') || ns.startsWith('amazon-'))) {
+    return 'eks'
+  } else if (namespaces.some(ns => ns.startsWith('azure-') || ns === 'azure-arc')) {
+    return 'aks'
+  } else if (namespaces.some(ns => ns === 'cattle-system' || ns.startsWith('cattle-'))) {
+    return 'rancher'
+  }
+  return undefined
+}
+
 // Detect cluster distribution by checking for system namespaces
-// Returns the detected distribution and list of system namespaces
+// Tries multiple endpoints as fallbacks: pods -> events -> deployments
 async function detectClusterDistribution(clusterName: string): Promise<{ distribution?: string; namespaces?: string[] }> {
+  const token = localStorage.getItem('token')
+  const headers: Record<string, string> = token ? { 'Authorization': `Bearer ${token}` } : {}
+
+  // Helper to extract namespaces from API response
+  const extractNamespaces = (items: Array<{ namespace?: string }>): string[] => {
+    return Array.from(new Set<string>(
+      items.map(item => item.namespace).filter((ns): ns is string => Boolean(ns))
+    ))
+  }
+
+  // Try pods endpoint first
   try {
-    const token = localStorage.getItem('token')
     const response = await fetch(
       `/api/mcp/pods?cluster=${encodeURIComponent(clusterName)}&limit=500`,
-      {
-        signal: AbortSignal.timeout(5000), // Short timeout
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
-      }
+      { signal: AbortSignal.timeout(5000), headers }
     )
     if (response.ok) {
       const data = await response.json()
-      // Extract unique namespaces from pods
-      const namespaces = Array.from(new Set<string>(
-        (data.pods || []).map((p: { namespace?: string }) => p.namespace).filter(Boolean)
-      ))
-
-      // Detect distribution based on namespaces
-      let distribution: string | undefined
-      if (namespaces.some(ns => ns.startsWith('openshift-') || ns === 'openshift')) {
-        distribution = 'openshift'
-      } else if (namespaces.some(ns => ns.startsWith('gke-') || ns === 'config-management-system')) {
-        distribution = 'gke'
-      } else if (namespaces.some(ns => ns.startsWith('aws-') || ns.startsWith('amazon-'))) {
-        distribution = 'eks'
-      } else if (namespaces.some(ns => ns.startsWith('azure-') || ns === 'azure-arc')) {
-        distribution = 'aks'
-      } else if (namespaces.some(ns => ns === 'cattle-system' || ns.startsWith('cattle-'))) {
-        distribution = 'rancher'
-      }
-
-      return { distribution, namespaces }
+      const namespaces = extractNamespaces(data.pods || [])
+      const distribution = detectDistributionFromNamespaces(namespaces)
+      if (distribution) return { distribution, namespaces }
     }
-  } catch {
-    // Ignore errors - distribution detection is optional
-  }
+  } catch { /* continue to fallback */ }
+
+  // Fallback: try events endpoint
+  try {
+    const response = await fetch(
+      `/api/mcp/events?cluster=${encodeURIComponent(clusterName)}&limit=200`,
+      { signal: AbortSignal.timeout(5000), headers }
+    )
+    if (response.ok) {
+      const data = await response.json()
+      const namespaces = extractNamespaces(data.events || [])
+      const distribution = detectDistributionFromNamespaces(namespaces)
+      if (distribution) return { distribution, namespaces }
+    }
+  } catch { /* continue to fallback */ }
+
+  // Fallback: try deployments endpoint
+  try {
+    const response = await fetch(
+      `/api/mcp/deployments?cluster=${encodeURIComponent(clusterName)}`,
+      { signal: AbortSignal.timeout(5000), headers }
+    )
+    if (response.ok) {
+      const data = await response.json()
+      const namespaces = extractNamespaces(data.deployments || [])
+      const distribution = detectDistributionFromNamespaces(namespaces)
+      if (distribution) return { distribution, namespaces }
+    }
+  } catch { /* ignore */ }
+
   return {}
 }
 
@@ -533,8 +785,32 @@ async function silentFetchClusters() {
     // Try local agent first - get cluster list quickly
     const agentClusters = await fetchClusterListFromAgent()
     if (agentClusters) {
+      // Preserve existing detected distribution and namespaces
+      const existingClusters = clusterCache.clusters
+      const mergedClusters = agentClusters.map(newCluster => {
+        const existing = existingClusters.find(c => c.name === newCluster.name)
+        if (existing) {
+          return {
+            ...newCluster,
+            // Preserve detected distribution and namespaces
+            distribution: existing.distribution,
+            namespaces: existing.namespaces,
+            // Preserve health data if available
+            ...(existing.nodeCount !== undefined ? {
+              nodeCount: existing.nodeCount,
+              podCount: existing.podCount,
+              cpuCores: existing.cpuCores,
+              memoryGB: existing.memoryGB,
+              storageGB: existing.storageGB,
+              healthy: existing.healthy,
+              reachable: existing.reachable,
+            } : {}),
+          }
+        }
+        return newCluster
+      })
       updateClusterCache({
-        clusters: agentClusters,
+        clusters: mergedClusters,
         error: null,
         lastUpdated: new Date(),
       })
@@ -544,8 +820,17 @@ async function silentFetchClusters() {
     }
     // Fall back to backend API
     const { data } = await api.get<{ clusters: ClusterInfo[] }>('/api/mcp/clusters')
+    // Preserve existing distribution data
+    const existingClusters = clusterCache.clusters
+    const mergedClusters = (data.clusters || []).map(newCluster => {
+      const existing = existingClusters.find(c => c.name === newCluster.name)
+      if (existing?.distribution) {
+        return { ...newCluster, distribution: existing.distribution, namespaces: existing.namespaces }
+      }
+      return newCluster
+    })
     updateClusterCache({
-      clusters: data.clusters || [],
+      clusters: mergedClusters,
       error: null,
       lastUpdated: new Date(),
     })
@@ -595,17 +880,23 @@ async function fullFetchClusters() {
       const existingClusters = clusterCache.clusters
       const mergedClusters = agentClusters.map(newCluster => {
         const existing = existingClusters.find(c => c.name === newCluster.name)
-        if (existing && existing.nodeCount !== undefined) {
-          // Preserve existing health data during silent background refresh (no visual indicator)
+        if (existing) {
+          // Preserve existing health data and detected distribution during refresh
           return {
             ...newCluster,
-            nodeCount: existing.nodeCount,
-            podCount: existing.podCount,
-            cpuCores: existing.cpuCores,
-            memoryGB: existing.memoryGB,
-            storageGB: existing.storageGB,
-            healthy: existing.healthy,
-            reachable: existing.reachable,
+            // Always preserve detected distribution and namespaces
+            distribution: existing.distribution,
+            namespaces: existing.namespaces,
+            // Preserve health data if available
+            ...(existing.nodeCount !== undefined ? {
+              nodeCount: existing.nodeCount,
+              podCount: existing.podCount,
+              cpuCores: existing.cpuCores,
+              memoryGB: existing.memoryGB,
+              storageGB: existing.storageGB,
+              healthy: existing.healthy,
+              reachable: existing.reachable,
+            } : {}),
             refreshing: false, // Keep false during background polling - no visual indicator
           }
         }
@@ -627,8 +918,32 @@ async function fullFetchClusters() {
     }
     // Fall back to backend API
     const { data } = await api.get<{ clusters: ClusterInfo[] }>('/api/mcp/clusters')
+    // Merge new cluster list with existing cached data (preserve distribution, health, etc.)
+    const existingClusters = clusterCache.clusters
+    const mergedClusters = (data.clusters || []).map(newCluster => {
+      const existing = existingClusters.find(c => c.name === newCluster.name)
+      if (existing) {
+        return {
+          ...newCluster,
+          // Preserve detected distribution and namespaces
+          distribution: existing.distribution,
+          namespaces: existing.namespaces,
+          // Preserve health data if available
+          ...(existing.nodeCount !== undefined ? {
+            nodeCount: existing.nodeCount,
+            podCount: existing.podCount,
+            cpuCores: existing.cpuCores,
+            memoryGB: existing.memoryGB,
+            storageGB: existing.storageGB,
+            healthy: existing.healthy,
+            reachable: existing.reachable,
+          } : {}),
+        }
+      }
+      return newCluster
+    })
     await finishWithMinDuration({
-      clusters: data.clusters || [],
+      clusters: mergedClusters,
       error: null,
       lastUpdated: new Date(),
       isLoading: false,
@@ -813,18 +1128,76 @@ export function useClusterHealth(cluster?: string) {
   return { health, isLoading, error, refetch }
 }
 
-// Hook to get pods
+// Module-level cache for pods data (persists across navigation)
+const PODS_CACHE_KEY = 'kubestellar-pods-cache'
+
+interface PodsCache {
+  data: PodInfo[]
+  timestamp: Date
+  key: string
+}
+
+let podsCache: PodsCache | null = null
+
+// Load pods cache from localStorage on startup
+function loadPodsCacheFromStorage(cacheKey: string): { data: PodInfo[], timestamp: Date } | null {
+  try {
+    const stored = localStorage.getItem(PODS_CACHE_KEY)
+    if (stored) {
+      const parsed = JSON.parse(stored)
+      if (parsed.key === cacheKey && parsed.data && parsed.data.length > 0) {
+        const timestamp = parsed.timestamp ? new Date(parsed.timestamp) : new Date()
+        podsCache = { data: parsed.data, timestamp, key: cacheKey }
+        return { data: parsed.data, timestamp }
+      }
+    }
+  } catch {
+    // Ignore parse errors
+  }
+  return null
+}
+
+function savePodsCacheToStorage() {
+  if (podsCache) {
+    try {
+      localStorage.setItem(PODS_CACHE_KEY, JSON.stringify({
+        data: podsCache.data,
+        timestamp: podsCache.timestamp.toISOString(),
+        key: podsCache.key
+      }))
+    } catch {
+      // Ignore storage errors
+    }
+  }
+}
+
+// Hook to get pods with localStorage-backed caching
 export function usePods(cluster?: string, namespace?: string, sortBy: 'restarts' | 'name' = 'restarts', limit = 10) {
-  const [pods, setPods] = useState<PodInfo[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+  const cacheKey = `pods:${cluster || 'all'}:${namespace || 'all'}`
+
+  // Initialize from cache if available
+  const getCachedData = () => {
+    if (podsCache && podsCache.key === cacheKey) {
+      return { data: podsCache.data, timestamp: podsCache.timestamp }
+    }
+    // Try loading from localStorage
+    return loadPodsCacheFromStorage(cacheKey)
+  }
+
+  const cached = getCachedData()
+  const [pods, setPods] = useState<PodInfo[]>(cached?.data || [])
+  const [isLoading, setIsLoading] = useState(!cached)
   const [isRefreshing, setIsRefreshing] = useState(false)
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(cached?.timestamp || null)
   const [error, setError] = useState<string | null>(null)
 
   const refetch = useCallback(async (silent = false) => {
     // For silent (background) refreshes, don't update loading states - prevents UI flashing
     if (!silent) {
-      setIsLoading(true)
+      const hasCachedData = podsCache && podsCache.key === cacheKey
+      if (!hasCachedData) {
+        setIsLoading(true)
+      }
     }
     try {
       const params = new URLSearchParams()
@@ -840,13 +1213,18 @@ export function usePods(cluster?: string, namespace?: string, sortBy: 'restarts'
         sortedPods = sortedPods.sort((a, b) => a.name.localeCompare(b.name))
       }
 
-      // Limit results
+      // Store all pods in cache (before limiting) so GPU workloads can use the full list
+      const now = new Date()
+      podsCache = { data: sortedPods, timestamp: now, key: cacheKey }
+      savePodsCacheToStorage()
+
+      // Limit results for display
       setPods(sortedPods.slice(0, limit))
       setError(null)
-      setLastUpdated(new Date())
+      setLastUpdated(now)
     } catch (err) {
-      // Keep existing data on silent refresh (stale-while-revalidate)
-      if (!silent) {
+      // Keep stale data on error - don't fall back to demo
+      if (!silent && !podsCache) {
         setError('Failed to fetch pods')
         setPods(getDemoPods())
       }
@@ -856,14 +1234,82 @@ export function usePods(cluster?: string, namespace?: string, sortBy: 'restarts'
       }
       setIsRefreshing(false)
     }
-  }, [cluster, namespace, sortBy, limit])
+  }, [cluster, namespace, sortBy, limit, cacheKey])
 
   useEffect(() => {
-    refetch(false)
-    // Poll every 30 seconds for pod updates
+    const hasCachedData = podsCache && podsCache.key === cacheKey
+    refetch(!hasCachedData) // silent=true if we have cached data
+    // Poll for pod updates
     const interval = setInterval(() => refetch(true), REFRESH_INTERVAL_MS)
     return () => clearInterval(interval)
-  }, [refetch])
+  }, [refetch, cacheKey])
+
+  return { pods, isLoading, isRefreshing, lastUpdated, error, refetch: () => refetch(false) }
+}
+
+// Hook to get ALL pods (no limit) - for components that need to search all pods
+// This uses the same cache as usePods but returns all pods without limiting
+export function useAllPods(cluster?: string, namespace?: string) {
+  const cacheKey = `pods:${cluster || 'all'}:${namespace || 'all'}`
+
+  // Initialize from cache if available
+  const getCachedData = () => {
+    if (podsCache && podsCache.key === cacheKey) {
+      return { data: podsCache.data, timestamp: podsCache.timestamp }
+    }
+    return loadPodsCacheFromStorage(cacheKey)
+  }
+
+  const cached = getCachedData()
+  const [pods, setPods] = useState<PodInfo[]>(cached?.data || [])
+  const [isLoading, setIsLoading] = useState(!cached)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(cached?.timestamp || null)
+  const [error, setError] = useState<string | null>(null)
+
+  const refetch = useCallback(async (silent = false) => {
+    if (!silent) {
+      const hasCachedData = podsCache && podsCache.key === cacheKey
+      if (!hasCachedData) {
+        setIsLoading(true)
+      }
+    }
+    try {
+      const params = new URLSearchParams()
+      if (cluster) params.append('cluster', cluster)
+      if (namespace) params.append('namespace', namespace)
+      const { data } = await api.get<{ pods: PodInfo[] }>(`/api/mcp/pods?${params}`)
+      const allPods = data.pods || []
+      const now = new Date()
+
+      // Update module-level cache with all pods
+      podsCache = { data: allPods, timestamp: now, key: cacheKey }
+      savePodsCacheToStorage()
+
+      setPods(allPods)
+      setError(null)
+      setLastUpdated(now)
+    } catch (err) {
+      // Keep stale data on error
+      if (!silent && !podsCache) {
+        setError('Failed to fetch pods')
+        setPods(getDemoPods())
+      }
+    } finally {
+      if (!silent) {
+        setIsLoading(false)
+      }
+      setIsRefreshing(false)
+    }
+  }, [cluster, namespace, cacheKey])
+
+  useEffect(() => {
+    const hasCachedData = podsCache && podsCache.key === cacheKey
+    refetch(!hasCachedData) // silent=true if we have cached data
+    // Poll for pod updates
+    const interval = setInterval(() => refetch(true), REFRESH_INTERVAL_MS)
+    return () => clearInterval(interval)
+  }, [refetch, cacheKey])
 
   return { pods, isLoading, isRefreshing, lastUpdated, error, refetch: () => refetch(false) }
 }
@@ -1163,6 +1609,8 @@ export function useDeployments(cluster?: string, namespace?: string) {
 }
 
 // Module-level cache for services data (persists across navigation)
+const SERVICES_CACHE_KEY = 'kubestellar-services-cache'
+
 interface ServicesCache {
   data: Service[]
   timestamp: Date
@@ -1170,7 +1618,39 @@ interface ServicesCache {
 }
 let servicesCache: ServicesCache | null = null
 
-// Hook to get services
+// Load services cache from localStorage
+function loadServicesCacheFromStorage(cacheKey: string): { data: Service[], timestamp: Date } | null {
+  try {
+    const stored = localStorage.getItem(SERVICES_CACHE_KEY)
+    if (stored) {
+      const parsed = JSON.parse(stored)
+      if (parsed.key === cacheKey && parsed.data && parsed.data.length > 0) {
+        const timestamp = parsed.timestamp ? new Date(parsed.timestamp) : new Date()
+        servicesCache = { data: parsed.data, timestamp, key: cacheKey }
+        return { data: parsed.data, timestamp }
+      }
+    }
+  } catch {
+    // Ignore parse errors
+  }
+  return null
+}
+
+function saveServicesCacheToStorage() {
+  if (servicesCache) {
+    try {
+      localStorage.setItem(SERVICES_CACHE_KEY, JSON.stringify({
+        data: servicesCache.data,
+        timestamp: servicesCache.timestamp.toISOString(),
+        key: servicesCache.key
+      }))
+    } catch {
+      // Ignore storage errors
+    }
+  }
+}
+
+// Hook to get services with localStorage-backed caching
 export function useServices(cluster?: string, namespace?: string) {
   const cacheKey = `services:${cluster || 'all'}:${namespace || 'all'}`
 
@@ -1179,7 +1659,7 @@ export function useServices(cluster?: string, namespace?: string) {
     if (servicesCache && servicesCache.key === cacheKey) {
       return { data: servicesCache.data, timestamp: servicesCache.timestamp }
     }
-    return null
+    return loadServicesCacheFromStorage(cacheKey)
   }
 
   const cached = getCachedData()
@@ -1206,8 +1686,9 @@ export function useServices(cluster?: string, namespace?: string) {
       const newData = data.services || []
       const now = new Date()
 
-      // Update module-level cache
+      // Update module-level cache and persist to localStorage
       servicesCache = { data: newData, timestamp: now, key: cacheKey }
+      saveServicesCacheToStorage()
 
       setServices(newData)
       setError(null)
@@ -1388,34 +1869,112 @@ export function useServiceAccounts(cluster?: string, namespace?: string) {
   return { serviceAccounts, isLoading, error, refetch }
 }
 
-// Hook to get PVCs
+// Module-level cache for PVCs data (persists across navigation)
+const PVCS_CACHE_KEY = 'kubestellar-pvcs-cache'
+
+interface PVCsCache {
+  data: PVC[]
+  timestamp: Date
+  key: string
+}
+
+let pvcsCache: PVCsCache | null = null
+
+// Load PVCs cache from localStorage
+function loadPVCsCacheFromStorage(cacheKey: string): { data: PVC[], timestamp: Date } | null {
+  try {
+    const stored = localStorage.getItem(PVCS_CACHE_KEY)
+    if (stored) {
+      const parsed = JSON.parse(stored)
+      if (parsed.key === cacheKey && parsed.data && parsed.data.length > 0) {
+        const timestamp = parsed.timestamp ? new Date(parsed.timestamp) : new Date()
+        pvcsCache = { data: parsed.data, timestamp, key: cacheKey }
+        return { data: parsed.data, timestamp }
+      }
+    }
+  } catch {
+    // Ignore parse errors
+  }
+  return null
+}
+
+function savePVCsCacheToStorage() {
+  if (pvcsCache) {
+    try {
+      localStorage.setItem(PVCS_CACHE_KEY, JSON.stringify({
+        data: pvcsCache.data,
+        timestamp: pvcsCache.timestamp.toISOString(),
+        key: pvcsCache.key
+      }))
+    } catch {
+      // Ignore storage errors
+    }
+  }
+}
+
+// Hook to get PVCs with localStorage-backed caching
 export function usePVCs(cluster?: string, namespace?: string) {
-  const [pvcs, setPVCs] = useState<PVC[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+  const cacheKey = `pvcs:${cluster || 'all'}:${namespace || 'all'}`
+
+  // Initialize from cache if available
+  const getCachedData = () => {
+    if (pvcsCache && pvcsCache.key === cacheKey) {
+      return { data: pvcsCache.data, timestamp: pvcsCache.timestamp }
+    }
+    return loadPVCsCacheFromStorage(cacheKey)
+  }
+
+  const cached = getCachedData()
+  const [pvcs, setPVCs] = useState<PVC[]>(cached?.data || [])
+  const [isLoading, setIsLoading] = useState(!cached)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(cached?.timestamp || null)
   const [error, setError] = useState<string | null>(null)
 
-  const refetch = useCallback(async () => {
-    setIsLoading(true)
+  const refetch = useCallback(async (silent = false) => {
+    if (!silent) {
+      const hasCachedData = pvcsCache && pvcsCache.key === cacheKey
+      if (!hasCachedData) {
+        setIsLoading(true)
+      }
+    }
     try {
       const params = new URLSearchParams()
       if (cluster) params.append('cluster', cluster)
       if (namespace) params.append('namespace', namespace)
       const { data } = await api.get<{ pvcs: PVC[] }>(`/api/mcp/pvcs?${params}`)
-      setPVCs(data.pvcs || [])
+      const newData = data.pvcs || []
+      const now = new Date()
+
+      // Update module-level cache
+      pvcsCache = { data: newData, timestamp: now, key: cacheKey }
+      savePVCsCacheToStorage()
+
+      setPVCs(newData)
       setError(null)
+      setLastUpdated(now)
     } catch (err) {
-      setError('Failed to fetch PVCs')
-      setPVCs([])
+      // Keep stale data on error
+      if (!silent && !pvcsCache) {
+        setError('Failed to fetch PVCs')
+      }
     } finally {
-      setIsLoading(false)
+      if (!silent) {
+        setIsLoading(false)
+      }
+      setIsRefreshing(false)
     }
-  }, [cluster, namespace])
+  }, [cluster, namespace, cacheKey])
 
   useEffect(() => {
-    refetch()
-  }, [refetch])
+    const hasCachedData = pvcsCache && pvcsCache.key === cacheKey
+    refetch(!hasCachedData) // silent=true if we have cached data
+    // Poll for PVC updates
+    const interval = setInterval(() => refetch(true), REFRESH_INTERVAL_MS)
+    return () => clearInterval(interval)
+  }, [refetch, cacheKey])
 
-  return { pvcs, isLoading, error, refetch }
+  return { pvcs, isLoading, isRefreshing, lastUpdated, error, refetch: () => refetch(false) }
 }
 
 // Hook to get pod logs
@@ -1527,34 +2086,152 @@ export function useWarningEvents(cluster?: string, namespace?: string, limit = 2
   return { events, isLoading, isRefreshing, lastUpdated, error, refetch: () => refetch(false) }
 }
 
-// Hook to get GPU nodes
-export function useGPUNodes(cluster?: string) {
-  const [nodes, setNodes] = useState<GPUNode[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+// Module-level cache for GPU nodes (persists across navigation)
+interface GPUNodeCache {
+  nodes: GPUNode[]
+  lastUpdated: Date | null
+  isLoading: boolean
+  error: string | null
+}
 
-  const refetch = useCallback(async () => {
-    setIsLoading(true)
-    try {
-      const params = new URLSearchParams()
-      if (cluster) params.append('cluster', cluster)
-      const { data } = await api.get<{ nodes: GPUNode[] }>(`/api/mcp/gpu-nodes?${params}`)
-      setNodes(data.nodes || [])
-      setError(null)
-    } catch (err) {
-      setError('Failed to fetch GPU nodes')
-      // Return demo GPU data
-      setNodes(getDemoGPUNodes())
-    } finally {
-      setIsLoading(false)
+// Try to restore GPU cache from localStorage for instant display on page load
+const GPU_CACHE_KEY = 'kubestellar-gpu-cache'
+function loadGPUCacheFromStorage(): GPUNodeCache {
+  try {
+    const stored = localStorage.getItem(GPU_CACHE_KEY)
+    if (stored) {
+      const parsed = JSON.parse(stored)
+      if (parsed.nodes && parsed.nodes.length > 0) {
+        return {
+          nodes: parsed.nodes,
+          lastUpdated: parsed.lastUpdated ? new Date(parsed.lastUpdated) : null,
+          isLoading: false,
+          error: null,
+        }
+      }
+    }
+  } catch {
+    // Ignore parse errors
+  }
+  return { nodes: [], lastUpdated: null, isLoading: false, error: null }
+}
+
+function saveGPUCacheToStorage(cache: GPUNodeCache) {
+  try {
+    if (cache.nodes.length > 0) {
+      localStorage.setItem(GPU_CACHE_KEY, JSON.stringify({
+        nodes: cache.nodes,
+        lastUpdated: cache.lastUpdated?.toISOString(),
+      }))
+    }
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+let gpuNodeCache: GPUNodeCache = loadGPUCacheFromStorage()
+
+const gpuNodeSubscribers = new Set<(cache: GPUNodeCache) => void>()
+
+function notifyGPUNodeSubscribers() {
+  gpuNodeSubscribers.forEach(subscriber => subscriber(gpuNodeCache))
+}
+
+function updateGPUNodeCache(updates: Partial<GPUNodeCache>) {
+  gpuNodeCache = { ...gpuNodeCache, ...updates }
+  // Persist to localStorage when nodes are updated
+  if (updates.nodes !== undefined) {
+    saveGPUCacheToStorage(gpuNodeCache)
+  }
+  notifyGPUNodeSubscribers()
+}
+
+// Fetch GPU nodes (shared across all consumers)
+let gpuFetchInProgress = false
+async function fetchGPUNodes(cluster?: string) {
+  if (gpuFetchInProgress) return
+  gpuFetchInProgress = true
+
+  // Only show loading if we have no cached data
+  if (gpuNodeCache.nodes.length === 0) {
+    updateGPUNodeCache({ isLoading: true })
+  }
+
+  try {
+    const params = new URLSearchParams()
+    if (cluster) params.append('cluster', cluster)
+    const { data } = await api.get<{ nodes: GPUNode[] }>(`/api/mcp/gpu-nodes?${params}`)
+    const newNodes = data.nodes || []
+
+    // If API returns empty but we have cached data, preserve the cache
+    // This prevents GPU count from going to zero during network issues or slow refreshes
+    if (newNodes.length === 0 && gpuNodeCache.nodes.length > 0) {
+      updateGPUNodeCache({
+        lastUpdated: new Date(),
+        isLoading: false,
+        error: null,
+      })
+    } else {
+      updateGPUNodeCache({
+        nodes: newNodes,
+        lastUpdated: new Date(),
+        isLoading: false,
+        error: null,
+      })
+    }
+  } catch (err) {
+    // On error, preserve existing cached data or use demo data
+    if (gpuNodeCache.nodes.length === 0) {
+      updateGPUNodeCache({
+        nodes: getDemoGPUNodes(),
+        isLoading: false,
+        error: 'Failed to fetch GPU nodes',
+      })
+    } else {
+      // Preserve existing cache on error
+      updateGPUNodeCache({ isLoading: false, error: 'Failed to refresh GPU nodes' })
+    }
+  } finally {
+    gpuFetchInProgress = false
+  }
+}
+
+// Hook to get GPU nodes with shared caching
+export function useGPUNodes(cluster?: string) {
+  const [state, setState] = useState<GPUNodeCache>(gpuNodeCache)
+
+  useEffect(() => {
+    // Subscribe to cache updates
+    const handleUpdate = (cache: GPUNodeCache) => setState(cache)
+    gpuNodeSubscribers.add(handleUpdate)
+
+    // Fetch if cache is empty or stale (older than 30 seconds)
+    const isStale = !gpuNodeCache.lastUpdated ||
+      (Date.now() - gpuNodeCache.lastUpdated.getTime()) > 30000
+    if (gpuNodeCache.nodes.length === 0 || isStale) {
+      fetchGPUNodes(cluster)
+    }
+
+    return () => {
+      gpuNodeSubscribers.delete(handleUpdate)
     }
   }, [cluster])
 
-  useEffect(() => {
-    refetch()
-  }, [refetch])
+  const refetch = useCallback(() => {
+    fetchGPUNodes(cluster)
+  }, [cluster])
 
-  return { nodes, isLoading, error, refetch }
+  // Filter by cluster if specified
+  const filteredNodes = cluster
+    ? state.nodes.filter(n => n.cluster === cluster || n.cluster.startsWith(cluster))
+    : state.nodes
+
+  return {
+    nodes: filteredNodes,
+    isLoading: state.isLoading,
+    error: state.error,
+    refetch,
+  }
 }
 
 // Hook to get detailed node information
@@ -1584,6 +2261,41 @@ export function useNodes(cluster?: string) {
   }, [refetch])
 
   return { nodes, isLoading, error, refetch }
+}
+
+// Hook to get NVIDIA operator status
+export function useNVIDIAOperators(cluster?: string) {
+  const [operators, setOperators] = useState<NVIDIAOperatorStatus[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const refetch = useCallback(async () => {
+    setIsLoading(true)
+    try {
+      const params = new URLSearchParams()
+      if (cluster) params.append('cluster', cluster)
+      const { data } = await api.get<{ operators?: NVIDIAOperatorStatus[], operator?: NVIDIAOperatorStatus }>(`/api/mcp/nvidia-operators?${params}`)
+      if (data.operators) {
+        setOperators(data.operators)
+      } else if (data.operator) {
+        setOperators([data.operator])
+      } else {
+        setOperators([])
+      }
+      setError(null)
+    } catch (err) {
+      setError('Failed to fetch NVIDIA operator status')
+      setOperators([])
+    } finally {
+      setIsLoading(false)
+    }
+  }, [cluster])
+
+  useEffect(() => {
+    refetch()
+  }, [refetch])
+
+  return { operators, isLoading, error, refetch }
 }
 
 // Security issue types

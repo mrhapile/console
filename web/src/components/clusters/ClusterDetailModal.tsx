@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { X, CheckCircle, AlertTriangle, WifiOff, Pencil, ChevronRight, ChevronDown, Layers, Server, Network, HardDrive, Box, FolderOpen, Loader2, Cpu, MemoryStick, Database, Wand2, Stethoscope, Wrench, Bot, ExternalLink } from 'lucide-react'
-import { useClusterHealth, usePodIssues, useDeploymentIssues, useGPUNodes, useNodes, useNamespaceStats, useDeployments } from '../../hooks/useMCP'
+import { useClusterHealth, usePodIssues, useDeploymentIssues, useGPUNodes, useNodes, useNamespaceStats, useDeployments, useClusters } from '../../hooks/useMCP'
 import { useDrillDownActions } from '../../hooks/useDrillDown'
 import { useMissions } from '../../hooks/useMissions'
 import { Gauge } from '../charts/Gauge'
@@ -9,148 +9,69 @@ import { NodeListItem } from './NodeListItem'
 import { NodeDetailPanel } from './NodeDetailPanel'
 import { NamespaceResources } from './components'
 import { CPUDetailModal, MemoryDetailModal, StorageDetailModal, GPUDetailModal } from './ResourceDetailModals'
+import { CloudProviderIcon, detectCloudProvider as detectCloudProviderShared, getProviderLabel, CloudProvider as CloudProviderType } from '../ui/CloudProviderIcon'
 
-// Cloud provider detection and console links
+// Cloud provider types
 type CloudProvider = 'eks' | 'gke' | 'aks' | 'openshift' | 'oci' | 'alibaba' | 'digitalocean' | 'rancher' | 'kind' | 'minikube' | 'k3s' | 'unknown'
 
-interface ProviderDetectionResult {
-  provider: CloudProvider
-  consoleUrl: string | null
-  region?: string
-  project?: string
-}
-
-function detectCloudProvider(clusterName: string, apiServerUrl?: string, userName?: string): ProviderDetectionResult {
-  const name = clusterName.toLowerCase()
+// Get console URL for a specific provider
+function getConsoleUrlForProvider(provider: string, clusterName: string, apiServerUrl?: string): string | null {
   const serverUrl = apiServerUrl?.toLowerCase() || ''
-  const user = userName?.toLowerCase() || ''
 
-  // AWS EKS - detect from API server URL (.eks.amazonaws.com) or name
-  if (serverUrl.includes('.eks.amazonaws.com') || name.includes('eks') || name.includes('aws') || name.match(/arn:aws:/)) {
-    // Try to extract region from API server URL (e.g., https://xxx.us-west-2.eks.amazonaws.com)
-    const urlRegionMatch = serverUrl.match(/\.([a-z]{2}-[a-z]+-\d)\.eks\.amazonaws\.com/)
-    const nameRegionMatch = clusterName.match(/(us|eu|ap|sa|ca|me|af)-(north|south|east|west|central|northeast|southeast)-\d/)
-    const region = urlRegionMatch?.[1] || nameRegionMatch?.[0] || 'us-east-1'
-    const shortName = clusterName.split('/').pop() || clusterName
-    return {
-      provider: 'eks',
-      region,
-      consoleUrl: `https://${region}.console.aws.amazon.com/eks/home?region=${region}#/clusters/${shortName}`,
-    }
-  }
-
-  // Google GKE - detect from API server URL (container.googleapis.com) or name
-  if (serverUrl.includes('container.googleapis.com') || name.includes('gke') || name.includes('gcp') || name.match(/gke_/)) {
-    const gkeMatch = clusterName.match(/gke_([^_]+)_([^_]+)_(.+)/)
-    if (gkeMatch) {
-      const [, project, location, gkeName] = gkeMatch
-      return {
-        provider: 'gke',
-        project,
-        region: location,
-        consoleUrl: `https://console.cloud.google.com/kubernetes/clusters/details/${location}/${gkeName}?project=${project}`,
+  switch (provider) {
+    case 'openshift': {
+      // OpenShift: api.xxx -> console-openshift-console.apps.xxx
+      const apiMatch = apiServerUrl?.match(/https?:\/\/api\.([^:\/]+)/)
+      if (apiMatch) {
+        return `https://console-openshift-console.apps.${apiMatch[1]}`
       }
+      return null
     }
-    return {
-      provider: 'gke',
-      consoleUrl: 'https://console.cloud.google.com/kubernetes/list/overview',
+    case 'eks': {
+      const urlRegionMatch = serverUrl.match(/\.([a-z]{2}-[a-z]+-\d)\.eks\.amazonaws\.com/)
+      const nameRegionMatch = clusterName.match(/(us|eu|ap|sa|ca|me|af)-(north|south|east|west|central|northeast|southeast)-\d/)
+      const region = urlRegionMatch?.[1] || nameRegionMatch?.[0] || 'us-east-1'
+      const shortName = clusterName.split('/').pop() || clusterName
+      return `https://${region}.console.aws.amazon.com/eks/home?region=${region}#/clusters/${shortName}`
     }
-  }
-
-  // Azure AKS - detect from API server URL (.azmk8s.io or .hcp.region.azmk8s.io) or name
-  if (serverUrl.includes('.azmk8s.io') || name.includes('aks') || name.includes('azure') || name.match(/akscluster/)) {
-    return {
-      provider: 'aks',
-      consoleUrl: 'https://portal.azure.com/#view/HubsExtension/BrowseResource/resourceType/Microsoft.ContainerService%2FmanagedClusters',
+    case 'gke': {
+      const gkeMatch = clusterName.match(/gke_([^_]+)_([^_]+)_(.+)/)
+      if (gkeMatch) {
+        const [, project, location, gkeName] = gkeMatch
+        return `https://console.cloud.google.com/kubernetes/clusters/details/${location}/${gkeName}?project=${project}`
+      }
+      return 'https://console.cloud.google.com/kubernetes/list/overview'
     }
-  }
-
-  // OpenShift - detect from API server URL (*.openshift.com, api.*.devshift.org, *.openshiftapps.com) or name
-  if (serverUrl.includes('openshift.com') || serverUrl.includes('openshiftapps.com') || serverUrl.includes(':6443') ||
-      name.includes('openshift') || name.includes('ocp') || name.includes('rosa')) {
-    // Try to extract console URL from API server (api.xxx -> console-openshift-console.apps.xxx)
-    let consoleUrl: string | null = null
-    const apiMatch = apiServerUrl?.match(/https?:\/\/api\.([^:\/]+)/)
-    if (apiMatch) {
-      const clusterDomain = apiMatch[1]
-      consoleUrl = `https://console-openshift-console.apps.${clusterDomain}`
+    case 'aks':
+      return 'https://portal.azure.com/#view/HubsExtension/BrowseResource/resourceType/Microsoft.ContainerService%2FmanagedClusters'
+    case 'oci': {
+      const regionMatch = serverUrl.match(/\.([a-z]+-[a-z]+-\d)\.clusters\.oci/)
+      const region = regionMatch?.[1] || 'us-ashburn-1'
+      return `https://cloud.oracle.com/containers/clusters?region=${region}`
     }
-    return {
-      provider: 'openshift',
-      consoleUrl,
-    }
+    case 'alibaba':
+      return 'https://cs.console.aliyun.com/#/k8s/cluster/list'
+    case 'digitalocean':
+      return 'https://cloud.digitalocean.com/kubernetes/clusters'
+    default:
+      return null
   }
-
-  // Oracle Cloud OCI - detect from API server URL (.oraclecloud.com) or name
-  if (serverUrl.includes('.oraclecloud.com') || serverUrl.includes('oci.') || name.includes('oci') || name.includes('oke')) {
-    // OKE clusters have URLs like: https://xxx.us-ashburn-1.clusters.oci.oraclecloud.com:6443
-    const regionMatch = serverUrl.match(/\.([a-z]+-[a-z]+-\d)\.clusters\.oci/)
-    const region = regionMatch?.[1] || 'us-ashburn-1'
-    return {
-      provider: 'oci',
-      region,
-      consoleUrl: `https://cloud.oracle.com/containers/clusters?region=${region}`,
-    }
-  }
-
-  // Alibaba Cloud ACK - detect from API server URL (.aliyuncs.com) or name
-  if (serverUrl.includes('.aliyuncs.com') || name.includes('alibaba') || name.includes('aliyun') || name.includes('ack')) {
-    return {
-      provider: 'alibaba',
-      consoleUrl: 'https://cs.console.aliyun.com/#/k8s/cluster/list',
-    }
-  }
-
-  // DigitalOcean DOKS - detect from API server URL (.k8s.ondigitalocean.com) or name
-  if (serverUrl.includes('.k8s.ondigitalocean.com') || name.includes('digitalocean') || name.includes('doks')) {
-    return {
-      provider: 'digitalocean',
-      consoleUrl: 'https://cloud.digitalocean.com/kubernetes/clusters',
-    }
-  }
-
-  // Rancher
-  if (name.includes('rancher')) {
-    return { provider: 'rancher', consoleUrl: null }
-  }
-
-  // Local development clusters
-  if (name.includes('kind-')) {
-    return { provider: 'kind', consoleUrl: null }
-  }
-  if (name.includes('minikube')) {
-    return { provider: 'minikube', consoleUrl: null }
-  }
-  if (name.includes('k3s')) {
-    return { provider: 'k3s', consoleUrl: null }
-  }
-
-  // OKE user pattern: user-[lowercase_alphanumeric_10-12_chars] (e.g., user-chbezebxx3a)
-  if (user.match(/^user-[a-z0-9]{10,12}$/)) {
-    return {
-      provider: 'oci',
-      region: 'us-ashburn-1',
-      consoleUrl: 'https://cloud.oracle.com/containers/clusters',
-    }
-  }
-
-  return { provider: 'unknown', consoleUrl: null }
 }
 
-function getProviderInfo(provider: CloudProvider): { icon: string; color: string; label: string; bgColor: string } {
+function getProviderInfo(provider: CloudProvider): { color: string; bgColor: string } {
   switch (provider) {
-    case 'eks': return { icon: '🟠', color: 'text-orange-400', bgColor: 'bg-orange-500/20', label: 'AWS EKS' }
-    case 'gke': return { icon: '🔵', color: 'text-blue-400', bgColor: 'bg-blue-500/20', label: 'Google GKE' }
-    case 'aks': return { icon: '🔷', color: 'text-cyan-400', bgColor: 'bg-cyan-500/20', label: 'Azure AKS' }
-    case 'openshift': return { icon: '🔴', color: 'text-red-400', bgColor: 'bg-red-500/20', label: 'OpenShift' }
-    case 'oci': return { icon: '🔶', color: 'text-red-500', bgColor: 'bg-red-500/20', label: 'Oracle OKE' }
-    case 'alibaba': return { icon: '🟡', color: 'text-orange-300', bgColor: 'bg-orange-500/20', label: 'Alibaba ACK' }
-    case 'digitalocean': return { icon: '💧', color: 'text-blue-400', bgColor: 'bg-blue-500/20', label: 'DigitalOcean' }
-    case 'rancher': return { icon: '🟢', color: 'text-green-400', bgColor: 'bg-green-500/20', label: 'Rancher' }
-    case 'kind': return { icon: '🐳', color: 'text-blue-300', bgColor: 'bg-blue-500/20', label: 'Kind' }
-    case 'minikube': return { icon: '🎯', color: 'text-purple-400', bgColor: 'bg-purple-500/20', label: 'Minikube' }
-    case 'k3s': return { icon: '🌿', color: 'text-green-300', bgColor: 'bg-green-500/20', label: 'K3s' }
-    default: return { icon: '☸️', color: 'text-gray-400', bgColor: 'bg-gray-500/20', label: 'Kubernetes' }
+    case 'eks': return { color: 'text-orange-400', bgColor: 'bg-orange-500/20' }
+    case 'gke': return { color: 'text-blue-400', bgColor: 'bg-blue-500/20' }
+    case 'aks': return { color: 'text-cyan-400', bgColor: 'bg-cyan-500/20' }
+    case 'openshift': return { color: 'text-red-400', bgColor: 'bg-red-500/20' }
+    case 'oci': return { color: 'text-red-500', bgColor: 'bg-red-500/20' }
+    case 'alibaba': return { color: 'text-orange-300', bgColor: 'bg-orange-500/20' }
+    case 'digitalocean': return { color: 'text-blue-400', bgColor: 'bg-blue-500/20' }
+    case 'rancher': return { color: 'text-green-400', bgColor: 'bg-green-500/20' }
+    case 'kind': return { color: 'text-blue-300', bgColor: 'bg-blue-500/20' }
+    case 'minikube': return { color: 'text-purple-400', bgColor: 'bg-purple-500/20' }
+    case 'k3s': return { color: 'text-green-300', bgColor: 'bg-green-500/20' }
+    default: return { color: 'text-blue-400', bgColor: 'bg-blue-500/20' }
   }
 }
 
@@ -163,6 +84,7 @@ interface ClusterDetailModalProps {
 
 export function ClusterDetailModal({ clusterName, clusterUser, onClose, onRename }: ClusterDetailModalProps) {
   const { health, isLoading } = useClusterHealth(clusterName)
+  const { clusters } = useClusters()
   const { issues: podIssues } = usePodIssues(clusterName)
   const { issues: deploymentIssues } = useDeploymentIssues(clusterName)
   const { nodes: gpuNodes } = useGPUNodes(clusterName)
@@ -171,6 +93,9 @@ export function ClusterDetailModal({ clusterName, clusterUser, onClose, onRename
   const { deployments: clusterDeployments } = useDeployments(clusterName)
   const { drillToPod } = useDrillDownActions()
   const { startMission } = useMissions()
+
+  // Get cached cluster info for distribution detection
+  const clusterInfo = useMemo(() => clusters.find(c => c.name === clusterName), [clusters, clusterName])
   const [showAllNamespaces, setShowAllNamespaces] = useState(false)
   const [showPodsByNamespace, setShowPodsByNamespace] = useState(false)
   const [showNodeDetails, setShowNodeDetails] = useState(false)
@@ -312,8 +237,13 @@ After I approve, help me execute the repairs step by step.`,
             )}
             <h2 className="text-xl font-semibold text-foreground">{clusterName.split('/').pop()}</h2>
             {(() => {
-              const { provider, consoleUrl } = detectCloudProvider(clusterName, health?.apiServer, clusterUser)
-              const providerInfo = getProviderInfo(provider)
+              // Use cached distribution if available, otherwise detect from name/server
+              const detectedProvider = clusterInfo?.distribution as CloudProviderType ||
+                detectCloudProviderShared(clusterName, health?.apiServer, clusterInfo?.namespaces, clusterUser)
+              // Get console URL based on detected provider
+              const consoleUrl = getConsoleUrlForProvider(detectedProvider, clusterName, health?.apiServer)
+              const providerInfo = getProviderInfo(detectedProvider === 'kubernetes' ? 'unknown' : detectedProvider as CloudProvider)
+              const providerLabel = getProviderLabel(detectedProvider)
               return (
                 <>
                   {consoleUrl ? (
@@ -322,17 +252,19 @@ After I approve, help me execute the repairs step by step.`,
                       target="_blank"
                       rel="noopener noreferrer"
                       className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-sm font-medium ${providerInfo.bgColor} ${providerInfo.color} hover:opacity-80 transition-opacity`}
-                      title={`Open ${providerInfo.label} console`}
+                      title={`Open ${providerLabel} console`}
                     >
-                      {providerInfo.icon} {providerInfo.label}
+                      <CloudProviderIcon provider={detectedProvider} size={16} />
+                      {providerLabel}
                       <ExternalLink className="w-3.5 h-3.5" />
                     </a>
                   ) : (
                     <span
-                      className={`px-3 py-1 rounded-lg text-sm font-medium ${providerInfo.bgColor} ${providerInfo.color}`}
-                      title={providerInfo.label}
+                      className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-sm font-medium ${providerInfo.bgColor} ${providerInfo.color}`}
+                      title={providerLabel}
                     >
-                      {providerInfo.icon} {providerInfo.label}
+                      <CloudProviderIcon provider={detectedProvider} size={16} />
+                      {providerLabel}
                     </span>
                   )}
                 </>

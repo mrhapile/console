@@ -8,6 +8,9 @@ import { SidebarCustomizer } from './SidebarCustomizer'
 import { useSidebarConfig, SidebarItem } from '../../hooks/useSidebarConfig'
 import { useClusters } from '../../hooks/useMCP'
 import { useDashboardContextOptional } from '../../hooks/useDashboardContext'
+import type { SnoozedSwap } from '../../hooks/useSnoozedCards'
+import type { SnoozedRecommendation } from '../../hooks/useSnoozedRecommendations'
+import type { SnoozedMission } from '../../hooks/useSnoozedMissions'
 
 export function Sidebar() {
   const { config, toggleCollapsed } = useSidebarConfig()
@@ -46,6 +49,24 @@ export function Sidebar() {
   // Navigate to clusters page with status filter
   const handleClusterStatusClick = (status: 'healthy' | 'unhealthy' | 'unreachable') => {
     navigate(`/clusters?status=${status}`)
+  }
+
+  // Handle snoozed card swap restore - navigate to dashboard
+  const handleApplySwap = (_swap: SnoozedSwap) => {
+    // Navigate to main dashboard where the swap can be applied
+    navigate('/')
+  }
+
+  // Handle snoozed recommendation restore - navigate to dashboard
+  const handleApplyRecommendation = (_rec: SnoozedRecommendation) => {
+    // Navigate to main dashboard to apply the recommendation
+    navigate('/')
+  }
+
+  // Handle snoozed mission restore - navigate to dashboard
+  const handleApplyMission = (_mission: SnoozedMission) => {
+    // Navigate to main dashboard where missions are displayed
+    navigate('/')
   }
 
   const renderIcon = (iconName: string, className?: string) => {
@@ -99,7 +120,15 @@ export function Sidebar() {
         </nav>
 
         {/* Snoozed card swaps */}
-        {!config.collapsed && <div data-tour="snoozed"><SnoozedCards /></div>}
+        {!config.collapsed && (
+          <div data-tour="snoozed">
+            <SnoozedCards
+              onApplySwap={handleApplySwap}
+              onApplyRecommendation={handleApplyRecommendation}
+              onApplyMission={handleApplyMission}
+            />
+          </div>
+        )}
 
         {/* Add card button */}
         {!config.collapsed && (

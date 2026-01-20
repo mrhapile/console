@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useSearchParams, useLocation } from 'react-router-dom'
 import { useShowCards } from '../../hooks/useShowCards'
 import { Pencil, X, Check, Loader2, Hourglass, WifiOff, ChevronRight, CheckCircle, AlertTriangle, AlertCircle, ChevronDown, HardDrive, Network, FolderOpen, Plus, Trash2, Box, Layers, Server, List, GitBranch, Eye, Terminal, FileText, Info, Activity, Briefcase, Lock, Settings, LayoutGrid, Wrench, Layout, RefreshCw } from 'lucide-react'
-import { useClusters, useClusterHealth, usePodIssues, useDeploymentIssues, useGPUNodes, useNamespaceStats, useNodes, usePods, useDeployments, useServices, useJobs, useHPAs, useConfigMaps, useSecrets, usePodLogs, ClusterInfo, refreshSingleCluster } from '../../hooks/useMCP'
+import { useClusters, useClusterHealth, usePodIssues, useDeploymentIssues, useGPUNodes, useNVIDIAOperators, useNamespaceStats, useNodes, usePods, useDeployments, useServices, useJobs, useHPAs, useConfigMaps, useSecrets, usePodLogs, ClusterInfo, refreshSingleCluster } from '../../hooks/useMCP'
 import { AddCardModal } from '../dashboard/AddCardModal'
 import { TemplatesModal } from '../dashboard/TemplatesModal'
 import { DashboardTemplate } from '../dashboard/templates'
@@ -14,6 +14,7 @@ import {
   StatsOverview,
   FilterTabs,
   ClusterGrid,
+  GPUDetailModal,
 } from './components'
 import { isClusterUnreachable } from './utils'
 import { formatK8sMemory } from '../../lib/formatters'
@@ -1362,7 +1363,8 @@ export function _ClusterDetail({ clusterName, onClose, onRename }: _ClusterDetai
 
 export function Clusters() {
   const { clusters, isLoading, isRefreshing, lastUpdated, error, refetch } = useClusters()
-  const { nodes: gpuNodes } = useGPUNodes()
+  const { nodes: gpuNodes, isLoading: gpuLoading, error: gpuError, refetch: gpuRefetch } = useGPUNodes()
+  const { operators: nvidiaOperators } = useNVIDIAOperators()
   const { isConnected } = useLocalAgent()
   const { isClusterAdmin, loading: permissionsLoading } = usePermissions()
   const {
@@ -1418,6 +1420,7 @@ export function Clusters() {
   const [showClusterGrid, setShowClusterGrid] = useState(true) // Cluster cards visible by default
   const [configuringCard, setConfiguringCard] = useState<ClusterCard | null>(null)
   const [autoRefresh, setAutoRefresh] = useState(true)
+  const [showGPUModal, setShowGPUModal] = useState(false)
 
   // Save cards to localStorage when they change
   useEffect(() => {
@@ -1771,7 +1774,7 @@ export function Clusters() {
             onCPUClick={() => window.location.href = '/compute'}
             onMemoryClick={() => window.location.href = '/compute'}
             onStorageClick={() => window.location.href = '/storage'}
-            onGPUClick={() => window.location.href = '/gpu'}
+            onGPUClick={() => setShowGPUModal(true)}
             onNodesClick={() => window.location.href = '/compute'}
             onPodsClick={() => window.location.href = '/workloads'}
           />
@@ -2079,6 +2082,18 @@ export function Clusters() {
         onClose={() => setShowTemplates(false)}
         onApplyTemplate={applyTemplate}
       />
+
+      {/* GPU Detail Modal */}
+      {showGPUModal && (
+        <GPUDetailModal
+          gpuNodes={gpuNodes}
+          isLoading={gpuLoading}
+          error={gpuError}
+          onRefresh={gpuRefetch}
+          onClose={() => setShowGPUModal(false)}
+          operatorStatus={nvidiaOperators}
+        />
+      )}
     </div>
   )
 }

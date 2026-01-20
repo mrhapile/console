@@ -47,12 +47,12 @@ type ClusterHealth struct {
 	APIServer     string   `json:"apiServer,omitempty"`
 	NodeCount     int      `json:"nodeCount"`
 	ReadyNodes    int      `json:"readyNodes"`
-	PodCount      int      `json:"podCount,omitempty"`
-	CpuCores      int      `json:"cpuCores,omitempty"`
-	MemoryBytes   int64    `json:"memoryBytes,omitempty"`
-	MemoryGB      float64  `json:"memoryGB,omitempty"`
-	StorageBytes  int64    `json:"storageBytes,omitempty"`
-	StorageGB     float64  `json:"storageGB,omitempty"`
+	PodCount      int      `json:"podCount"`
+	CpuCores      int      `json:"cpuCores"`
+	MemoryBytes   int64    `json:"memoryBytes"`
+	MemoryGB      float64  `json:"memoryGB"`
+	StorageBytes  int64    `json:"storageBytes"`
+	StorageGB     float64  `json:"storageGB"`
 	PVCCount      int      `json:"pvcCount,omitempty"`
 	PVCBoundCount int      `json:"pvcBoundCount,omitempty"`
 	Issues        []string `json:"issues,omitempty"`

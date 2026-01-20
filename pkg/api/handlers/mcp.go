@@ -272,6 +272,53 @@ func (h *MCPHandlers) GetGPUNodes(c *fiber.Ctx) error {
 	return c.Status(503).JSON(fiber.Map{"error": "No cluster access available"})
 }
 
+// GetNVIDIAOperatorStatus returns NVIDIA GPU and Network operator status
+func (h *MCPHandlers) GetNVIDIAOperatorStatus(c *fiber.Ctx) error {
+	cluster := c.Query("cluster")
+
+	if h.k8sClient != nil {
+		// If no cluster specified, query all clusters in parallel
+		if cluster == "" {
+			clusters, err := h.k8sClient.ListClusters(c.Context())
+			if err != nil {
+				return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+			}
+
+			var wg sync.WaitGroup
+			var mu sync.Mutex
+			var allStatus []*k8s.NVIDIAOperatorStatus
+			clusterTimeout := 5 * time.Second
+
+			for _, cl := range clusters {
+				wg.Add(1)
+				go func(clusterName string) {
+					defer wg.Done()
+					ctx, cancel := context.WithTimeout(c.Context(), clusterTimeout)
+					defer cancel()
+
+					status, err := h.k8sClient.GetNVIDIAOperatorStatus(ctx, clusterName)
+					if err == nil && (status.GPUOperator != nil || status.NetworkOperator != nil) {
+						mu.Lock()
+						allStatus = append(allStatus, status)
+						mu.Unlock()
+					}
+				}(cl.Name)
+			}
+
+			wg.Wait()
+			return c.JSON(fiber.Map{"operators": allStatus, "source": "k8s"})
+		}
+
+		status, err := h.k8sClient.GetNVIDIAOperatorStatus(c.Context(), cluster)
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		}
+		return c.JSON(fiber.Map{"operator": status, "source": "k8s"})
+	}
+
+	return c.Status(503).JSON(fiber.Map{"error": "No cluster access available"})
+}
+
 // GetNodes returns detailed node information
 func (h *MCPHandlers) GetNodes(c *fiber.Ctx) error {
 	cluster := c.Query("cluster")

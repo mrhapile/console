@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { RefreshCw, Cpu, Box, ChevronRight, AlertTriangle, CheckCircle, Loader2 } from 'lucide-react'
-import { useGPUNodes, usePods, useClusters } from '../../hooks/useMCP'
+import { useGPUNodes, useAllPods, useClusters } from '../../hooks/useMCP'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { useDrillDownActions } from '../../hooks/useDrillDown'
 import { ClusterBadge } from '../ui/ClusterBadge'
@@ -37,7 +37,7 @@ function isNvidiaNamespace(namespace: string): boolean {
 
 export function GPUWorkloads({ config: _config }: GPUWorkloadsProps) {
   const { nodes: gpuNodes, isLoading: gpuLoading, refetch: refetchGPU } = useGPUNodes()
-  const { pods: allPods, isLoading: podsLoading, refetch: refetchPods } = usePods()
+  const { pods: allPods, isLoading: podsLoading, refetch: refetchPods } = useAllPods()
   const { clusters } = useClusters()
   const { selectedClusters, isAllClustersSelected } = useGlobalFilters()
   const { drillToPod } = useDrillDownActions()

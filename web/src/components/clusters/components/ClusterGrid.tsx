@@ -56,8 +56,9 @@ export const ClusterGrid = memo(function ClusterGrid({
         // Determine status: initialLoading > unreachable > refreshing > healthy
         const status = initialLoading ? 'loading' : unreachable ? 'warning' : 'healthy'
 
-        // Detect cloud provider (pass user for OKE pattern detection)
-        const provider = detectCloudProvider(cluster.name, cluster.server, undefined, cluster.user)
+        // Use cached distribution if available, otherwise detect from name/server/namespaces/user
+        const provider = (cluster.distribution as ReturnType<typeof detectCloudProvider>) ||
+          detectCloudProvider(cluster.name, cluster.server, cluster.namespaces, cluster.user)
         const providerLabel = getProviderLabel(provider)
         const providerColor = getProviderColor(provider)
 
@@ -75,8 +76,15 @@ export const ClusterGrid = memo(function ClusterGrid({
           >
             {/* Inner card content */}
             <div className="relative glass p-5 rounded-lg h-full overflow-hidden">
-            {/* Background provider icon - bottom left, 0% transparent at corner fading to 70% transparent */}
-            <div className="absolute -bottom-4 -left-4 pointer-events-none" style={{ opacity: 0.15, maskImage: 'linear-gradient(45deg, rgba(0,0,0,1) 0%, rgba(0,0,0,0.3) 70%)', WebkitMaskImage: 'linear-gradient(45deg, rgba(0,0,0,1) 0%, rgba(0,0,0,0.3) 70%)' }}>
+            {/* Background provider icon - bottom left */}
+            <div
+              className="absolute -bottom-4 -left-4 pointer-events-none"
+              style={{
+                opacity: 0.12,
+                maskImage: 'linear-gradient(45deg, rgba(0,0,0,1) 0%, rgba(0,0,0,0.3) 70%)',
+                WebkitMaskImage: 'linear-gradient(45deg, rgba(0,0,0,1) 0%, rgba(0,0,0,0.3) 70%)',
+              }}
+            >
               <CloudProviderIcon provider={provider} size={120} />
             </div>
             <div className="flex items-start justify-between mb-4 relative z-10">
@@ -174,21 +182,21 @@ export const ClusterGrid = memo(function ClusterGrid({
             </div>
 
             <div className="grid grid-cols-4 gap-4 text-center relative z-10">
-              <div title={unreachable ? 'Offline' : hasCachedData ? `${cluster.nodeCount} worker nodes` : 'Loading...'}>
+              <div title={unreachable ? 'Offline' : hasCachedData && cluster.nodeCount !== undefined ? `${cluster.nodeCount} worker nodes` : 'Loading...'}>
                 <div className={`text-lg font-bold ${refreshing ? 'text-muted-foreground' : 'text-foreground'}`}>
-                  {hasCachedData ? cluster.nodeCount : '-'}
+                  {hasCachedData && cluster.nodeCount !== undefined ? cluster.nodeCount : '-'}
                 </div>
                 <div className="text-xs text-muted-foreground">Nodes</div>
               </div>
-              <div title={unreachable ? 'Offline' : hasCachedData ? `${cluster.cpuCores} CPU cores` : 'Loading...'}>
+              <div title={unreachable ? 'Offline' : hasCachedData && cluster.cpuCores !== undefined ? `${cluster.cpuCores} CPU cores` : 'Loading...'}>
                 <div className={`text-lg font-bold ${refreshing ? 'text-muted-foreground' : 'text-foreground'}`}>
-                  {hasCachedData ? cluster.cpuCores : '-'}
+                  {hasCachedData && cluster.cpuCores !== undefined ? cluster.cpuCores : '-'}
                 </div>
                 <div className="text-xs text-muted-foreground">CPUs</div>
               </div>
-              <div title={unreachable ? 'Offline' : hasCachedData ? `${cluster.podCount} running pods` : 'Loading...'}>
+              <div title={unreachable ? 'Offline' : hasCachedData && cluster.podCount !== undefined ? `${cluster.podCount} running pods` : 'Loading...'}>
                 <div className={`text-lg font-bold ${refreshing ? 'text-muted-foreground' : 'text-foreground'}`}>
-                  {hasCachedData ? cluster.podCount : '-'}
+                  {hasCachedData && cluster.podCount !== undefined ? cluster.podCount : '-'}
                 </div>
                 <div className="text-xs text-muted-foreground">Pods</div>
               </div>

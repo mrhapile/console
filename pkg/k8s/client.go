@@ -14,6 +14,8 @@ import (
 	"github.com/fsnotify/fsnotify"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -25,6 +27,7 @@ type MultiClusterClient struct {
 	mu              sync.RWMutex
 	kubeconfig      string
 	clients         map[string]*kubernetes.Clientset
+	dynamicClients  map[string]dynamic.Interface
 	configs         map[string]*rest.Config
 	rawConfig       *api.Config
 	healthCache     map[string]*ClusterHealth
@@ -60,12 +63,12 @@ type ClusterHealth struct {
 	APIServer     string   `json:"apiServer,omitempty"`
 	NodeCount     int      `json:"nodeCount"`
 	ReadyNodes    int      `json:"readyNodes"`
-	PodCount      int      `json:"podCount,omitempty"`
-	CpuCores      int      `json:"cpuCores,omitempty"`
-	MemoryBytes   int64    `json:"memoryBytes,omitempty"`   // Total allocatable memory in bytes
-	MemoryGB      float64  `json:"memoryGB,omitempty"`      // Total allocatable memory in GB
-	StorageBytes  int64    `json:"storageBytes,omitempty"`  // Total ephemeral storage in bytes
-	StorageGB     float64  `json:"storageGB,omitempty"`     // Total ephemeral storage in GB
+	PodCount      int      `json:"podCount"`
+	CpuCores      int      `json:"cpuCores"`
+	MemoryBytes   int64    `json:"memoryBytes"`   // Total allocatable memory in bytes
+	MemoryGB      float64  `json:"memoryGB"`      // Total allocatable memory in GB
+	StorageBytes  int64    `json:"storageBytes"`  // Total ephemeral storage in bytes
+	StorageGB     float64  `json:"storageGB"`     // Total ephemeral storage in GB
 	PVCCount      int      `json:"pvcCount,omitempty"`      // Total PVC count
 	PVCBoundCount int      `json:"pvcBoundCount,omitempty"` // Bound PVC count
 	Issues        []string `json:"issues,omitempty"`
@@ -140,6 +143,14 @@ type GPUNode struct {
 	GPUType      string `json:"gpuType"`
 	GPUCount     int    `json:"gpuCount"`
 	GPUAllocated int    `json:"gpuAllocated"`
+	// Enhanced GPU info from NVIDIA GPU Feature Discovery
+	GPUMemoryMB      int    `json:"gpuMemoryMB,omitempty"`      // GPU memory in MB
+	GPUFamily        string `json:"gpuFamily,omitempty"`        // GPU architecture family (e.g., ampere, hopper)
+	CUDADriverVersion string `json:"cudaDriverVersion,omitempty"` // CUDA driver version
+	CUDARuntimeVersion string `json:"cudaRuntimeVersion,omitempty"` // CUDA runtime version
+	MIGCapable       bool   `json:"migCapable,omitempty"`       // Whether MIG is supported
+	MIGStrategy      string `json:"migStrategy,omitempty"`      // MIG strategy if enabled
+	Manufacturer     string `json:"manufacturer,omitempty"`     // GPU manufacturer (NVIDIA, AMD, Intel)
 }
 
 // NodeCondition represents a node condition status
@@ -289,12 +300,13 @@ func NewMultiClusterClient(kubeconfig string) (*MultiClusterClient, error) {
 	}
 
 	client := &MultiClusterClient{
-		kubeconfig:  kubeconfig,
-		clients:     make(map[string]*kubernetes.Clientset),
-		configs:     make(map[string]*rest.Config),
-		healthCache: make(map[string]*ClusterHealth),
-		cacheTTL:    30 * time.Second,
-		cacheTime:   make(map[string]time.Time),
+		kubeconfig:     kubeconfig,
+		clients:        make(map[string]*kubernetes.Clientset),
+		dynamicClients: make(map[string]dynamic.Interface),
+		configs:        make(map[string]*rest.Config),
+		healthCache:    make(map[string]*ClusterHealth),
+		cacheTTL:       30 * time.Second,
+		cacheTime:      make(map[string]time.Time),
 	}
 
 	// Try to detect if we're running in-cluster
@@ -335,6 +347,7 @@ func (m *MultiClusterClient) LoadConfig() error {
 	m.rawConfig = config
 	// Clear cached clients when config reloads
 	m.clients = make(map[string]*kubernetes.Clientset)
+	m.dynamicClients = make(map[string]dynamic.Interface)
 	m.configs = make(map[string]*rest.Config)
 	m.healthCache = make(map[string]*ClusterHealth)
 	m.cacheTime = make(map[string]time.Time)
@@ -541,6 +554,51 @@ func (m *MultiClusterClient) GetClient(contextName string) (*kubernetes.Clientse
 
 	m.clients[contextName] = client
 	m.configs[contextName] = config
+	return client, nil
+}
+
+// GetDynamicClient returns a dynamic kubernetes client for the specified context
+func (m *MultiClusterClient) GetDynamicClient(contextName string) (dynamic.Interface, error) {
+	m.mu.RLock()
+	if client, ok := m.dynamicClients[contextName]; ok {
+		m.mu.RUnlock()
+		return client, nil
+	}
+	m.mu.RUnlock()
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// Double-check after acquiring write lock
+	if client, ok := m.dynamicClients[contextName]; ok {
+		return client, nil
+	}
+
+	// Get or create config
+	config, ok := m.configs[contextName]
+	if !ok {
+		var err error
+		if contextName == "in-cluster" && m.inClusterConfig != nil {
+			config = rest.CopyConfig(m.inClusterConfig)
+		} else {
+			config, err = clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+				&clientcmd.ClientConfigLoadingRules{ExplicitPath: m.kubeconfig},
+				&clientcmd.ConfigOverrides{CurrentContext: contextName},
+			).ClientConfig()
+			if err != nil {
+				return nil, fmt.Errorf("failed to get config for context %s: %w", contextName, err)
+			}
+		}
+		config.Timeout = 10 * time.Second
+		m.configs[contextName] = config
+	}
+
+	client, err := dynamic.NewForConfig(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create dynamic client for context %s: %w", contextName, err)
+	}
+
+	m.dynamicClients[contextName] = client
 	return client, nil
 }
 
@@ -934,22 +992,101 @@ func (m *MultiClusterClient) GetGPUNodes(ctx context.Context, contextName string
 	var gpuNodes []GPUNode
 	for _, node := range nodes.Items {
 		// Check for nvidia.com/gpu in allocatable resources
-		gpuQuantity, hasGPU := node.Status.Allocatable["nvidia.com/gpu"]
-		if !hasGPU {
+		gpuQuantity, hasNvidiaGPU := node.Status.Allocatable["nvidia.com/gpu"]
+		// Also check for AMD GPUs
+		amdGPUQuantity, hasAMDGPU := node.Status.Allocatable["amd.com/gpu"]
+		// Check for Intel GPUs
+		intelGPUQuantity, hasIntelGPU := node.Status.Allocatable["gpu.intel.com/i915"]
+
+		if !hasNvidiaGPU && !hasAMDGPU && !hasIntelGPU {
 			continue
 		}
 
-		gpuCount := int(gpuQuantity.Value())
+		var gpuCount int
+		var manufacturer string
+		var gpuType string
+
+		if hasNvidiaGPU && gpuQuantity.Value() > 0 {
+			gpuCount = int(gpuQuantity.Value())
+			manufacturer = "NVIDIA"
+			// Get GPU type from NVIDIA GPU Feature Discovery labels
+			if label, ok := node.Labels["nvidia.com/gpu.product"]; ok {
+				gpuType = label
+			} else if label, ok := node.Labels["accelerator"]; ok {
+				gpuType = label
+			} else {
+				gpuType = "NVIDIA GPU"
+			}
+		} else if hasAMDGPU && amdGPUQuantity.Value() > 0 {
+			gpuCount = int(amdGPUQuantity.Value())
+			manufacturer = "AMD"
+			if label, ok := node.Labels["amd.com/gpu.product"]; ok {
+				gpuType = label
+			} else {
+				gpuType = "AMD GPU"
+			}
+		} else if hasIntelGPU && intelGPUQuantity.Value() > 0 {
+			gpuCount = int(intelGPUQuantity.Value())
+			manufacturer = "Intel"
+			gpuType = "Intel GPU"
+		} else {
+			continue
+		}
+
 		if gpuCount == 0 {
 			continue
 		}
 
-		// Determine GPU type from labels
-		gpuType := "GPU"
-		if label, ok := node.Labels["nvidia.com/gpu.product"]; ok {
-			gpuType = label
-		} else if label, ok := node.Labels["accelerator"]; ok {
-			gpuType = label
+		// Extract enhanced GPU info from NVIDIA GPU Feature Discovery (GFD) labels
+		var gpuMemoryMB int
+		var gpuFamily string
+		var cudaDriverVersion string
+		var cudaRuntimeVersion string
+		var migCapable bool
+		var migStrategy string
+
+		// GPU memory (in MB)
+		if memLabel, ok := node.Labels["nvidia.com/gpu.memory"]; ok {
+			fmt.Sscanf(memLabel, "%d", &gpuMemoryMB)
+		}
+
+		// GPU architecture family
+		if familyLabel, ok := node.Labels["nvidia.com/gpu.family"]; ok {
+			gpuFamily = familyLabel
+		}
+
+		// CUDA driver version (major.minor.rev)
+		driverMajor := node.Labels["nvidia.com/cuda.driver.major"]
+		driverMinor := node.Labels["nvidia.com/cuda.driver.minor"]
+		driverRev := node.Labels["nvidia.com/cuda.driver.rev"]
+		if driverMajor != "" {
+			cudaDriverVersion = driverMajor
+			if driverMinor != "" {
+				cudaDriverVersion += "." + driverMinor
+			}
+			if driverRev != "" {
+				cudaDriverVersion += "." + driverRev
+			}
+		}
+
+		// CUDA runtime version
+		runtimeMajor := node.Labels["nvidia.com/cuda.runtime.major"]
+		runtimeMinor := node.Labels["nvidia.com/cuda.runtime.minor"]
+		if runtimeMajor != "" {
+			cudaRuntimeVersion = runtimeMajor
+			if runtimeMinor != "" {
+				cudaRuntimeVersion += "." + runtimeMinor
+			}
+		}
+
+		// MIG capability
+		if migLabel, ok := node.Labels["nvidia.com/mig.capable"]; ok {
+			migCapable = migLabel == "true"
+		}
+
+		// MIG strategy
+		if strategyLabel, ok := node.Labels["nvidia.com/mig.strategy"]; ok {
+			migStrategy = strategyLabel
 		}
 
 		// Get allocated GPUs by checking pods on this node
@@ -961,7 +1098,16 @@ func (m *MultiClusterClient) GetGPUNodes(ctx context.Context, contextName string
 		if err == nil {
 			for _, pod := range pods.Items {
 				for _, container := range pod.Spec.Containers {
+					// Check NVIDIA GPU requests
 					if gpuReq, ok := container.Resources.Requests["nvidia.com/gpu"]; ok {
+						allocated += int(gpuReq.Value())
+					}
+					// Check AMD GPU requests
+					if gpuReq, ok := container.Resources.Requests["amd.com/gpu"]; ok {
+						allocated += int(gpuReq.Value())
+					}
+					// Check Intel GPU requests
+					if gpuReq, ok := container.Resources.Requests["gpu.intel.com/i915"]; ok {
 						allocated += int(gpuReq.Value())
 					}
 				}
@@ -969,11 +1115,18 @@ func (m *MultiClusterClient) GetGPUNodes(ctx context.Context, contextName string
 		}
 
 		gpuNodes = append(gpuNodes, GPUNode{
-			Name:         node.Name,
-			Cluster:      contextName,
-			GPUType:      gpuType,
-			GPUCount:     gpuCount,
-			GPUAllocated: allocated,
+			Name:               node.Name,
+			Cluster:            contextName,
+			GPUType:            gpuType,
+			GPUCount:           gpuCount,
+			GPUAllocated:       allocated,
+			GPUMemoryMB:        gpuMemoryMB,
+			GPUFamily:          gpuFamily,
+			CUDADriverVersion:  cudaDriverVersion,
+			CUDARuntimeVersion: cudaRuntimeVersion,
+			MIGCapable:         migCapable,
+			MIGStrategy:        migStrategy,
+			Manufacturer:       manufacturer,
 		})
 	}
 
@@ -1687,4 +1840,233 @@ func formatDuration(d time.Duration) string {
 		return fmt.Sprintf("%dh", int(d.Hours()))
 	}
 	return fmt.Sprintf("%dd", int(d.Hours()/24))
+}
+
+// NVIDIAOperatorStatus represents the status of NVIDIA GPU and Network operators
+type NVIDIAOperatorStatus struct {
+	Cluster          string                  `json:"cluster"`
+	GPUOperator      *GPUOperatorInfo        `json:"gpuOperator,omitempty"`
+	NetworkOperator  *NetworkOperatorInfo    `json:"networkOperator,omitempty"`
+}
+
+// GPUOperatorInfo represents NVIDIA GPU Operator ClusterPolicy status
+type GPUOperatorInfo struct {
+	Installed      bool                `json:"installed"`
+	Version        string              `json:"version,omitempty"`
+	State          string              `json:"state,omitempty"`       // ready, notReady, disabled
+	Ready          bool                `json:"ready"`
+	Components     []OperatorComponent `json:"components,omitempty"`
+	DriverVersion  string              `json:"driverVersion,omitempty"`
+	CUDAVersion    string              `json:"cudaVersion,omitempty"`
+	Namespace      string              `json:"namespace,omitempty"`
+}
+
+// NetworkOperatorInfo represents NVIDIA Network Operator NicClusterPolicy status
+type NetworkOperatorInfo struct {
+	Installed      bool                `json:"installed"`
+	Version        string              `json:"version,omitempty"`
+	State          string              `json:"state,omitempty"`       // ready, notReady, disabled
+	Ready          bool                `json:"ready"`
+	Components     []OperatorComponent `json:"components,omitempty"`
+	Namespace      string              `json:"namespace,omitempty"`
+}
+
+// OperatorComponent represents a component of the NVIDIA operators
+type OperatorComponent struct {
+	Name   string `json:"name"`
+	Status string `json:"status"` // ready, pending, error, disabled
+	Reason string `json:"reason,omitempty"`
+}
+
+// GetNVIDIAOperatorStatus fetches the status of NVIDIA GPU and Network operators
+func (m *MultiClusterClient) GetNVIDIAOperatorStatus(ctx context.Context, contextName string) (*NVIDIAOperatorStatus, error) {
+	dynamicClient, err := m.GetDynamicClient(contextName)
+	if err != nil {
+		return nil, err
+	}
+
+	status := &NVIDIAOperatorStatus{
+		Cluster: contextName,
+	}
+
+	// GPU Operator ClusterPolicy GVR
+	clusterPolicyGVR := schema.GroupVersionResource{
+		Group:    "nvidia.com",
+		Version:  "v1",
+		Resource: "clusterpolicies",
+	}
+
+	// Try to get ClusterPolicy (GPU Operator)
+	clusterPolicies, err := dynamicClient.Resource(clusterPolicyGVR).List(ctx, metav1.ListOptions{})
+	if err == nil && len(clusterPolicies.Items) > 0 {
+		cp := clusterPolicies.Items[0]
+		gpuInfo := &GPUOperatorInfo{
+			Installed: true,
+		}
+
+		// Get metadata
+		if labels := cp.GetLabels(); labels != nil {
+			if version, ok := labels["app.kubernetes.io/version"]; ok {
+				gpuInfo.Version = version
+			}
+		}
+		gpuInfo.Namespace = cp.GetNamespace()
+		if gpuInfo.Namespace == "" {
+			gpuInfo.Namespace = "gpu-operator"
+		}
+
+		// Get status
+		if statusObj, found, _ := unstructuredNestedMap(cp.Object, "status"); found {
+			if state, ok := statusObj["state"].(string); ok {
+				gpuInfo.State = state
+				gpuInfo.Ready = strings.EqualFold(state, "ready")
+			}
+		}
+
+		// Get driver version from spec
+		if spec, found, _ := unstructuredNestedMap(cp.Object, "spec"); found {
+			if driver, found, _ := unstructuredNestedMap(spec, "driver"); found {
+				if version, ok := driver["version"].(string); ok {
+					gpuInfo.DriverVersion = version
+				}
+			}
+			if toolkit, found, _ := unstructuredNestedMap(spec, "toolkit"); found {
+				if version, ok := toolkit["version"].(string); ok {
+					// CUDA version often embedded in toolkit version
+					gpuInfo.CUDAVersion = version
+				}
+			}
+		}
+
+		// Get component states from status.conditions
+		if conditions, found, _ := unstructuredNestedSlice(cp.Object, "status", "conditions"); found {
+			for _, cond := range conditions {
+				if condMap, ok := cond.(map[string]interface{}); ok {
+					component := OperatorComponent{}
+					if t, ok := condMap["type"].(string); ok {
+						component.Name = t
+					}
+					if status, ok := condMap["status"].(string); ok {
+						if strings.EqualFold(status, "True") {
+							component.Status = "ready"
+						} else {
+							component.Status = "pending"
+						}
+					}
+					if reason, ok := condMap["reason"].(string); ok {
+						component.Reason = reason
+					}
+					if component.Name != "" {
+						gpuInfo.Components = append(gpuInfo.Components, component)
+					}
+				}
+			}
+		}
+
+		status.GPUOperator = gpuInfo
+	}
+
+	// Network Operator NicClusterPolicy GVR
+	nicClusterPolicyGVR := schema.GroupVersionResource{
+		Group:    "mellanox.com",
+		Version:  "v1alpha1",
+		Resource: "nicclusterpolicies",
+	}
+
+	// Try to get NicClusterPolicy (Network Operator)
+	nicPolicies, err := dynamicClient.Resource(nicClusterPolicyGVR).List(ctx, metav1.ListOptions{})
+	if err == nil && len(nicPolicies.Items) > 0 {
+		ncp := nicPolicies.Items[0]
+		netInfo := &NetworkOperatorInfo{
+			Installed: true,
+		}
+
+		// Get metadata
+		if labels := ncp.GetLabels(); labels != nil {
+			if version, ok := labels["app.kubernetes.io/version"]; ok {
+				netInfo.Version = version
+			}
+		}
+		netInfo.Namespace = ncp.GetNamespace()
+		if netInfo.Namespace == "" {
+			netInfo.Namespace = "nvidia-network-operator"
+		}
+
+		// Get status
+		if statusObj, found, _ := unstructuredNestedMap(ncp.Object, "status"); found {
+			if state, ok := statusObj["state"].(string); ok {
+				netInfo.State = state
+				netInfo.Ready = strings.EqualFold(state, "ready")
+			}
+		}
+
+		// Get component states
+		if conditions, found, _ := unstructuredNestedSlice(ncp.Object, "status", "conditions"); found {
+			for _, cond := range conditions {
+				if condMap, ok := cond.(map[string]interface{}); ok {
+					component := OperatorComponent{}
+					if t, ok := condMap["type"].(string); ok {
+						component.Name = t
+					}
+					if status, ok := condMap["status"].(string); ok {
+						if strings.EqualFold(status, "True") {
+							component.Status = "ready"
+						} else {
+							component.Status = "pending"
+						}
+					}
+					if reason, ok := condMap["reason"].(string); ok {
+						component.Reason = reason
+					}
+					if component.Name != "" {
+						netInfo.Components = append(netInfo.Components, component)
+					}
+				}
+			}
+		}
+
+		status.NetworkOperator = netInfo
+	}
+
+	return status, nil
+}
+
+// Helper function to get nested map from unstructured object
+func unstructuredNestedMap(obj map[string]interface{}, fields ...string) (map[string]interface{}, bool, error) {
+	var val interface{} = obj
+	for _, field := range fields {
+		if m, ok := val.(map[string]interface{}); ok {
+			var found bool
+			val, found = m[field]
+			if !found {
+				return nil, false, nil
+			}
+		} else {
+			return nil, false, nil
+		}
+	}
+	if result, ok := val.(map[string]interface{}); ok {
+		return result, true, nil
+	}
+	return nil, false, nil
+}
+
+// Helper function to get nested slice from unstructured object
+func unstructuredNestedSlice(obj map[string]interface{}, fields ...string) ([]interface{}, bool, error) {
+	var val interface{} = obj
+	for _, field := range fields {
+		if m, ok := val.(map[string]interface{}); ok {
+			var found bool
+			val, found = m[field]
+			if !found {
+				return nil, false, nil
+			}
+		} else {
+			return nil, false, nil
+		}
+	}
+	if result, ok := val.([]interface{}); ok {
+		return result, true, nil
+	}
+	return nil, false, nil
 }

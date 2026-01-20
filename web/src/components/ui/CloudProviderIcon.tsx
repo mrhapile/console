@@ -37,13 +37,23 @@ const AzureIcon: React.FC<{ size: number; className?: string }> = ({ size, class
   </svg>
 )
 
-// OpenShift icon - red with stylized O
+// OpenShift icon - official logo: red O with two horizontal offset bars
 const OpenShiftIcon: React.FC<{ size: number; className?: string }> = ({ size, className }) => (
-  <svg viewBox="0 0 24 24" width={size} height={size} className={className}>
-    <circle cx="12" cy="12" r="10" fill="#EE0000" />
-    <path d="M8 8.5L16 6l-1 3.5-8 2.5 1-3.5z" fill="white" />
-    <path d="M8 12L16 9.5l-1 3.5-8 2.5 1-3.5z" fill="white" fillOpacity="0.7" />
-    <path d="M8 15.5L16 13l-1 3.5-8 2.5 1-3.5z" fill="white" fillOpacity="0.4" />
+  <svg viewBox="0 0 100 100" width={size} height={size} className={className}>
+    {/* Top horizontal bar with slight tilt */}
+    <rect x="5" y="28" width="90" height="12" rx="2" fill="#EE0000" transform="rotate(-10 50 34)" />
+    {/* Bottom horizontal bar with slight tilt */}
+    <rect x="5" y="60" width="90" height="12" rx="2" fill="#EE0000" transform="rotate(-10 50 66)" />
+    {/* Main red O ring */}
+    <circle cx="50" cy="50" r="35" fill="#EE0000" />
+    {/* White center hole */}
+    <circle cx="50" cy="50" r="18" fill="white" />
+    {/* Darker overlap areas on top bar */}
+    <path d="M15 28 L38 28 L38 40 L15 40 Z" fill="#C00000" transform="rotate(-10 50 34)" />
+    <path d="M62 28 L85 28 L85 40 L62 40 Z" fill="#C00000" transform="rotate(-10 50 34)" />
+    {/* Darker overlap areas on bottom bar */}
+    <path d="M15 60 L38 60 L38 72 L15 72 Z" fill="#C00000" transform="rotate(-10 50 66)" />
+    <path d="M62 60 L85 60 L85 72 L62 72 Z" fill="#C00000" transform="rotate(-10 50 66)" />
   </svg>
 )
 
