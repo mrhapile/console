@@ -3,6 +3,12 @@ name: AI Fix with Claude Code
 on:
   issues:
     types: [labeled]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: 'Issue number to fix'
+        required: true
+        type: number
 
 permissions:
   contents: write
