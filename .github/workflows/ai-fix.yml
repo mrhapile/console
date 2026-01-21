@@ -23,6 +23,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Add rocket reaction to issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/reactions \
+            -X POST \
+            -f content='rocket'
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
