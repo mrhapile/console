@@ -15,7 +15,7 @@ interface LayoutProps {
 
 export function Layout({ children }: LayoutProps) {
   const { config } = useSidebarConfig()
-  const { isSidebarOpen: isMissionSidebarOpen, isSidebarMinimized: isMissionSidebarMinimized } = useMissions()
+  const { isSidebarOpen: isMissionSidebarOpen, isSidebarMinimized: isMissionSidebarMinimized, isFullScreen: isMissionFullScreen } = useMissions()
 
   // Track navigation for behavior analysis
   useNavigationHistory()
@@ -50,8 +50,9 @@ export function Layout({ children }: LayoutProps) {
         <main className={cn(
           'flex-1 p-6 transition-all duration-300',
           config.collapsed ? 'ml-20' : 'ml-64',
-          isMissionSidebarOpen && !isMissionSidebarMinimized && 'mr-96',
-          isMissionSidebarOpen && isMissionSidebarMinimized && 'mr-12'
+          // Don't apply margin when fullscreen is active - sidebar covers everything
+          isMissionSidebarOpen && !isMissionSidebarMinimized && !isMissionFullScreen && 'mr-96',
+          isMissionSidebarOpen && isMissionSidebarMinimized && !isMissionFullScreen && 'mr-12'
         )}>
           {children}
         </main>

@@ -1,8 +1,31 @@
-import { useState, useEffect, useCallback } from 'react'
-import { Shield, AlertTriangle, CheckCircle, ExternalLink, RefreshCw, XCircle, Info } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { createPortal } from 'react-dom'
+import { Shield, AlertTriangle, CheckCircle, ExternalLink, RefreshCw, XCircle, Info, X, ChevronRight } from 'lucide-react'
 import { useClusters } from '../../hooks/useMCP'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { useMissions } from '../../hooks/useMissions'
+
+// Violation detail interface
+interface Violation {
+  name: string
+  namespace: string
+  kind: string
+  policy: string
+  message: string
+  severity: 'critical' | 'warning' | 'info'
+}
+
+// Demo violations data
+const DEMO_VIOLATIONS: Violation[] = [
+  { name: 'nginx-deployment', namespace: 'default', kind: 'Deployment', policy: 'require-labels', message: 'Missing required label: app.kubernetes.io/name', severity: 'warning' },
+  { name: 'redis-pod', namespace: 'cache', kind: 'Pod', policy: 'container-limits', message: 'Container "redis" does not have resource limits defined', severity: 'critical' },
+  { name: 'api-gateway', namespace: 'production', kind: 'Deployment', policy: 'container-limits', message: 'Container "gateway" memory limit exceeds maximum allowed', severity: 'warning' },
+  { name: 'worker-deployment', namespace: 'jobs', kind: 'Deployment', policy: 'container-limits', message: 'Container "worker" does not have CPU limits defined', severity: 'critical' },
+  { name: 'frontend-pod', namespace: 'web', kind: 'Pod', policy: 'allowed-repos', message: 'Image from unauthorized registry: docker.io', severity: 'warning' },
+  { name: 'debug-pod', namespace: 'default', kind: 'Pod', policy: 'no-privileged', message: 'Privileged container not allowed', severity: 'critical' },
+  { name: 'monitoring-sts', namespace: 'monitoring', kind: 'StatefulSet', policy: 'require-labels', message: 'Missing required label: team', severity: 'info' },
+  { name: 'batch-job', namespace: 'jobs', kind: 'Job', policy: 'container-limits', message: 'Container "processor" does not have memory requests defined', severity: 'warning' },
+]
 
 interface OPAPoliciesProps {
   config?: {
@@ -114,6 +137,255 @@ const DEMO_POLICIES = [
   { name: 'no-privileged', kind: 'K8sPSPPrivilegedContainer', violations: 1, mode: 'dryrun' as const },
 ]
 
+// Policy Detail Modal
+function PolicyDetailModal({
+  isOpen,
+  onClose,
+  policy,
+  onAddPolicy
+}: {
+  isOpen: boolean
+  onClose: () => void
+  policy: { name: string; kind: string; violations: number; mode: 'warn' | 'enforce' | 'dryrun' }
+  onAddPolicy: () => void
+}) {
+  if (!isOpen) return null
+
+  // Get violations for this policy
+  const policyViolations = DEMO_VIOLATIONS.filter(v => v.policy === policy.name)
+
+  const getModeColor = (mode: string) => {
+    switch (mode) {
+      case 'enforce': return 'text-red-400 bg-red-500/20'
+      case 'warn': return 'text-amber-400 bg-amber-500/20'
+      default: return 'text-blue-400 bg-blue-500/20'
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-lg mx-4 bg-card border border-border rounded-2xl shadow-2xl overflow-hidden max-h-[80vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-border">
+          <div className="flex items-center gap-3">
+            <Shield className="w-5 h-5 text-orange-400" />
+            <div>
+              <h2 className="text-lg font-semibold text-foreground">{policy.name}</h2>
+              <p className="text-sm text-muted-foreground">{policy.kind}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1 hover:bg-secondary rounded transition-colors">
+            <X className="w-5 h-5 text-muted-foreground" />
+          </button>
+        </div>
+
+        {/* Policy Info */}
+        <div className="p-4 border-b border-border">
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
+              <p className="text-xs text-muted-foreground mb-1">Enforcement Mode</p>
+              <span className={`px-2 py-1 rounded text-sm font-medium ${getModeColor(policy.mode)}`}>
+                {policy.mode}
+              </span>
+            </div>
+            <div className="flex-1">
+              <p className="text-xs text-muted-foreground mb-1">Violations</p>
+              <p className={`text-2xl font-bold ${policy.violations > 0 ? 'text-amber-400' : 'text-green-400'}`}>
+                {policy.violations}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Violations List */}
+        <div className="flex-1 overflow-y-auto p-4">
+          {policyViolations.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <CheckCircle className="w-8 h-8 mx-auto mb-2 text-green-400" />
+              <p>No violations for this policy</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {policyViolations.map((violation, idx) => (
+                <div
+                  key={idx}
+                  className="p-3 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors"
+                >
+                  <div className="flex items-start justify-between mb-1">
+                    <span className="text-sm font-medium text-foreground">{violation.name}</span>
+                    <span className="text-xs text-muted-foreground">{violation.kind}</span>
+                  </div>
+                  <p className="text-sm text-muted-foreground mb-1">{violation.message}</p>
+                  <span className="text-xs text-muted-foreground">Namespace: <span className="text-foreground">{violation.namespace}</span></span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between p-4 border-t border-border">
+          <a
+            href={`https://open-policy-agent.github.io/gatekeeper-library/website/${policy.kind.toLowerCase()}/`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm text-purple-400 hover:text-purple-300 flex items-center gap-1"
+          >
+            Policy Documentation
+            <ExternalLink className="w-3 h-3" />
+          </a>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                onClose()
+                onAddPolicy()
+              }}
+              className="px-4 py-2 bg-purple-500/20 text-purple-400 rounded-lg hover:bg-purple-500/30 transition-colors"
+            >
+              Create Similar Policy
+            </button>
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-secondary text-foreground rounded-lg hover:bg-secondary/80 transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Violations Modal Component
+function ViolationsModal({
+  isOpen,
+  onClose,
+  clusterName,
+  violations,
+  onAddPolicy
+}: {
+  isOpen: boolean
+  onClose: () => void
+  clusterName: string
+  violations: Violation[]
+  onAddPolicy: () => void
+}) {
+  if (!isOpen) return null
+
+  const severityCounts = {
+    critical: violations.filter(v => v.severity === 'critical').length,
+    warning: violations.filter(v => v.severity === 'warning').length,
+    info: violations.filter(v => v.severity === 'info').length,
+  }
+
+  const getSeverityColor = (severity: string) => {
+    switch (severity) {
+      case 'critical': return 'text-red-400 bg-red-500/20'
+      case 'warning': return 'text-amber-400 bg-amber-500/20'
+      default: return 'text-blue-400 bg-blue-500/20'
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-2xl mx-4 bg-card border border-border rounded-2xl shadow-2xl overflow-hidden max-h-[80vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-border">
+          <div className="flex items-center gap-3">
+            <Shield className="w-5 h-5 text-orange-400" />
+            <div>
+              <h2 className="text-lg font-semibold text-foreground">OPA Gatekeeper Violations</h2>
+              <p className="text-sm text-muted-foreground">{clusterName}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1 hover:bg-secondary rounded transition-colors">
+            <X className="w-5 h-5 text-muted-foreground" />
+          </button>
+        </div>
+
+        {/* Summary */}
+        <div className="grid grid-cols-3 gap-3 p-4 border-b border-border">
+          <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-center">
+            <p className="text-2xl font-bold text-red-400">{severityCounts.critical}</p>
+            <p className="text-xs text-muted-foreground">Critical</p>
+          </div>
+          <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-center">
+            <p className="text-2xl font-bold text-amber-400">{severityCounts.warning}</p>
+            <p className="text-xs text-muted-foreground">Warning</p>
+          </div>
+          <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 text-center">
+            <p className="text-2xl font-bold text-blue-400">{severityCounts.info}</p>
+            <p className="text-xs text-muted-foreground">Info</p>
+          </div>
+        </div>
+
+        {/* Violations List - sorted by severity */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+          {[...violations]
+            .sort((a, b) => {
+              const severityOrder = { critical: 0, warning: 1, info: 2 }
+              return severityOrder[a.severity] - severityOrder[b.severity]
+            })
+            .map((violation, idx) => (
+            <div
+              key={idx}
+              className="p-3 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors"
+            >
+              <div className="flex items-start justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${getSeverityColor(violation.severity)}`}>
+                    {violation.severity}
+                  </span>
+                  <span className="text-sm font-medium text-foreground">{violation.name}</span>
+                </div>
+                <span className="text-xs text-muted-foreground">{violation.kind}</span>
+              </div>
+              <p className="text-sm text-muted-foreground mb-2">{violation.message}</p>
+              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                <span>Namespace: <span className="text-foreground">{violation.namespace}</span></span>
+                <span>Policy: <span className="text-orange-400">{violation.policy}</span></span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between p-4 border-t border-border">
+          <a
+            href="https://open-policy-agent.github.io/gatekeeper/website/docs/violations"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm text-purple-400 hover:text-purple-300 flex items-center gap-1"
+          >
+            Learn about violations
+            <ExternalLink className="w-3 h-3" />
+          </a>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                onClose()
+                onAddPolicy()
+              }}
+              className="px-4 py-2 bg-purple-500/20 text-purple-400 rounded-lg hover:bg-purple-500/30 transition-colors"
+            >
+              Create Policy with Klaude
+            </button>
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-secondary text-foreground rounded-lg hover:bg-secondary/80 transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function OPAPolicies({ config: _config }: OPAPoliciesProps) {
   const { clusters } = useClusters()
   const { selectedClusters, isAllClustersSelected } = useGlobalFilters()
@@ -121,6 +393,14 @@ export function OPAPolicies({ config: _config }: OPAPoliciesProps) {
   const [statuses, setStatuses] = useState<Record<string, GatekeeperStatus>>({})
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [hasChecked, setHasChecked] = useState(false)
+  const [showViolationsModal, setShowViolationsModal] = useState(false)
+  const [selectedClusterForViolations, setSelectedClusterForViolations] = useState<string>('')
+  const [showPolicyModal, setShowPolicyModal] = useState(false)
+  const [selectedPolicy, setSelectedPolicy] = useState<typeof DEMO_POLICIES[0] | null>(null)
+
+  // Use ref to avoid recreating checkAllClusters on every status change
+  const statusesRef = useRef(statuses)
+  statusesRef.current = statuses
 
   // Filter clusters
   const filteredClusters = clusters.filter(c =>
@@ -132,7 +412,10 @@ export function OPAPolicies({ config: _config }: OPAPoliciesProps) {
     if (filteredClusters.length === 0) return
 
     setIsRefreshing(true)
-    const newStatuses: Record<string, GatekeeperStatus> = {}
+
+    // Start with existing statuses (stale-while-revalidate pattern)
+    // Use ref to avoid dependency on statuses state
+    const newStatuses: Record<string, GatekeeperStatus> = { ...statusesRef.current }
 
     for (const cluster of filteredClusters) {
       // For vllm-d and platform-eval, we have real OPA - check it
@@ -189,6 +472,46 @@ Please proceed step by step.`,
   const totalViolations = Object.values(statuses)
     .filter(s => s.installed)
     .reduce((sum, s) => sum + (s.violationCount || 0), 0)
+
+  const handleShowViolations = (clusterName: string) => {
+    setSelectedClusterForViolations(clusterName)
+    setShowViolationsModal(true)
+  }
+
+  const handleAddPolicy = (basedOnPolicy?: string) => {
+    // Get the first installed cluster, or use a default
+    const installedCluster = Object.entries(statuses).find(([_, s]) => s.installed)?.[0] || 'default'
+
+    startMission({
+      title: 'Create OPA Gatekeeper Policy',
+      description: basedOnPolicy
+        ? `Create a policy similar to ${basedOnPolicy}`
+        : 'Create a new OPA Gatekeeper policy',
+      type: 'deploy',
+      cluster: installedCluster,
+      initialPrompt: basedOnPolicy
+        ? `I want to create a new OPA Gatekeeper policy similar to "${basedOnPolicy}".
+
+Please help me:
+1. Explain what the ${basedOnPolicy} policy does
+2. Ask me what modifications I want to make
+3. Generate a ConstraintTemplate and Constraint for my requirements
+4. Help me apply it to the cluster
+5. Test that the policy is working
+
+Let's start by discussing what kind of policy I need.`
+        : `I want to create a new OPA Gatekeeper policy for my Kubernetes cluster.
+
+Please help me:
+1. Ask me what kind of policy I want to enforce (e.g., require labels, restrict images, enforce resource limits)
+2. Generate the appropriate ConstraintTemplate and Constraint
+3. Help me apply it to the cluster
+4. Test that the policy is working
+
+Let's start by discussing what kind of policy I need.`,
+      context: { basedOnPolicy },
+    })
+  }
 
   return (
     <div className="h-full flex flex-col min-h-card">
@@ -252,19 +575,32 @@ Please proceed step by step.`,
             const isLoading = !hasChecked || status?.loading
 
             return (
-              <div
+              <button
                 key={cluster.name}
-                className="p-2.5 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors"
+                onClick={() => status?.installed && handleShowViolations(cluster.name)}
+                disabled={!status?.installed || isLoading}
+                className={`w-full text-left p-2.5 rounded-lg bg-secondary/30 transition-colors ${
+                  status?.installed && !isLoading
+                    ? 'hover:bg-secondary/50 cursor-pointer group'
+                    : ''
+                }`}
               >
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm font-medium text-foreground">{cluster.name}</span>
-                  {isLoading ? (
-                    <RefreshCw className="w-3.5 h-3.5 text-muted-foreground animate-spin" />
-                  ) : status?.installed ? (
-                    <CheckCircle className="w-3.5 h-3.5 text-green-400" />
-                  ) : (
-                    <XCircle className="w-3.5 h-3.5 text-muted-foreground" />
-                  )}
+                  <span className={`text-sm font-medium text-foreground ${status?.installed ? 'group-hover:text-purple-400' : ''}`}>
+                    {cluster.name}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    {isLoading ? (
+                      <RefreshCw className="w-3.5 h-3.5 text-muted-foreground animate-spin" />
+                    ) : status?.installed ? (
+                      <>
+                        <CheckCircle className="w-3.5 h-3.5 text-green-400" />
+                        <ChevronRight className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </>
+                    ) : (
+                      <XCircle className="w-3.5 h-3.5 text-muted-foreground" />
+                    )}
+                  </div>
                 </div>
 
                 {isLoading ? (
@@ -293,19 +629,33 @@ Please proceed step by step.`,
                 ) : (
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-muted-foreground">Not installed</span>
-                    <button
-                      onClick={() => handleInstallOPA(cluster.name)}
-                      className="text-xs text-purple-400 hover:text-purple-300"
+                    <span
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleInstallOPA(cluster.name)
+                      }}
+                      className="text-xs text-purple-400 hover:text-purple-300 cursor-pointer"
                     >
                       Install with Klaude →
-                    </button>
+                    </span>
                   </div>
                 )}
-              </div>
+              </button>
             )
           })
         )}
       </div>
+
+      {/* Add Policy Button */}
+      {installedCount > 0 && (
+        <button
+          onClick={() => handleAddPolicy()}
+          className="w-full mt-3 p-2.5 rounded-lg bg-purple-500/10 border border-purple-500/30 hover:bg-purple-500/20 transition-colors flex items-center justify-center gap-2 group"
+        >
+          <Shield className="w-4 h-4 text-purple-400" />
+          <span className="text-sm font-medium text-purple-400 group-hover:text-purple-300">Create Policy with Klaude</span>
+        </button>
+      )}
 
       {/* Demo policies preview */}
       {installedCount > 0 && (
@@ -316,8 +666,15 @@ Please proceed step by step.`,
           </p>
           <div className="space-y-1">
             {DEMO_POLICIES.slice(0, 3).map(policy => (
-              <div key={policy.name} className="flex items-center justify-between text-xs">
-                <span className="text-foreground truncate">{policy.name}</span>
+              <button
+                key={policy.name}
+                onClick={() => {
+                  setSelectedPolicy(policy)
+                  setShowPolicyModal(true)
+                }}
+                className="w-full flex items-center justify-between text-xs p-1.5 -mx-1.5 rounded hover:bg-secondary/50 transition-colors group"
+              >
+                <span className="text-foreground truncate group-hover:text-purple-400">{policy.name}</span>
                 <div className="flex items-center gap-2">
                   {policy.violations > 0 && (
                     <span className="text-amber-400">{policy.violations}</span>
@@ -329,8 +686,9 @@ Please proceed step by step.`,
                   }`}>
                     {policy.mode}
                   </span>
+                  <ChevronRight className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         </div>
@@ -356,6 +714,32 @@ Please proceed step by step.`,
           Policy Library
         </a>
       </div>
+
+      {/* Violations Modal - rendered via portal to escape card container */}
+      {showViolationsModal && createPortal(
+        <ViolationsModal
+          isOpen={showViolationsModal}
+          onClose={() => setShowViolationsModal(false)}
+          clusterName={selectedClusterForViolations}
+          violations={DEMO_VIOLATIONS}
+          onAddPolicy={() => handleAddPolicy()}
+        />,
+        document.body
+      )}
+
+      {/* Policy Detail Modal - rendered via portal to escape card container */}
+      {selectedPolicy && showPolicyModal && createPortal(
+        <PolicyDetailModal
+          isOpen={showPolicyModal}
+          onClose={() => {
+            setShowPolicyModal(false)
+            setSelectedPolicy(null)
+          }}
+          policy={selectedPolicy}
+          onAddPolicy={() => handleAddPolicy(selectedPolicy.name)}
+        />,
+        document.body
+      )}
     </div>
   )
 }

@@ -114,6 +114,50 @@ func (s *SQLiteStore) migrate() error {
 	CREATE INDEX IF NOT EXISTS idx_cards_dashboard ON cards(dashboard_id);
 	CREATE INDEX IF NOT EXISTS idx_events_user_time ON user_events(user_id, created_at);
 	CREATE INDEX IF NOT EXISTS idx_pending_swaps_due ON pending_swaps(swap_at, status);
+
+	-- Feature requests from users (bugs/features submitted via console)
+	CREATE TABLE IF NOT EXISTS feature_requests (
+		id TEXT PRIMARY KEY,
+		user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		title TEXT NOT NULL,
+		description TEXT NOT NULL,
+		request_type TEXT NOT NULL,
+		github_issue_number INTEGER,
+		github_issue_url TEXT,
+		status TEXT DEFAULT 'submitted',
+		pr_number INTEGER,
+		pr_url TEXT,
+		netlify_preview_url TEXT,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME
+	);
+
+	-- PR feedback from users (thumbs up/down on AI-generated fixes)
+	CREATE TABLE IF NOT EXISTS pr_feedback (
+		id TEXT PRIMARY KEY,
+		feature_request_id TEXT NOT NULL REFERENCES feature_requests(id) ON DELETE CASCADE,
+		user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		feedback_type TEXT NOT NULL,
+		comment TEXT,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+
+	-- User notifications for feature request status updates
+	CREATE TABLE IF NOT EXISTS notifications (
+		id TEXT PRIMARY KEY,
+		user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		feature_request_id TEXT REFERENCES feature_requests(id) ON DELETE CASCADE,
+		notification_type TEXT NOT NULL,
+		title TEXT NOT NULL,
+		message TEXT NOT NULL,
+		read INTEGER DEFAULT 0,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_feature_requests_user ON feature_requests(user_id);
+	CREATE INDEX IF NOT EXISTS idx_feature_requests_status ON feature_requests(status);
+	CREATE INDEX IF NOT EXISTS idx_pr_feedback_request ON pr_feedback(feature_request_id);
+	CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, read);
 	`
 	_, err := s.db.Exec(schema)
 	if err != nil {
@@ -816,6 +860,275 @@ func (s *SQLiteStore) GetRecentEvents(userID uuid.UUID, since time.Duration) ([]
 		events = append(events, e)
 	}
 	return events, rows.Err()
+}
+
+// Feature Request methods
+
+func (s *SQLiteStore) CreateFeatureRequest(request *models.FeatureRequest) error {
+	if request.ID == uuid.Nil {
+		request.ID = uuid.New()
+	}
+	request.CreatedAt = time.Now()
+	if request.Status == "" {
+		request.Status = models.RequestStatusSubmitted
+	}
+
+	_, err := s.db.Exec(`INSERT INTO feature_requests (id, user_id, title, description, request_type, github_issue_number, github_issue_url, status, pr_number, pr_url, netlify_preview_url, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		request.ID.String(), request.UserID.String(), request.Title, request.Description, string(request.RequestType),
+		request.GitHubIssueNumber, nullString(request.GitHubIssueURL), string(request.Status),
+		request.PRNumber, nullString(request.PRURL), nullString(request.NetlifyPreviewURL), request.CreatedAt)
+	return err
+}
+
+func (s *SQLiteStore) GetFeatureRequest(id uuid.UUID) (*models.FeatureRequest, error) {
+	row := s.db.QueryRow(`SELECT id, user_id, title, description, request_type, github_issue_number, github_issue_url, status, pr_number, pr_url, netlify_preview_url, created_at, updated_at FROM feature_requests WHERE id = ?`, id.String())
+	return s.scanFeatureRequest(row)
+}
+
+func (s *SQLiteStore) GetUserFeatureRequests(userID uuid.UUID) ([]models.FeatureRequest, error) {
+	rows, err := s.db.Query(`SELECT id, user_id, title, description, request_type, github_issue_number, github_issue_url, status, pr_number, pr_url, netlify_preview_url, created_at, updated_at FROM feature_requests WHERE user_id = ? ORDER BY created_at DESC`, userID.String())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var requests []models.FeatureRequest
+	for rows.Next() {
+		r, err := s.scanFeatureRequestRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		requests = append(requests, *r)
+	}
+	return requests, rows.Err()
+}
+
+func (s *SQLiteStore) scanFeatureRequest(row *sql.Row) (*models.FeatureRequest, error) {
+	var r models.FeatureRequest
+	var idStr, userIDStr string
+	var requestType, status string
+	var issueNumber, prNumber sql.NullInt64
+	var issueURL, prURL, previewURL sql.NullString
+	var updatedAt sql.NullTime
+
+	err := row.Scan(&idStr, &userIDStr, &r.Title, &r.Description, &requestType, &issueNumber, &issueURL, &status, &prNumber, &prURL, &previewURL, &r.CreatedAt, &updatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	r.ID, _ = uuid.Parse(idStr)
+	r.UserID, _ = uuid.Parse(userIDStr)
+	r.RequestType = models.RequestType(requestType)
+	r.Status = models.RequestStatus(status)
+	if issueNumber.Valid {
+		num := int(issueNumber.Int64)
+		r.GitHubIssueNumber = &num
+	}
+	if issueURL.Valid {
+		r.GitHubIssueURL = issueURL.String
+	}
+	if prNumber.Valid {
+		num := int(prNumber.Int64)
+		r.PRNumber = &num
+	}
+	if prURL.Valid {
+		r.PRURL = prURL.String
+	}
+	if previewURL.Valid {
+		r.NetlifyPreviewURL = previewURL.String
+	}
+	if updatedAt.Valid {
+		r.UpdatedAt = &updatedAt.Time
+	}
+	return &r, nil
+}
+
+func (s *SQLiteStore) scanFeatureRequestRow(rows *sql.Rows) (*models.FeatureRequest, error) {
+	var r models.FeatureRequest
+	var idStr, userIDStr string
+	var requestType, status string
+	var issueNumber, prNumber sql.NullInt64
+	var issueURL, prURL, previewURL sql.NullString
+	var updatedAt sql.NullTime
+
+	err := rows.Scan(&idStr, &userIDStr, &r.Title, &r.Description, &requestType, &issueNumber, &issueURL, &status, &prNumber, &prURL, &previewURL, &r.CreatedAt, &updatedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	r.ID, _ = uuid.Parse(idStr)
+	r.UserID, _ = uuid.Parse(userIDStr)
+	r.RequestType = models.RequestType(requestType)
+	r.Status = models.RequestStatus(status)
+	if issueNumber.Valid {
+		num := int(issueNumber.Int64)
+		r.GitHubIssueNumber = &num
+	}
+	if issueURL.Valid {
+		r.GitHubIssueURL = issueURL.String
+	}
+	if prNumber.Valid {
+		num := int(prNumber.Int64)
+		r.PRNumber = &num
+	}
+	if prURL.Valid {
+		r.PRURL = prURL.String
+	}
+	if previewURL.Valid {
+		r.NetlifyPreviewURL = previewURL.String
+	}
+	if updatedAt.Valid {
+		r.UpdatedAt = &updatedAt.Time
+	}
+	return &r, nil
+}
+
+func (s *SQLiteStore) UpdateFeatureRequest(request *models.FeatureRequest) error {
+	now := time.Now()
+	request.UpdatedAt = &now
+
+	_, err := s.db.Exec(`UPDATE feature_requests SET title = ?, description = ?, request_type = ?, github_issue_number = ?, github_issue_url = ?, status = ?, pr_number = ?, pr_url = ?, netlify_preview_url = ?, updated_at = ? WHERE id = ?`,
+		request.Title, request.Description, string(request.RequestType),
+		request.GitHubIssueNumber, nullString(request.GitHubIssueURL), string(request.Status),
+		request.PRNumber, nullString(request.PRURL), nullString(request.NetlifyPreviewURL),
+		request.UpdatedAt, request.ID.String())
+	return err
+}
+
+func (s *SQLiteStore) UpdateFeatureRequestStatus(id uuid.UUID, status models.RequestStatus) error {
+	now := time.Now()
+	_, err := s.db.Exec(`UPDATE feature_requests SET status = ?, updated_at = ? WHERE id = ?`, string(status), now, id.String())
+	return err
+}
+
+func (s *SQLiteStore) UpdateFeatureRequestPR(id uuid.UUID, prNumber int, prURL string) error {
+	now := time.Now()
+	_, err := s.db.Exec(`UPDATE feature_requests SET pr_number = ?, pr_url = ?, status = ?, updated_at = ? WHERE id = ?`,
+		prNumber, prURL, string(models.RequestStatusPRReady), now, id.String())
+	return err
+}
+
+func (s *SQLiteStore) UpdateFeatureRequestPreview(id uuid.UUID, previewURL string) error {
+	now := time.Now()
+	_, err := s.db.Exec(`UPDATE feature_requests SET netlify_preview_url = ?, status = ?, updated_at = ? WHERE id = ?`,
+		previewURL, string(models.RequestStatusPreviewAvailable), now, id.String())
+	return err
+}
+
+// PR Feedback methods
+
+func (s *SQLiteStore) CreatePRFeedback(feedback *models.PRFeedback) error {
+	if feedback.ID == uuid.Nil {
+		feedback.ID = uuid.New()
+	}
+	feedback.CreatedAt = time.Now()
+
+	_, err := s.db.Exec(`INSERT INTO pr_feedback (id, feature_request_id, user_id, feedback_type, comment, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		feedback.ID.String(), feedback.FeatureRequestID.String(), feedback.UserID.String(),
+		string(feedback.FeedbackType), nullString(feedback.Comment), feedback.CreatedAt)
+	return err
+}
+
+func (s *SQLiteStore) GetPRFeedback(featureRequestID uuid.UUID) ([]models.PRFeedback, error) {
+	rows, err := s.db.Query(`SELECT id, feature_request_id, user_id, feedback_type, comment, created_at FROM pr_feedback WHERE feature_request_id = ? ORDER BY created_at DESC`, featureRequestID.String())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var feedbacks []models.PRFeedback
+	for rows.Next() {
+		var f models.PRFeedback
+		var idStr, requestIDStr, userIDStr string
+		var feedbackType string
+		var comment sql.NullString
+
+		if err := rows.Scan(&idStr, &requestIDStr, &userIDStr, &feedbackType, &comment, &f.CreatedAt); err != nil {
+			return nil, err
+		}
+
+		f.ID, _ = uuid.Parse(idStr)
+		f.FeatureRequestID, _ = uuid.Parse(requestIDStr)
+		f.UserID, _ = uuid.Parse(userIDStr)
+		f.FeedbackType = models.FeedbackType(feedbackType)
+		if comment.Valid {
+			f.Comment = comment.String
+		}
+		feedbacks = append(feedbacks, f)
+	}
+	return feedbacks, rows.Err()
+}
+
+// Notification methods
+
+func (s *SQLiteStore) CreateNotification(notification *models.Notification) error {
+	if notification.ID == uuid.Nil {
+		notification.ID = uuid.New()
+	}
+	notification.CreatedAt = time.Now()
+
+	var featureRequestID *string
+	if notification.FeatureRequestID != nil {
+		str := notification.FeatureRequestID.String()
+		featureRequestID = &str
+	}
+
+	_, err := s.db.Exec(`INSERT INTO notifications (id, user_id, feature_request_id, notification_type, title, message, read, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		notification.ID.String(), notification.UserID.String(), featureRequestID,
+		string(notification.NotificationType), notification.Title, notification.Message,
+		boolToInt(notification.Read), notification.CreatedAt)
+	return err
+}
+
+func (s *SQLiteStore) GetUserNotifications(userID uuid.UUID, limit int) ([]models.Notification, error) {
+	rows, err := s.db.Query(`SELECT id, user_id, feature_request_id, notification_type, title, message, read, created_at FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT ?`, userID.String(), limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var notifications []models.Notification
+	for rows.Next() {
+		var n models.Notification
+		var idStr, userIDStr string
+		var featureRequestID sql.NullString
+		var notificationType string
+		var read int
+
+		if err := rows.Scan(&idStr, &userIDStr, &featureRequestID, &notificationType, &n.Title, &n.Message, &read, &n.CreatedAt); err != nil {
+			return nil, err
+		}
+
+		n.ID, _ = uuid.Parse(idStr)
+		n.UserID, _ = uuid.Parse(userIDStr)
+		n.NotificationType = models.NotificationType(notificationType)
+		n.Read = read == 1
+		if featureRequestID.Valid {
+			id, _ := uuid.Parse(featureRequestID.String)
+			n.FeatureRequestID = &id
+		}
+		notifications = append(notifications, n)
+	}
+	return notifications, rows.Err()
+}
+
+func (s *SQLiteStore) GetUnreadNotificationCount(userID uuid.UUID) (int, error) {
+	var count int
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM notifications WHERE user_id = ? AND read = 0`, userID.String()).Scan(&count)
+	return count, err
+}
+
+func (s *SQLiteStore) MarkNotificationRead(id uuid.UUID) error {
+	_, err := s.db.Exec(`UPDATE notifications SET read = 1 WHERE id = ?`, id.String())
+	return err
+}
+
+func (s *SQLiteStore) MarkAllNotificationsRead(userID uuid.UUID) error {
+	_, err := s.db.Exec(`UPDATE notifications SET read = 1 WHERE user_id = ?`, userID.String())
+	return err
 }
 
 // Helper functions

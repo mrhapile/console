@@ -38,6 +38,7 @@ import {
 } from './components'
 import { isClusterUnreachable } from './utils'
 import { formatK8sMemory } from '../../lib/formatters'
+import { formatCardTitle } from '../../lib/formatCardTitle'
 
 interface ClusterCard {
   id: string
@@ -106,7 +107,7 @@ const SortableClusterCard = memo(function SortableClusterCard({
       <CardWrapper
         cardId={card.id}
         cardType={card.card_type}
-        title={card.title || card.card_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+        title={card.title || formatCardTitle(card.card_type)}
         cardWidth={cardWidth}
         onConfigure={onConfigure}
         onRemove={onRemove}
@@ -139,7 +140,7 @@ function DragPreviewCard({ card }: { card: ClusterCard }) {
       <div className="flex items-center gap-2">
         <GripVertical className="w-4 h-4 text-muted-foreground" />
         <span className="text-sm font-medium truncate">
-          {card.title || card.card_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+          {card.title || formatCardTitle(card.card_type)}
         </span>
       </div>
     </div>
@@ -2261,7 +2262,7 @@ function CardConfigModal({
       <div className="glass p-6 rounded-lg w-[500px] max-h-[80vh] overflow-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-foreground">
-            Configure {card.title || card.card_type.replace(/_/g, ' ')}
+            Configure {card.title || formatCardTitle(card.card_type)}
           </h3>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
             <X className="w-5 h-5" />

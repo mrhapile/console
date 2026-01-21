@@ -297,22 +297,21 @@ function MissionChat({ mission, isFullScreen = false }: { mission: Mission; isFu
 }
 
 export function MissionSidebar() {
-  const { missions, activeMission, isSidebarOpen, isSidebarMinimized, setActiveMission, closeSidebar, dismissMission, minimizeSidebar, expandSidebar } = useMissions()
+  const { missions, activeMission, isSidebarOpen, isSidebarMinimized, isFullScreen, setActiveMission, closeSidebar, dismissMission, minimizeSidebar, expandSidebar, setFullScreen } = useMissions()
   const [collapsedMissions, setCollapsedMissions] = useState<Set<string>>(new Set())
-  const [isFullScreen, setIsFullScreen] = useState(false)
 
   // Exit fullscreen on Escape key
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isFullScreen) {
-        setIsFullScreen(false)
+        setFullScreen(false)
       }
     }
     if (isFullScreen) {
       document.addEventListener('keydown', handleEscape)
       return () => document.removeEventListener('keydown', handleEscape)
     }
-  }, [isFullScreen])
+  }, [isFullScreen, setFullScreen])
 
   // Count missions needing attention
   const needsAttention = missions.filter(m =>
@@ -369,10 +368,12 @@ export function MissionSidebar() {
 
   return (
     <div className={cn(
-      "fixed bg-card/95 backdrop-blur-sm border-l border-border z-40 flex flex-col transition-all duration-300",
+      "fixed bg-card/95 backdrop-blur-sm border-border z-40 flex flex-col",
+      // Use separate transitions for smoother animation
+      "transition-[width,top,border] duration-300",
       isFullScreen
-        ? "top-0 right-0 bottom-0 left-0 border-l-0"
-        : "top-16 right-0 bottom-0 w-96"
+        ? "inset-0 border-l-0"
+        : "top-16 right-0 bottom-0 w-96 border-l"
     )}>
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-border">
@@ -388,7 +389,7 @@ export function MissionSidebar() {
         <div className="flex items-center gap-1">
           {isFullScreen ? (
             <button
-              onClick={() => setIsFullScreen(false)}
+              onClick={() => setFullScreen(false)}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 border border-primary/30 hover:bg-primary/20 rounded-lg transition-colors text-sm text-primary font-medium"
               title="Exit full screen and return to sidebar"
             >
@@ -398,7 +399,7 @@ export function MissionSidebar() {
           ) : (
             <>
               <button
-                onClick={() => setIsFullScreen(true)}
+                onClick={() => setFullScreen(true)}
                 className="p-1 hover:bg-secondary rounded transition-colors"
                 title="Full screen"
               >
@@ -414,7 +415,7 @@ export function MissionSidebar() {
             </>
           )}
           <button
-            onClick={() => { setIsFullScreen(false); closeSidebar(); }}
+            onClick={closeSidebar}
             className="p-1 hover:bg-secondary rounded transition-colors"
             title="Close sidebar"
           >

@@ -7,10 +7,14 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/joho/godotenv"
 	"github.com/kubestellar/console/pkg/api"
 )
 
 func main() {
+	// Load .env file if it exists (silently ignore if not found)
+	_ = godotenv.Load()
+
 	// Parse flags
 	devMode := flag.Bool("dev", false, "Run in development mode")
 	port := flag.Int("port", 0, "Server port (default: 8080)")

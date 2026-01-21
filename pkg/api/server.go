@@ -38,7 +38,12 @@ type Config struct {
 	DevUserEmail  string
 	DevUserAvatar string
 	// GitHub personal access token for dev mode profile lookup
-	GitHubToken   string
+	GitHubToken string
+	// Feature request/feedback configuration
+	FeedbackGitHubToken  string // PAT for creating issues
+	GitHubWebhookSecret  string // Secret for validating GitHub webhooks
+	FeedbackRepoOwner    string // GitHub org/owner (e.g., "kubestellar")
+	FeedbackRepoName     string // GitHub repo name (e.g., "console")
 }
 
 // Server represents the API server
@@ -316,6 +321,25 @@ func (s *Server) setupRoutes() {
 	api.Post("/gitops/detect-drift", gitopsHandlers.DetectDrift)
 	api.Post("/gitops/sync", gitopsHandlers.Sync)
 
+	// Feature requests and feedback routes
+	feedback := handlers.NewFeedbackHandler(s.store, handlers.FeedbackConfig{
+		GitHubToken:   s.config.FeedbackGitHubToken,
+		WebhookSecret: s.config.GitHubWebhookSecret,
+		RepoOwner:     s.config.FeedbackRepoOwner,
+		RepoName:      s.config.FeedbackRepoName,
+	})
+	api.Post("/feedback/requests", feedback.CreateFeatureRequest)
+	api.Get("/feedback/requests", feedback.ListFeatureRequests)
+	api.Get("/feedback/requests/:id", feedback.GetFeatureRequest)
+	api.Post("/feedback/requests/:id/feedback", feedback.SubmitFeedback)
+	api.Get("/notifications", feedback.GetNotifications)
+	api.Get("/notifications/unread-count", feedback.GetUnreadCount)
+	api.Post("/notifications/:id/read", feedback.MarkNotificationRead)
+	api.Post("/notifications/read-all", feedback.MarkAllNotificationsRead)
+
+	// GitHub webhook (public endpoint, uses signature verification)
+	s.app.Post("/webhooks/github", feedback.HandleGitHubWebhook)
+
 	// WebSocket for real-time updates
 	s.app.Use("/ws", middleware.WebSocketUpgrade())
 	s.app.Get("/ws", websocket.New(func(c *websocket.Conn) {
@@ -428,6 +452,11 @@ func LoadConfigFromEnv() Config {
 		DevUserAvatar: getEnvOrDefault("DEV_USER_AVATAR", ""),
 		// GitHub token for dev mode profile fetching
 		GitHubToken: os.Getenv("GITHUB_TOKEN"),
+		// Feature request/feedback configuration
+		FeedbackGitHubToken: os.Getenv("FEEDBACK_GITHUB_TOKEN"),
+		GitHubWebhookSecret: os.Getenv("GITHUB_WEBHOOK_SECRET"),
+		FeedbackRepoOwner:   getEnvOrDefault("FEEDBACK_REPO_OWNER", "kubestellar"),
+		FeedbackRepoName:    getEnvOrDefault("FEEDBACK_REPO_NAME", "console"),
 	}
 }
 

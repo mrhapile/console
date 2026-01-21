@@ -1,5 +1,7 @@
-import { WifiOff, HardDrive, Server, CheckCircle2, XCircle, Cpu, MemoryStick, Layers, Zap, Box } from 'lucide-react'
+import { useState } from 'react'
+import { WifiOff, HardDrive, Server, CheckCircle2, XCircle, Cpu, MemoryStick, Layers, Zap, Box, Settings } from 'lucide-react'
 import { formatStat, formatMemoryStat } from '../../../lib/formatStats'
+import { StatsConfigModal, useStatsConfig } from './StatsConfig'
 
 export interface ClusterStats {
   total: number
@@ -34,151 +36,216 @@ interface StatsOverviewProps {
   onNodesClick?: () => void
   /** Navigate to pods view */
   onPodsClick?: () => void
+  /** Storage key for persisting config */
+  configKey?: string
+  /** Whether to show the configure button */
+  showConfigButton?: boolean
 }
 
-export function StatsOverview({ stats, onFilterByStatus, onCPUClick, onMemoryClick, onStorageClick, onGPUClick, onNodesClick, onPodsClick }: StatsOverviewProps) {
+// Icon mapping for dynamic rendering
+const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  Server, CheckCircle2, XCircle, WifiOff, Box, Cpu, MemoryStick, HardDrive, Zap, Layers,
+}
+
+// Color mapping for dynamic rendering
+const COLOR_CLASSES: Record<string, string> = {
+  purple: 'text-purple-400',
+  green: 'text-green-400',
+  orange: 'text-orange-400',
+  yellow: 'text-yellow-400',
+  cyan: 'text-cyan-400',
+  blue: 'text-blue-400',
+}
+
+// Stat block renderer for individual blocks
+interface StatBlockProps {
+  blockId: string
+  stats: ClusterStats
+  hasData: boolean
+  onClick?: () => void
+  color: string
+  icon: string
+}
+
+function StatBlock({ blockId, stats, hasData, onClick, color, icon }: StatBlockProps) {
+  const IconComponent = ICONS[icon] || Server
+  const colorClass = COLOR_CLASSES[color] || 'text-foreground'
+
+  // Get value and label based on block type
+  let value: string | number = '-'
+  let label = ''
+  let sublabel = ''
+  let isClickable = !!onClick
+
+  switch (blockId) {
+    case 'clusters':
+      value = formatStat(stats.total)
+      label = 'Clusters'
+      sublabel = 'total'
+      break
+    case 'healthy':
+      value = formatStat(stats.healthy)
+      label = 'Healthy'
+      sublabel = 'clusters'
+      isClickable = isClickable && stats.healthy > 0
+      break
+    case 'unhealthy':
+      value = formatStat(stats.unhealthy)
+      label = 'Unhealthy'
+      sublabel = 'clusters'
+      isClickable = isClickable && stats.unhealthy > 0
+      break
+    case 'unreachable':
+      value = formatStat(stats.unreachable)
+      label = 'Offline'
+      sublabel = 'clusters'
+      isClickable = isClickable && stats.unreachable > 0
+      break
+    case 'nodes':
+      value = hasData ? formatStat(stats.totalNodes) : '-'
+      label = 'Nodes'
+      sublabel = 'total'
+      isClickable = isClickable && hasData && stats.totalNodes > 0
+      break
+    case 'cpus':
+      value = hasData ? formatStat(stats.totalCPUs) : '-'
+      label = 'CPUs'
+      sublabel = 'cores'
+      isClickable = isClickable && hasData && stats.totalCPUs > 0
+      break
+    case 'memory':
+      value = formatMemoryStat(stats.totalMemoryGB, hasData)
+      label = 'Memory'
+      sublabel = 'allocatable'
+      isClickable = isClickable && hasData && stats.totalMemoryGB > 0
+      break
+    case 'storage':
+      value = formatMemoryStat(stats.totalStorageGB, hasData)
+      label = 'Storage'
+      sublabel = 'ephemeral'
+      isClickable = isClickable && hasData && stats.totalStorageGB > 0
+      break
+    case 'gpus':
+      value = hasData ? formatStat(stats.totalGPUs) : '-'
+      label = 'GPUs'
+      sublabel = hasData && stats.allocatedGPUs > 0 ? `${formatStat(stats.allocatedGPUs)} allocated` : 'total'
+      isClickable = isClickable && hasData && stats.totalGPUs > 0
+      break
+    case 'pods':
+      value = hasData ? formatStat(stats.totalPods) : '-'
+      label = 'Pods'
+      sublabel = 'running'
+      isClickable = isClickable && hasData && stats.totalPods > 0
+      break
+  }
+
+  // Value color - some blocks have colored values
+  const valueColor = ['healthy'].includes(blockId) ? 'text-green-400' :
+    ['unhealthy'].includes(blockId) ? 'text-orange-400' :
+    ['unreachable'].includes(blockId) ? 'text-yellow-400' : 'text-foreground'
+
+  return (
+    <div
+      className={`glass p-4 rounded-lg ${isClickable ? 'cursor-pointer hover:bg-secondary/50' : ''} transition-colors`}
+      onClick={() => isClickable && onClick?.()}
+    >
+      <div className="flex items-center gap-2 mb-2">
+        <IconComponent className={`w-5 h-5 shrink-0 ${colorClass}`} />
+        <span className="text-sm text-muted-foreground truncate">{label}</span>
+      </div>
+      <div className={`text-3xl font-bold ${valueColor}`}>{value}</div>
+      <div className="text-xs text-muted-foreground">{sublabel}</div>
+    </div>
+  )
+}
+
+export function StatsOverview({
+  stats,
+  onFilterByStatus,
+  onCPUClick,
+  onMemoryClick,
+  onStorageClick,
+  onGPUClick,
+  onNodesClick,
+  onPodsClick,
+  configKey = 'cluster-stats-config',
+  showConfigButton = true,
+}: StatsOverviewProps) {
+  const { blocks, saveBlocks, visibleBlocks } = useStatsConfig(configKey)
+  const [showConfig, setShowConfig] = useState(false)
+
   // Resource data is available if we have reachable clusters with node data
   const hasData = stats.hasResourceData !== false
 
+  // Map block IDs to their click handlers
+  const getClickHandler = (blockId: string) => {
+    switch (blockId) {
+      case 'clusters':
+        return onFilterByStatus ? () => onFilterByStatus('all') : undefined
+      case 'healthy':
+        return onFilterByStatus ? () => onFilterByStatus('healthy') : undefined
+      case 'unhealthy':
+        return onFilterByStatus ? () => onFilterByStatus('unhealthy') : undefined
+      case 'unreachable':
+        return onFilterByStatus ? () => onFilterByStatus('unreachable') : undefined
+      case 'nodes':
+        return onNodesClick
+      case 'cpus':
+        return onCPUClick
+      case 'memory':
+        return onMemoryClick
+      case 'storage':
+        return onStorageClick
+      case 'gpus':
+        return onGPUClick
+      case 'pods':
+        return onPodsClick
+      default:
+        return undefined
+    }
+  }
+
+  // Dynamic grid columns based on visible blocks
+  const gridCols = visibleBlocks.length <= 5 ? 'grid-cols-5' :
+    visibleBlocks.length <= 6 ? 'grid-cols-6' :
+    visibleBlocks.length <= 8 ? 'grid-cols-4 lg:grid-cols-8' :
+    'grid-cols-5 lg:grid-cols-10'
+
   return (
-    <div className="grid grid-cols-5 lg:grid-cols-10 gap-3 mb-6">
-      {/* Row 1: Cluster health stats - always show these counts */}
-      <div
-        className={`glass p-4 rounded-lg ${onFilterByStatus ? 'cursor-pointer hover:bg-secondary/50' : ''} transition-colors`}
-        onClick={() => onFilterByStatus?.('all')}
-        title={`${formatStat(stats.total)} total clusters${onFilterByStatus ? ' - Click to show all' : ''}`}
-      >
-        <div className="flex items-center gap-2 mb-2">
-          <Server className="w-5 h-5 shrink-0 text-purple-400" />
-          <span className="text-sm text-muted-foreground truncate">Clusters</span>
-        </div>
-        <div className="text-3xl font-bold text-foreground">{formatStat(stats.total)}</div>
-        <div className="text-xs text-muted-foreground">total</div>
-      </div>
-      <div
-        className={`glass p-4 rounded-lg ${onFilterByStatus && stats.healthy > 0 ? 'cursor-pointer hover:bg-secondary/50' : ''} transition-colors`}
-        onClick={() => stats.healthy > 0 && onFilterByStatus?.('healthy')}
-        title={`${formatStat(stats.healthy)} healthy clusters${onFilterByStatus && stats.healthy > 0 ? ' - Click to filter' : ''}`}
-      >
-        <div className="flex items-center gap-2 mb-2">
-          <CheckCircle2 className="w-5 h-5 shrink-0 text-green-400" />
-          <span className="text-sm text-muted-foreground truncate">Healthy</span>
-        </div>
-        <div className="text-3xl font-bold text-green-400">{formatStat(stats.healthy)}</div>
-        <div className="text-xs text-muted-foreground">clusters</div>
-      </div>
-      <div
-        className={`glass p-4 rounded-lg ${onFilterByStatus && stats.unhealthy > 0 ? 'cursor-pointer hover:bg-secondary/50' : ''} transition-colors`}
-        onClick={() => stats.unhealthy > 0 && onFilterByStatus?.('unhealthy')}
-        title={`${formatStat(stats.unhealthy)} unhealthy clusters${onFilterByStatus && stats.unhealthy > 0 ? ' - Click to filter' : ''}`}
-      >
-        <div className="flex items-center gap-2 mb-2">
-          <XCircle className="w-5 h-5 shrink-0 text-orange-400" />
-          <span className="text-sm text-muted-foreground truncate">Unhealthy</span>
-        </div>
-        <div className="text-3xl font-bold text-orange-400">{formatStat(stats.unhealthy)}</div>
-        <div className="text-xs text-muted-foreground">clusters</div>
-      </div>
-      <div
-        className={`glass p-4 rounded-lg ${onFilterByStatus && stats.unreachable > 0 ? 'cursor-pointer hover:bg-secondary/50' : ''} transition-colors`}
-        onClick={() => stats.unreachable > 0 && onFilterByStatus?.('unreachable')}
-        title={`${formatStat(stats.unreachable)} offline clusters - check network connection${onFilterByStatus && stats.unreachable > 0 ? ' - Click to filter' : ''}`}
-      >
-        <div className="flex items-center gap-2 mb-2">
-          <WifiOff className="w-5 h-5 shrink-0 text-yellow-400" />
-          <span className="text-sm text-muted-foreground truncate">Offline</span>
-        </div>
-        <div className="text-3xl font-bold text-yellow-400">{formatStat(stats.unreachable)}</div>
-        <div className="text-xs text-muted-foreground">clusters</div>
-      </div>
-      <div
-        className={`glass p-4 rounded-lg ${onNodesClick && hasData && stats.totalNodes > 0 ? 'cursor-pointer hover:bg-secondary/50' : ''} transition-colors`}
-        onClick={() => hasData && stats.totalNodes > 0 && onNodesClick?.()}
-        title={hasData ? `${formatStat(stats.totalNodes)} total nodes${onNodesClick && stats.totalNodes > 0 ? ' - Click to view' : ''}` : 'No data available'}
-      >
-        <div className="flex items-center gap-2 mb-2">
-          <Box className="w-5 h-5 shrink-0 text-cyan-400" />
-          <span className="text-sm text-muted-foreground truncate">Nodes</span>
-        </div>
-        <div className="text-3xl font-bold text-foreground">
-          {hasData ? formatStat(stats.totalNodes) : '-'}
-        </div>
-        <div className="text-xs text-muted-foreground">total</div>
+    <div className="relative mb-6">
+      {/* Configure button */}
+      {showConfigButton && (
+        <button
+          onClick={() => setShowConfig(true)}
+          className="absolute -top-8 right-0 p-1 text-muted-foreground hover:text-foreground hover:bg-secondary rounded transition-colors"
+          title="Configure stats"
+        >
+          <Settings className="w-4 h-4" />
+        </button>
+      )}
+
+      {/* Stats grid */}
+      <div className={`grid ${gridCols} gap-3`}>
+        {visibleBlocks.map(block => (
+          <StatBlock
+            key={block.id}
+            blockId={block.id}
+            stats={stats}
+            hasData={hasData}
+            onClick={getClickHandler(block.id)}
+            color={block.color}
+            icon={block.icon}
+          />
+        ))}
       </div>
 
-      {/* Row 2: Resource metrics - show '-' if no data available */}
-      <div
-        className={`glass p-4 rounded-lg ${onCPUClick && hasData && stats.totalCPUs > 0 ? 'cursor-pointer hover:bg-secondary/50' : ''} transition-colors`}
-        onClick={() => hasData && stats.totalCPUs > 0 && onCPUClick?.()}
-        title={hasData ? `${formatStat(stats.totalCPUs)} CPU cores${onCPUClick && stats.totalCPUs > 0 ? ' - Click to view details' : ''}` : 'No data available'}
-      >
-        <div className="flex items-center gap-2 mb-2">
-          <Cpu className="w-5 h-5 shrink-0 text-blue-400" />
-          <span className="text-sm text-muted-foreground truncate">CPUs</span>
-        </div>
-        <div className="text-3xl font-bold text-foreground">
-          {hasData ? formatStat(stats.totalCPUs) : '-'}
-        </div>
-        <div className="text-xs text-muted-foreground">cores</div>
-      </div>
-      <div
-        className={`glass p-4 rounded-lg ${onMemoryClick && hasData && stats.totalMemoryGB > 0 ? 'cursor-pointer hover:bg-secondary/50' : ''} transition-colors`}
-        onClick={() => hasData && stats.totalMemoryGB > 0 && onMemoryClick?.()}
-        title={hasData ? `${formatMemoryStat(stats.totalMemoryGB, hasData)} memory${onMemoryClick && stats.totalMemoryGB > 0 ? ' - Click to view details' : ''}` : 'No data available'}
-      >
-        <div className="flex items-center gap-2 mb-2">
-          <MemoryStick className="w-5 h-5 shrink-0 text-green-400" />
-          <span className="text-sm text-muted-foreground truncate">Memory</span>
-        </div>
-        <div className="text-3xl font-bold text-foreground">
-          {formatMemoryStat(stats.totalMemoryGB, hasData)}
-        </div>
-        <div className="text-xs text-muted-foreground">allocatable</div>
-      </div>
-      <div
-        className={`glass p-4 rounded-lg ${onStorageClick && hasData && stats.totalStorageGB > 0 ? 'cursor-pointer hover:bg-secondary/50' : ''} transition-colors`}
-        onClick={() => hasData && stats.totalStorageGB > 0 && onStorageClick?.()}
-        title={hasData ? `${formatMemoryStat(stats.totalStorageGB, hasData)} ephemeral storage${onStorageClick && stats.totalStorageGB > 0 ? ' - Click to view details' : ''}` : 'No data available'}
-      >
-        <div className="flex items-center gap-2 mb-2">
-          <HardDrive className="w-5 h-5 shrink-0 text-purple-400" />
-          <span className="text-sm text-muted-foreground truncate">Storage</span>
-        </div>
-        <div className="text-3xl font-bold text-foreground">
-          {formatMemoryStat(stats.totalStorageGB, hasData)}
-        </div>
-        <div className="text-xs text-muted-foreground">ephemeral</div>
-      </div>
-      <div
-        className={`glass p-4 rounded-lg ${onGPUClick && hasData && stats.totalGPUs > 0 ? 'cursor-pointer hover:bg-secondary/50' : ''} transition-colors`}
-        onClick={() => hasData && stats.totalGPUs > 0 && onGPUClick?.()}
-        title={hasData ? `${formatStat(stats.totalGPUs)} total GPUs${stats.allocatedGPUs > 0 ? ` (${formatStat(stats.allocatedGPUs)} allocated)` : ''}${onGPUClick && stats.totalGPUs > 0 ? ' - Click to view details' : ''}` : 'No data available'}
-      >
-        <div className="flex items-center gap-2 mb-2">
-          <Zap className="w-5 h-5 shrink-0 text-yellow-400" />
-          <span className="text-sm text-muted-foreground truncate">GPUs</span>
-        </div>
-        <div className="text-3xl font-bold text-foreground">
-          {hasData ? formatStat(stats.totalGPUs) : '-'}
-        </div>
-        <div className="text-xs text-muted-foreground">
-          {hasData && stats.allocatedGPUs > 0 ? `${formatStat(stats.allocatedGPUs)} allocated` : 'total'}
-        </div>
-      </div>
-      <div
-        className={`glass p-4 rounded-lg ${onPodsClick && hasData && stats.totalPods > 0 ? 'cursor-pointer hover:bg-secondary/50' : ''} transition-colors`}
-        onClick={() => hasData && stats.totalPods > 0 && onPodsClick?.()}
-        title={hasData ? `${formatStat(stats.totalPods)} running pods${onPodsClick && stats.totalPods > 0 ? ' - Click to view' : ''}` : 'No data available'}
-      >
-        <div className="flex items-center gap-2 mb-2">
-          <Layers className="w-5 h-5 shrink-0 text-purple-400" />
-          <span className="text-sm text-muted-foreground truncate">Pods</span>
-        </div>
-        <div className="text-3xl font-bold text-foreground">
-          {hasData ? formatStat(stats.totalPods) : '-'}
-        </div>
-        <div className="text-xs text-muted-foreground">running</div>
-      </div>
+      {/* Config modal */}
+      <StatsConfigModal
+        isOpen={showConfig}
+        onClose={() => setShowConfig(false)}
+        blocks={blocks}
+        onSave={saveBlocks}
+      />
     </div>
   )
 }

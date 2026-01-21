@@ -31,6 +31,7 @@ import { TemplatesModal } from '../dashboard/TemplatesModal'
 import { ConfigureCardModal } from '../dashboard/ConfigureCardModal'
 import { FloatingDashboardActions } from '../dashboard/FloatingDashboardActions'
 import { DashboardTemplate } from '../dashboard/templates'
+import { formatCardTitle } from '../../lib/formatCardTitle'
 
 interface ComplianceCard {
   id: string
@@ -96,7 +97,7 @@ const SortableCard = memo(function SortableCard({
   return (
     <div ref={setNodeRef} style={style} className={colSpan}>
       <CardWrapper
-        title={card.title || card.card_type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+        title={card.title || formatCardTitle(card.card_type)}
         onRemove={onRemove}
         onConfigure={onConfigure}
         cardType={card.card_type}
@@ -125,7 +126,7 @@ function DragPreviewCard({ card }: { card: ComplianceCard }) {
   return (
     <div className={colSpan}>
       <CardWrapper
-        title={card.title || card.card_type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+        title={card.title || formatCardTitle(card.card_type)}
         cardType={card.card_type}
       >
         <CardComponent config={card.config} />

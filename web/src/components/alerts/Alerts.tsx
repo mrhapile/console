@@ -25,6 +25,7 @@ import { TemplatesModal } from '../dashboard/TemplatesModal'
 import { FloatingDashboardActions } from '../dashboard/FloatingDashboardActions'
 import { CARD_COMPONENTS, DEMO_DATA_CARDS } from '../cards/cardRegistry'
 import type { DashboardTemplate } from '../dashboard/templates'
+import { formatCardTitle } from '../../lib/formatCardTitle'
 
 interface AlertCard {
   id: string
@@ -103,7 +104,7 @@ function SortableCard({ card, onRemove, onReplace, onConfigure }: {
       style={style}
     >
       <CardWrapper
-        title={card.title || card.card_type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+        title={card.title || formatCardTitle(card.card_type)}
         cardId={card.id}
         cardType={card.card_type}
         onRemove={() => onRemove(card.id)}

@@ -7,6 +7,7 @@ import { TemplatesModal } from './TemplatesModal'
 import { ConfigureCardModal } from './ConfigureCardModal'
 import { DashboardTemplate } from './templates'
 import { DashboardCard } from '../../hooks/useDashboardCards'
+import { formatCardTitle } from '../../lib/formatCardTitle'
 
 interface CardSuggestion {
   type: string
@@ -150,7 +151,7 @@ export function DashboardCards({
                     key={card.id}
                     cardId={card.id}
                     cardType={card.card_type}
-                    title={card.title || card.card_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                    title={card.title || formatCardTitle(card.card_type)}
                     onConfigure={() => handleConfigureCard(card.id)}
                     onRemove={() => onRemoveCard(card.id)}
                   >

@@ -31,6 +31,7 @@ interface MissionContextValue {
   activeMission: Mission | null
   isSidebarOpen: boolean
   isSidebarMinimized: boolean
+  isFullScreen: boolean
 
   // Actions
   startMission: (params: StartMissionParams) => string
@@ -44,6 +45,7 @@ interface MissionContextValue {
   closeSidebar: () => void
   minimizeSidebar: () => void
   expandSidebar: () => void
+  setFullScreen: (isFullScreen: boolean) => void
 }
 
 interface StartMissionParams {
@@ -64,6 +66,7 @@ export function MissionProvider({ children }: { children: ReactNode }) {
   const [activeMissionId, setActiveMissionId] = useState<string | null>(null)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [isSidebarMinimized, setIsSidebarMinimized] = useState(false)
+  const [isFullScreen, setIsFullScreen] = useState(false)
 
   const wsRef = useRef<WebSocket | null>(null)
   const pendingRequests = useRef<Map<string, string>>(new Map()) // requestId -> missionId
@@ -334,9 +337,17 @@ export function MissionProvider({ children }: { children: ReactNode }) {
     setIsSidebarOpen(true)
     setIsSidebarMinimized(false) // Expand when opening
   }, [])
-  const closeSidebar = useCallback(() => setIsSidebarOpen(false), [])
+  const closeSidebar = useCallback(() => {
+    setIsSidebarOpen(false)
+    setIsFullScreen(false) // Exit fullscreen when closing
+  }, [])
   const minimizeSidebar = useCallback(() => setIsSidebarMinimized(true), [])
   const expandSidebar = useCallback(() => setIsSidebarMinimized(false), [])
+
+  // Fullscreen controls
+  const handleSetFullScreen = useCallback((fullScreen: boolean) => {
+    setIsFullScreen(fullScreen)
+  }, [])
 
   // Get active mission object
   const activeMission = missions.find(m => m.id === activeMissionId) || null
@@ -354,6 +365,7 @@ export function MissionProvider({ children }: { children: ReactNode }) {
       activeMission,
       isSidebarOpen,
       isSidebarMinimized,
+      isFullScreen,
       startMission,
       sendMessage,
       cancelMission,
@@ -365,6 +377,7 @@ export function MissionProvider({ children }: { children: ReactNode }) {
       closeSidebar,
       minimizeSidebar,
       expandSidebar,
+      setFullScreen: handleSetFullScreen,
     }}>
       {children}
     </MissionContext.Provider>

@@ -52,9 +52,43 @@ export function ResourceTrend() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // Track historical data points
-  const historyRef = useRef<ResourcePoint[]>([])
-  const [history, setHistory] = useState<ResourcePoint[]>([])
+  // Track historical data points with persistence
+  const STORAGE_KEY = 'resource-trend-history'
+  const MAX_AGE_MS = 30 * 60 * 1000 // 30 minutes - discard older data
+
+  // Load from localStorage on mount
+  const loadSavedHistory = (): ResourcePoint[] => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY)
+      if (saved) {
+        const parsed = JSON.parse(saved) as { data: ResourcePoint[]; timestamp: number }
+        // Check if data is not too old
+        if (Date.now() - parsed.timestamp < MAX_AGE_MS) {
+          return parsed.data
+        }
+      }
+    } catch {
+      // Ignore parse errors
+    }
+    return []
+  }
+
+  const historyRef = useRef<ResourcePoint[]>(loadSavedHistory())
+  const [history, setHistory] = useState<ResourcePoint[]>(historyRef.current)
+
+  // Save to localStorage when history changes
+  useEffect(() => {
+    if (history.length > 0) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+          data: history,
+          timestamp: Date.now(),
+        }))
+      } catch {
+        // Ignore storage errors (quota exceeded, etc.)
+      }
+    }
+  }, [history])
 
   // Get reachable clusters
   const reachableClusters = useMemo(() => {

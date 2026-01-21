@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { X, Layout, ChevronRight, Check } from 'lucide-react'
 import { DASHBOARD_TEMPLATES, TEMPLATE_CATEGORIES, DashboardTemplate } from './templates'
+import { formatCardTitle } from '../../lib/formatCardTitle'
 
 interface TemplatesModalProps {
   isOpen: boolean
@@ -158,7 +159,7 @@ export function TemplatesModal({ isOpen, onClose, onApplyTemplate }: TemplatesMo
                         key={idx}
                         className="text-xs px-2 py-0.5 rounded bg-secondary text-muted-foreground"
                       >
-                        {card.card_type.replace(/_/g, ' ')}
+                        {formatCardTitle(card.card_type)}
                       </span>
                     ))}
                     {template.cards.length > 4 && (
@@ -204,7 +205,7 @@ export function TemplatesModal({ isOpen, onClose, onApplyTemplate }: TemplatesMo
                           }}
                         >
                           <span className="text-[9px] text-foreground/80 text-center leading-tight">
-                            {card.card_type.replace(/_/g, ' ')}
+                            {formatCardTitle(card.card_type)}
                           </span>
                         </div>
                       )
@@ -218,7 +219,7 @@ export function TemplatesModal({ isOpen, onClose, onApplyTemplate }: TemplatesMo
                   {hoveredTemplate.cards.map((card, idx) => (
                     <div key={idx} className="flex items-center gap-2 text-xs">
                       <div className={`w-2 h-2 rounded ${CARD_COLORS[card.card_type] || 'bg-gray-500/40'}`} />
-                      <span className="text-foreground/80">{card.title || card.card_type.replace(/_/g, ' ')}</span>
+                      <span className="text-foreground/80">{card.title || formatCardTitle(card.card_type)}</span>
                     </div>
                   ))}
                 </div>

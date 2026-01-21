@@ -32,6 +32,7 @@ import { TemplatesModal } from '../dashboard/TemplatesModal'
 import { ConfigureCardModal } from '../dashboard/ConfigureCardModal'
 import { FloatingDashboardActions } from '../dashboard/FloatingDashboardActions'
 import { DashboardTemplate } from '../dashboard/templates'
+import { formatCardTitle } from '../../lib/formatCardTitle'
 
 interface NetworkCard {
   id: string
@@ -109,7 +110,7 @@ const SortableNetworkCard = memo(function SortableNetworkCard({
       <CardWrapper
         cardId={card.id}
         cardType={card.card_type}
-        title={card.title || card.card_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+        title={card.title || formatCardTitle(card.card_type)}
         cardWidth={cardWidth}
         onConfigure={onConfigure}
         onRemove={onRemove}
@@ -142,7 +143,7 @@ function NetworkDragPreviewCard({ card }: { card: NetworkCard }) {
       <div className="flex items-center gap-2">
         <GripVertical className="w-4 h-4 text-muted-foreground" />
         <span className="text-sm font-medium truncate">
-          {card.title || card.card_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+          {card.title || formatCardTitle(card.card_type)}
         </span>
       </div>
     </div>

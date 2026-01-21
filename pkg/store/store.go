@@ -57,6 +57,26 @@ type Store interface {
 	RecordEvent(event *models.UserEvent) error
 	GetRecentEvents(userID uuid.UUID, since time.Duration) ([]models.UserEvent, error)
 
+	// Feature Requests
+	CreateFeatureRequest(request *models.FeatureRequest) error
+	GetFeatureRequest(id uuid.UUID) (*models.FeatureRequest, error)
+	GetUserFeatureRequests(userID uuid.UUID) ([]models.FeatureRequest, error)
+	UpdateFeatureRequest(request *models.FeatureRequest) error
+	UpdateFeatureRequestStatus(id uuid.UUID, status models.RequestStatus) error
+	UpdateFeatureRequestPR(id uuid.UUID, prNumber int, prURL string) error
+	UpdateFeatureRequestPreview(id uuid.UUID, previewURL string) error
+
+	// PR Feedback
+	CreatePRFeedback(feedback *models.PRFeedback) error
+	GetPRFeedback(featureRequestID uuid.UUID) ([]models.PRFeedback, error)
+
+	// Notifications
+	CreateNotification(notification *models.Notification) error
+	GetUserNotifications(userID uuid.UUID, limit int) ([]models.Notification, error)
+	GetUnreadNotificationCount(userID uuid.UUID) (int, error)
+	MarkNotificationRead(id uuid.UUID) error
+	MarkAllNotificationsRead(userID uuid.UUID) error
+
 	// Lifecycle
 	Close() error
 }

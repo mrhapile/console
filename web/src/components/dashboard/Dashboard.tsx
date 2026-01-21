@@ -38,6 +38,7 @@ import { MissionSuggestions } from './MissionSuggestions'
 import { TemplatesModal } from './TemplatesModal'
 import { FloatingDashboardActions } from './FloatingDashboardActions'
 import { DashboardTemplate } from './templates'
+import { formatCardTitle } from '../../lib/formatCardTitle'
 
 // Module-level cache for dashboard data (survives navigation)
 interface CachedDashboard {
@@ -837,7 +838,7 @@ function DragPreviewCard({ card }: { card: Card }) {
       }}
     >
       <div className="text-sm font-medium text-foreground mb-2">
-        {card.title || card.card_type.replace(/_/g, ' ')}
+        {card.title || formatCardTitle(card.card_type)}
       </div>
       <div className="h-24 flex items-center justify-center text-muted-foreground">
         {CardComponent ? 'Moving card...' : `Card type: ${card.card_type}`}
