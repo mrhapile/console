@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useCallback, useRef, useEffect, ReactNode } from 'react'
+import type { AgentInfo, AgentsListPayload, AgentSelectedPayload, ChatStreamPayload } from '../types/agent'
 
 export type MissionStatus = 'pending' | 'running' | 'waiting_input' | 'completed' | 'failed'
 
@@ -32,6 +33,8 @@ export interface Mission {
     output: number
     total: number
   }
+  /** AI agent used for this mission */
+  agent?: string
 }
 
 interface MissionContextValue {
@@ -44,6 +47,14 @@ interface MissionContextValue {
   unreadMissionCount: number
   /** IDs of missions with unread updates */
   unreadMissionIds: Set<string>
+  /** Available AI agents */
+  agents: AgentInfo[]
+  /** Currently selected agent */
+  selectedAgent: string | null
+  /** Default agent */
+  defaultAgent: string | null
+  /** Whether agents are loading */
+  agentsLoading: boolean
 
   // Actions
   startMission: (params: StartMissionParams) => string
@@ -53,6 +64,7 @@ interface MissionContextValue {
   rateMission: (missionId: string, feedback: MissionFeedback) => void
   setActiveMission: (missionId: string | null) => void
   markMissionAsRead: (missionId: string) => void
+  selectAgent: (agentName: string) => void
   toggleSidebar: () => void
   openSidebar: () => void
   closeSidebar: () => void
@@ -82,16 +94,36 @@ function loadMissions(): Mission[] {
     const stored = localStorage.getItem(MISSIONS_STORAGE_KEY)
     if (stored) {
       const parsed = JSON.parse(stored)
-      // Convert date strings back to Date objects
-      return parsed.map((m: Mission) => ({
-        ...m,
-        createdAt: new Date(m.createdAt),
-        updatedAt: new Date(m.updatedAt),
-        messages: m.messages.map(msg => ({
-          ...msg,
-          timestamp: new Date(msg.timestamp)
-        }))
-      }))
+      // Convert date strings back to Date objects and mark stale running missions as failed
+      return parsed.map((m: Mission) => {
+        const mission = {
+          ...m,
+          createdAt: new Date(m.createdAt),
+          updatedAt: new Date(m.updatedAt),
+          messages: m.messages.map(msg => ({
+            ...msg,
+            timestamp: new Date(msg.timestamp)
+          }))
+        }
+        // Mark any "running" missions as failed - they're stale from a previous session
+        if (mission.status === 'running') {
+          return {
+            ...mission,
+            status: 'failed' as const,
+            currentStep: undefined,
+            messages: [
+              ...mission.messages,
+              {
+                id: `msg-stale-${Date.now()}`,
+                role: 'system' as const,
+                content: `**Session Interrupted**\n\nThis mission was interrupted when the page was refreshed.\n\n[Configure API Keys →](/settings) and start a new mission to try again.`,
+                timestamp: new Date(),
+              }
+            ]
+          }
+        }
+        return mission
+      })
     }
   } catch (e) {
     console.error('Failed to load missions from localStorage:', e)
@@ -138,6 +170,12 @@ export function MissionProvider({ children }: { children: ReactNode }) {
   const [isFullScreen, setIsFullScreen] = useState(false)
   const [unreadMissionIds, setUnreadMissionIds] = useState<Set<string>>(() => loadUnreadMissionIds())
 
+  // Agent state
+  const [agents, setAgents] = useState<AgentInfo[]>([])
+  const [selectedAgent, setSelectedAgent] = useState<string | null>(null)
+  const [defaultAgent, setDefaultAgent] = useState<string | null>(null)
+  const [agentsLoading, setAgentsLoading] = useState(true)
+
   const wsRef = useRef<WebSocket | null>(null)
   const pendingRequests = useRef<Map<string, string>>(new Map()) // requestId -> missionId
 
@@ -151,6 +189,16 @@ export function MissionProvider({ children }: { children: ReactNode }) {
     saveUnreadMissionIds(unreadMissionIds)
   }, [unreadMissionIds])
 
+  // Fetch available agents
+  const fetchAgents = useCallback(() => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        id: `list-agents-${Date.now()}`,
+        type: 'list_agents',
+      }))
+    }
+  }, [])
+
   // Connect to KKC agent WebSocket
   const ensureConnection = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -158,11 +206,23 @@ export function MissionProvider({ children }: { children: ReactNode }) {
     }
 
     return new Promise<void>((resolve, reject) => {
+      // Connection timeout - 5 seconds
+      const timeout = setTimeout(() => {
+        if (wsRef.current) {
+          wsRef.current.close()
+          wsRef.current = null
+        }
+        reject(new Error('CONNECTION_TIMEOUT'))
+      }, 5000)
+
       try {
         wsRef.current = new WebSocket(KKC_AGENT_WS_URL)
 
         wsRef.current.onopen = () => {
+          clearTimeout(timeout)
           console.log('[Missions] Connected to KKC agent')
+          // Fetch available agents on connect
+          fetchAgents()
           resolve()
         }
 
@@ -176,18 +236,57 @@ export function MissionProvider({ children }: { children: ReactNode }) {
         }
 
         wsRef.current.onclose = () => {
+          clearTimeout(timeout)
           console.log('[Missions] Connection closed')
           wsRef.current = null
+          setAgentsLoading(false) // Stop loading spinner on disconnect
+          setAgents([]) // Clear agents so "Configure AI" button shows
+
+          // Fail any pending missions that were waiting for a response
+          if (pendingRequests.current.size > 0) {
+            const errorContent = `**Local Agent Not Connected**
+
+The AI missions feature requires the local KKC agent to be running.
+
+**To get started:**
+1. Install the agent: \`brew install kubestellar/tap/kkc-agent\`
+2. Start the agent: \`kkc-agent\`
+3. [Configure API Keys →](/settings) for Claude, OpenAI, or Gemini`
+
+            const pendingMissionIds = new Set(pendingRequests.current.values())
+            setMissions(prev => prev.map(m => {
+              if (pendingMissionIds.has(m.id) && m.status === 'running') {
+                return {
+                  ...m,
+                  status: 'failed',
+                  currentStep: undefined,
+                  messages: [
+                    ...m.messages,
+                    {
+                      id: `msg-${Date.now()}-${m.id}`,
+                      role: 'system',
+                      content: errorContent,
+                      timestamp: new Date(),
+                    }
+                  ]
+                }
+              }
+              return m
+            }))
+            pendingRequests.current.clear()
+          }
         }
 
         wsRef.current.onerror = () => {
-          reject(new Error('Failed to connect to KKC agent'))
+          clearTimeout(timeout)
+          reject(new Error('CONNECTION_FAILED'))
         }
       } catch (err) {
+        clearTimeout(timeout)
         reject(err)
       }
     })
-  }, [])
+  }, [fetchAgents])
 
   // Mark a mission as having unread content (not currently being viewed)
   const markMissionAsUnread = useCallback((missionId: string) => {
@@ -203,6 +302,22 @@ export function MissionProvider({ children }: { children: ReactNode }) {
 
   // Handle messages from the agent
   const handleAgentMessage = useCallback((message: { id: string; type: string; payload?: unknown }) => {
+    // Handle agent-related messages (no mission ID needed)
+    if (message.type === 'agents_list') {
+      const payload = message.payload as AgentsListPayload
+      setAgents(payload.agents)
+      setDefaultAgent(payload.defaultAgent)
+      setSelectedAgent(payload.selected || payload.defaultAgent)
+      setAgentsLoading(false)
+      return
+    }
+
+    if (message.type === 'agent_selected') {
+      const payload = message.payload as AgentSelectedPayload
+      setSelectedAgent(payload.agent)
+      return
+    }
+
     const missionId = pendingRequests.current.get(message.id)
     if (!missionId) return
 
@@ -257,28 +372,44 @@ export function MissionProvider({ children }: { children: ReactNode }) {
         }
       } else if (message.type === 'result') {
         // Complete response - mark as unread
-        const payload = message.payload as { content?: string; output?: string }
+        const payload = message.payload as ChatStreamPayload | { content?: string; output?: string }
         pendingRequests.current.delete(message.id)
         markMissionAsUnread(missionId)
+
+        // Extract token usage if available
+        const chatPayload = payload as ChatStreamPayload
+        const tokenUsage = chatPayload.usage ? {
+          input: chatPayload.usage.inputTokens,
+          output: chatPayload.usage.outputTokens,
+          total: chatPayload.usage.totalTokens,
+        } : m.tokenUsage
 
         return {
           ...m,
           status: 'waiting_input' as MissionStatus,
           currentStep: undefined,
           updatedAt: new Date(),
+          agent: chatPayload.agent || m.agent,
+          tokenUsage,
           messages: [
             ...m.messages,
             {
               id: `msg-${Date.now()}`,
               role: 'assistant' as const,
-              content: payload.content || payload.output || 'Task completed.',
+              content: chatPayload.content || (payload as { output?: string }).output || 'Task completed.',
               timestamp: new Date(),
             }
           ]
         }
       } else if (message.type === 'error') {
-        const payload = message.payload as { message?: string }
+        const payload = message.payload as { code?: string; message?: string }
         pendingRequests.current.delete(message.id)
+
+        // Create helpful error message based on error code
+        let errorContent = payload.message || 'Unknown error'
+        if (payload.code === 'no_agent' || payload.code === 'agent_unavailable') {
+          errorContent = `${payload.message}\n\n[Configure API Keys →](/settings)\n\nAdd your API key for Claude, OpenAI, or Gemini to use AI missions.`
+        }
 
         return {
           ...m,
@@ -290,7 +421,7 @@ export function MissionProvider({ children }: { children: ReactNode }) {
             {
               id: `msg-${Date.now()}`,
               role: 'system' as const,
-              content: `Error: ${payload.message || 'Unknown error'}`,
+              content: errorContent,
               timestamp: new Date(),
             }
           ]
@@ -323,6 +454,7 @@ export function MissionProvider({ children }: { children: ReactNode }) {
       createdAt: new Date(),
       updatedAt: new Date(),
       context: params.context,
+      agent: selectedAgent || defaultAgent || undefined,
     }
 
     setMissions(prev => [mission, ...prev])
@@ -340,23 +472,34 @@ export function MissionProvider({ children }: { children: ReactNode }) {
 
       wsRef.current?.send(JSON.stringify({
         id: requestId,
-        type: 'claude',
+        type: 'chat',
         payload: {
           prompt: params.initialPrompt,
           sessionId: missionId,
+          agent: selectedAgent || undefined,
         }
       }))
-    }).catch(err => {
+    }).catch(() => {
+      const errorContent = `**Local Agent Not Connected**
+
+The AI missions feature requires the local KKC agent to be running.
+
+**To get started:**
+1. Install the agent: \`brew install kubestellar/tap/kkc-agent\`
+2. Start the agent: \`kkc-agent\`
+3. [Configure API Keys →](/settings) for Claude, OpenAI, or Gemini`
+
       setMissions(prev => prev.map(m =>
         m.id === missionId ? {
           ...m,
           status: 'failed',
+          currentStep: undefined,
           messages: [
             ...m.messages,
             {
               id: `msg-${Date.now()}`,
               role: 'system',
-              content: `Failed to connect to KKC agent: ${err.message}`,
+              content: errorContent,
               timestamp: new Date(),
             }
           ]
@@ -394,12 +537,30 @@ export function MissionProvider({ children }: { children: ReactNode }) {
 
       wsRef.current?.send(JSON.stringify({
         id: requestId,
-        type: 'claude',
+        type: 'chat',
         payload: {
           prompt: content,
           sessionId: missionId,
+          agent: selectedAgent || undefined,
         }
       }))
+    }).catch(() => {
+      setMissions(prev => prev.map(m =>
+        m.id === missionId ? {
+          ...m,
+          status: 'failed',
+          currentStep: undefined,
+          messages: [
+            ...m.messages,
+            {
+              id: `msg-${Date.now()}`,
+              role: 'system',
+              content: 'Lost connection to local agent. Please ensure the agent is running and try again.',
+              timestamp: new Date(),
+            }
+          ]
+        } : m
+      ))
     })
   }, [ensureConnection])
 
@@ -469,6 +630,19 @@ export function MissionProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
+  // Select an AI agent
+  const selectAgent = useCallback((agentName: string) => {
+    ensureConnection().then(() => {
+      wsRef.current?.send(JSON.stringify({
+        id: `select-agent-${Date.now()}`,
+        type: 'select_agent',
+        payload: { agent: agentName }
+      }))
+    }).catch(err => {
+      console.error('[Missions] Failed to select agent:', err)
+    })
+  }, [ensureConnection])
+
   // Sidebar controls
   const toggleSidebar = useCallback(() => setIsSidebarOpen(prev => !prev), [])
   const openSidebar = useCallback(() => {
@@ -506,6 +680,10 @@ export function MissionProvider({ children }: { children: ReactNode }) {
       isFullScreen,
       unreadMissionCount: unreadMissionIds.size,
       unreadMissionIds,
+      agents,
+      selectedAgent,
+      defaultAgent,
+      agentsLoading,
       startMission,
       sendMessage,
       cancelMission,
@@ -513,6 +691,7 @@ export function MissionProvider({ children }: { children: ReactNode }) {
       rateMission,
       setActiveMission,
       markMissionAsRead,
+      selectAgent,
       toggleSidebar,
       openSidebar,
       closeSidebar,

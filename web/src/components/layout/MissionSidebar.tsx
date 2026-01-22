@@ -28,6 +28,8 @@ import {
 import ReactMarkdown from 'react-markdown'
 import { useMissions, Mission, MissionStatus } from '../../hooks/useMissions'
 import { cn } from '../../lib/cn'
+import { AgentSelector } from '../agent/AgentSelector'
+import { AgentBadge } from '../agent/AgentIcon'
 
 // Rotating status messages for agent thinking
 const THINKING_MESSAGES = [
@@ -225,7 +227,15 @@ function MissionChat({ mission, isFullScreen = false }: { mission: Mission; isFu
             <span className="text-xs">{config.label}</span>
           </div>
         </div>
-        <p className="text-xs text-muted-foreground">{mission.description}</p>
+        <div className="flex items-center gap-2 flex-wrap">
+          <p className="text-xs text-muted-foreground flex-1">{mission.description}</p>
+          {mission.agent && (
+            <AgentBadge
+              provider={mission.agent === 'claude' ? 'anthropic' : mission.agent === 'openai' ? 'openai' : 'google'}
+              name={mission.agent}
+            />
+          )}
+        </div>
         {mission.cluster && (
           <span className="text-xs text-purple-400 mt-1 inline-block">Cluster: {mission.cluster}</span>
         )}
@@ -266,8 +276,11 @@ function MissionChat({ mission, isFullScreen = false }: { mission: Mission; isFu
               msg.role === 'assistant' ? 'bg-secondary/50' :
               'bg-yellow-500/10'
             )}>
-              {msg.role === 'assistant' ? (
-                <div className="text-sm text-foreground prose prose-sm prose-invert max-w-none prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 prose-pre:my-2 prose-pre:bg-black/30 prose-pre:text-xs prose-code:text-purple-300 prose-code:bg-black/20 prose-code:px-1 prose-code:rounded">
+              {msg.role === 'assistant' || msg.role === 'system' ? (
+                <div className={cn(
+                  "text-sm prose prose-sm prose-invert max-w-none prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 prose-pre:my-2 prose-pre:bg-black/30 prose-pre:text-xs prose-code:text-purple-300 prose-code:bg-black/20 prose-code:px-1 prose-code:rounded prose-a:text-blue-400 prose-a:underline hover:prose-a:text-blue-300",
+                  msg.role === 'system' ? 'text-yellow-200' : 'text-foreground'
+                )}>
                   <ReactMarkdown>{msg.content}</ReactMarkdown>
                 </div>
               ) : (
@@ -473,7 +486,9 @@ export function MissionSidebar() {
             </span>
           )}
         </div>
-        <div className="flex items-center gap-1">
+        {/* Agent Selector */}
+        <div className="flex items-center gap-2">
+          <AgentSelector compact={!isFullScreen} />
           {isFullScreen ? (
             <button
               onClick={() => setFullScreen(false)}
