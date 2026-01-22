@@ -26,24 +26,26 @@ import { FloatingDashboardActions } from '../dashboard/FloatingDashboardActions'
 import { CARD_COMPONENTS, DEMO_DATA_CARDS } from '../cards/cardRegistry'
 import type { DashboardTemplate } from '../dashboard/templates'
 import { formatCardTitle } from '../../lib/formatCardTitle'
+import { useDashboardReset } from '../../hooks/useDashboardReset'
+import { StatsOverview, StatBlockValue } from '../ui/StatsOverview'
 
 interface AlertCard {
   id: string
   card_type: string
   title?: string
-  config?: Record<string, unknown>
-  position: { w: number; h: number }
+  config: Record<string, unknown>
+  position?: { w: number; h: number }
 }
 
 const ALERTS_STORAGE_KEY = 'kubestellar-alerts-dashboard-cards'
 
 // Default cards for the alerts dashboard
 const DEFAULT_ALERT_CARDS: AlertCard[] = [
-  { id: 'active_alerts_1', card_type: 'active_alerts', title: 'Active Alerts', position: { w: 6, h: 2 } },
-  { id: 'alert_rules_1', card_type: 'alert_rules', title: 'Alert Rules', position: { w: 6, h: 2 } },
-  { id: 'pod_issues_1', card_type: 'pod_issues', title: 'Pod Issues', position: { w: 4, h: 2 } },
-  { id: 'deployment_issues_1', card_type: 'deployment_issues', title: 'Deployment Issues', position: { w: 4, h: 2 } },
-  { id: 'security_issues_1', card_type: 'security_issues', title: 'Security Issues', position: { w: 4, h: 2 } },
+  { id: 'active_alerts_1', card_type: 'active_alerts', title: 'Active Alerts', config: {}, position: { w: 6, h: 2 } },
+  { id: 'alert_rules_1', card_type: 'alert_rules', title: 'Alert Rules', config: {}, position: { w: 6, h: 2 } },
+  { id: 'pod_issues_1', card_type: 'pod_issues', title: 'Pod Issues', config: {}, position: { w: 4, h: 2 } },
+  { id: 'deployment_issues_1', card_type: 'deployment_issues', title: 'Deployment Issues', config: {}, position: { w: 4, h: 2 } },
+  { id: 'security_issues_1', card_type: 'security_issues', title: 'Security Issues', config: {}, position: { w: 4, h: 2 } },
 ]
 
 function loadCards(): AlertCard[] {
@@ -86,8 +88,8 @@ function SortableCard({ card, onRemove, onReplace, onConfigure }: {
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    gridColumn: `span ${Math.min(card.position.w, 12)}`,
-    gridRow: `span ${card.position.h}`,
+    gridColumn: `span ${Math.min(card.position?.w || 4, 12)}`,
+    gridRow: `span ${card.position?.h || 2}`,
     opacity: isDragging ? 0.5 : 1,
   }
 
@@ -136,6 +138,14 @@ export function Alerts() {
   const { stats, evaluateConditions } = useAlerts()
   const { rules } = useAlertRules()
   const { isRefreshing, refetch } = useClusters()
+
+  // Reset hook for dashboard
+  const { reset, isCustomized } = useDashboardReset({
+    storageKey: ALERTS_STORAGE_KEY,
+    defaultCards: DEFAULT_ALERT_CARDS,
+    setCards,
+    cards,
+  })
 
   // Sensors for drag and drop
   const sensors = useSensors(
@@ -194,7 +204,7 @@ export function Alerts() {
       id: `${card.card_type}_${Date.now()}_${index}`,
       card_type: card.card_type,
       title: card.title,
-      config: card.config,
+      config: card.config || {},
       position: card.position,
     }))
     setCards(newCards)
@@ -204,11 +214,32 @@ export function Alerts() {
   const handleRefresh = useCallback(() => {
     refetch()
     evaluateConditions()
+    setLastUpdated(new Date())
   }, [refetch, evaluateConditions])
 
   const enabledRulesCount = rules.filter(r => r.enabled).length
 
   const [autoRefresh, setAutoRefresh] = useState(true)
+  const [lastUpdated, setLastUpdated] = useState<Date | undefined>(undefined)
+
+  // Stats value getter for the configurable StatsOverview component
+  const getStatValue = useCallback((blockId: string): StatBlockValue => {
+    const disabledRulesCount = rules.filter(r => !r.enabled).length
+    switch (blockId) {
+      case 'firing':
+        return { value: stats.firing, sublabel: 'active alerts', isClickable: false }
+      case 'pending':
+        return { value: 0, sublabel: 'pending' }
+      case 'resolved':
+        return { value: stats.resolved, sublabel: 'resolved' }
+      case 'rules_enabled':
+        return { value: enabledRulesCount, sublabel: 'rules enabled' }
+      case 'rules_disabled':
+        return { value: disabledRulesCount, sublabel: 'rules disabled' }
+      default:
+        return { value: 0 }
+    }
+  }, [stats, enabledRulesCount, rules])
 
   // Auto-refresh every 30 seconds
   useEffect(() => {
@@ -216,9 +247,15 @@ export function Alerts() {
     const interval = setInterval(() => {
       refetch()
       evaluateConditions()
+      setLastUpdated(new Date())
     }, 30000)
     return () => clearInterval(interval)
   }, [autoRefresh, refetch, evaluateConditions])
+
+  // Set initial lastUpdated on mount
+  useEffect(() => {
+    setLastUpdated(new Date())
+  }, [])
 
   return (
     <div className="pt-16">
@@ -274,6 +311,16 @@ export function Alerts() {
         </div>
       </div>
 
+      {/* Configurable Stats Overview */}
+      <StatsOverview
+        dashboardType="alerts"
+        getStatValue={getStatValue}
+        hasData={stats.firing > 0 || enabledRulesCount > 0}
+        isLoading={isRefreshing}
+        lastUpdated={lastUpdated}
+        collapsedStorageKey="kubestellar-alerts-stats-collapsed"
+      />
+
       {/* Cards Grid */}
       <DndContext
         sensors={sensors}
@@ -307,6 +354,8 @@ export function Alerts() {
       <FloatingDashboardActions
         onAddCard={() => setIsAddCardOpen(true)}
         onOpenTemplates={() => setIsTemplatesOpen(true)}
+        onReset={reset}
+        isCustomized={isCustomized}
       />
 
       {/* Modals */}

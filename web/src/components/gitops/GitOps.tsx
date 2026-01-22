@@ -1,10 +1,40 @@
-import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useState, useMemo, useCallback, useEffect, memo } from 'react'
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+  DragStartEvent,
+  DragOverlay,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  rectSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { useClusters } from '../../hooks/useMCP'
 import { StatusIndicator } from '../charts/StatusIndicator'
 import { useToast } from '../ui/Toast'
-import { RefreshCw, GitBranch, FolderGit, Box, Loader2 } from 'lucide-react'
+import { useShowCards } from '../../hooks/useShowCards'
+import { useDashboardReset } from '../../hooks/useDashboardReset'
+import { RefreshCw, GitBranch, FolderGit, Box, Loader2, GripVertical, Hourglass } from 'lucide-react'
 import { SyncDialog } from './SyncDialog'
 import { api } from '../../lib/api'
+import { CardWrapper } from '../cards/CardWrapper'
+import { CARD_COMPONENTS, DEMO_DATA_CARDS } from '../cards/cardRegistry'
+import { AddCardModal } from '../dashboard/AddCardModal'
+import { TemplatesModal } from '../dashboard/TemplatesModal'
+import { ConfigureCardModal } from '../dashboard/ConfigureCardModal'
+import { FloatingDashboardActions } from '../dashboard/FloatingDashboardActions'
+import type { DashboardTemplate } from '../dashboard/templates'
+import { formatCardTitle } from '../../lib/formatCardTitle'
+import { StatsOverview, StatBlockValue } from '../ui/StatsOverview'
 
 // GitOps app configuration (repos to monitor)
 interface GitOpsAppConfig {
@@ -35,6 +65,121 @@ interface DriftResult {
     clusterValue: string
   }>
   error?: string
+}
+
+// Card interface for GitOps dashboard
+interface GitOpsCard {
+  id: string
+  card_type: string
+  config: Record<string, unknown>
+  title?: string
+  position?: { w: number; h: number }
+}
+
+// Width class lookup for Tailwind
+const WIDTH_CLASSES: Record<number, string> = {
+  3: 'col-span-3',
+  4: 'col-span-4',
+  5: 'col-span-5',
+  6: 'col-span-6',
+  7: 'col-span-7',
+  8: 'col-span-8',
+  9: 'col-span-9',
+  10: 'col-span-10',
+  11: 'col-span-11',
+  12: 'col-span-12',
+}
+
+const GITOPS_STORAGE_KEY = 'kubestellar-gitops-dashboard-cards'
+
+// Default cards for the GitOps dashboard
+const DEFAULT_GITOPS_CARDS: GitOpsCard[] = [
+  { id: 'gitops-1', card_type: 'argocd_applications', config: {}, position: { w: 6, h: 4 } },
+  { id: 'gitops-2', card_type: 'argocd_sync_status', config: {}, position: { w: 6, h: 3 } },
+  { id: 'gitops-3', card_type: 'helm_release_status', config: {}, position: { w: 6, h: 3 } },
+  { id: 'gitops-4', card_type: 'kustomization_status', config: {}, position: { w: 6, h: 3 } },
+  { id: 'gitops-5', card_type: 'gitops_drift', config: {}, position: { w: 6, h: 3 } },
+]
+
+// Sortable Card Component
+interface SortableCardProps {
+  card: GitOpsCard
+  onRemove: () => void
+  onConfigure: () => void
+  onWidthChange: (width: number) => void
+  isDragging: boolean
+}
+
+const SortableCard = memo(function SortableCard({
+  card,
+  onRemove,
+  onConfigure,
+  onWidthChange,
+  isDragging,
+}: SortableCardProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+  } = useSortable({ id: card.id })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
+
+  const CardComponent = CARD_COMPONENTS[card.card_type]
+  if (!CardComponent) {
+    console.warn(`Card component not found: ${card.card_type}`)
+    return null
+  }
+
+  const width = Math.min(12, Math.max(3, card.position?.w || 6))
+  const colSpan = WIDTH_CLASSES[width] || 'col-span-6'
+
+  return (
+    <div ref={setNodeRef} style={style} className={colSpan}>
+      <CardWrapper
+        title={formatCardTitle(card.card_type)}
+        onRemove={onRemove}
+        onConfigure={onConfigure}
+        cardType={card.card_type}
+        cardWidth={width}
+        onWidthChange={onWidthChange}
+        isDemoData={DEMO_DATA_CARDS.has(card.card_type)}
+        dragHandle={
+          <button {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing">
+            <GripVertical className="w-4 h-4 text-muted-foreground" />
+          </button>
+        }
+      >
+        <CardComponent config={card.config} />
+      </CardWrapper>
+    </div>
+  )
+})
+
+// Drag preview component
+function DragPreviewCard({ card }: { card: GitOpsCard }) {
+  const CardComponent = CARD_COMPONENTS[card.card_type]
+  if (!CardComponent) return null
+
+  const width = Math.min(12, Math.max(3, card.position?.w || 6))
+  const colSpan = WIDTH_CLASSES[width] || 'col-span-6'
+
+  return (
+    <div className={colSpan}>
+      <CardWrapper
+        title={formatCardTitle(card.card_type)}
+        cardType={card.card_type}
+      >
+        <CardComponent config={card.config} />
+      </CardWrapper>
+    </div>
+  )
 }
 
 // Apps to monitor - these could come from a config file or API
@@ -85,14 +230,129 @@ function getTimeAgo(timestamp: string | undefined): string {
 }
 
 export function GitOps() {
-  const { clusters } = useClusters()
+  const { clusters, isRefreshing, refetch } = useClusters()
   const { showToast } = useToast()
+  const { showCards, expandCards } = useShowCards('kubestellar-gitops')
   const [selectedCluster, setSelectedCluster] = useState<string>('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [syncedApps, setSyncedApps] = useState<Set<string>>(new Set())
   const [syncDialogApp, setSyncDialogApp] = useState<GitOpsApp | null>(null)
   const [driftResults, setDriftResults] = useState<Map<string, DriftResult>>(new Map())
   const [isDetecting, setIsDetecting] = useState(true)
+  const [autoRefresh, setAutoRefresh] = useState(true)
+  const [lastUpdated, setLastUpdated] = useState<Date | undefined>(undefined)
+
+  // Card state
+  const [cards, setCards] = useState<GitOpsCard[]>(() => {
+    const saved = localStorage.getItem(GITOPS_STORAGE_KEY)
+    return saved ? JSON.parse(saved) : DEFAULT_GITOPS_CARDS
+  })
+  const [showAddCard, setShowAddCard] = useState(false)
+  const [showTemplates, setShowTemplates] = useState(false)
+  const [configuringCard, setConfiguringCard] = useState<GitOpsCard | null>(null)
+  const [activeId, setActiveId] = useState<string | null>(null)
+
+  // Reset hook for dashboard
+  const { reset, isCustomized } = useDashboardReset({
+    storageKey: GITOPS_STORAGE_KEY,
+    defaultCards: DEFAULT_GITOPS_CARDS,
+    setCards,
+    cards,
+  })
+
+  // Save cards to localStorage
+  useEffect(() => {
+    localStorage.setItem(GITOPS_STORAGE_KEY, JSON.stringify(cards))
+  }, [cards])
+
+  // DnD sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  )
+
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    setActiveId(event.active.id as string)
+  }, [])
+
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event
+    setActiveId(null)
+
+    if (over && active.id !== over.id) {
+      setCards(prev => {
+        const oldIndex = prev.findIndex(c => c.id === active.id)
+        const newIndex = prev.findIndex(c => c.id === over.id)
+        return arrayMove(prev, oldIndex, newIndex)
+      })
+    }
+  }, [])
+
+  const handleAddCards = useCallback((newCards: Array<{ type: string; title: string; config: Record<string, unknown> }>) => {
+    const cardsToAdd: GitOpsCard[] = newCards.map(card => ({
+      id: `card-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      card_type: card.type,
+      config: card.config,
+      title: card.title,
+    }))
+    setCards(prev => [...prev, ...cardsToAdd])
+    expandCards()
+    setShowAddCard(false)
+  }, [expandCards])
+
+  const handleRemoveCard = useCallback((cardId: string) => {
+    setCards(prev => prev.filter(c => c.id !== cardId))
+  }, [])
+
+  const handleConfigureCard = useCallback((cardId: string) => {
+    const card = cards.find(c => c.id === cardId)
+    if (card) setConfiguringCard(card)
+  }, [cards])
+
+  const handleSaveCardConfig = useCallback((cardId: string, config: Record<string, unknown>) => {
+    setCards(prev => prev.map(c =>
+      c.id === cardId ? { ...c, config } : c
+    ))
+    setConfiguringCard(null)
+  }, [])
+
+  const handleWidthChange = useCallback((cardId: string, newWidth: number) => {
+    setCards(prev => prev.map(c =>
+      c.id === cardId ? { ...c, position: { ...(c.position || { w: 6, h: 2 }), w: newWidth } } : c
+    ))
+  }, [])
+
+  const applyTemplate = useCallback((template: DashboardTemplate) => {
+    const newCards: GitOpsCard[] = template.cards.map(card => ({
+      id: `card-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      card_type: card.card_type,
+      config: card.config || {},
+      title: card.title,
+    }))
+    setCards(newCards)
+    expandCards()
+    setShowTemplates(false)
+  }, [expandCards])
+
+  // Auto-refresh every 30 seconds
+  useEffect(() => {
+    if (!autoRefresh) return
+    const interval = setInterval(() => {
+      refetch()
+      setLastUpdated(new Date())
+    }, 30000)
+    return () => clearInterval(interval)
+  }, [autoRefresh, refetch])
+
+  // Set initial lastUpdated on mount
+  useEffect(() => {
+    setLastUpdated(new Date())
+  }, [])
+
+  const handleRefresh = useCallback(() => {
+    refetch()
+    setLastUpdated(new Date())
+  }, [refetch])
 
   // Detect drift for all apps on mount
   useEffect(() => {
@@ -270,32 +530,90 @@ export function GitOps() {
     }
   }
 
+  // Stats value getter for the configurable StatsOverview component
+  const getStatValue = useCallback((blockId: string): StatBlockValue => {
+    switch (blockId) {
+      case 'total':
+        return { value: stats.total, sublabel: 'apps configured' }
+      case 'helm':
+        return { value: 0, sublabel: 'helm releases' }
+      case 'kustomize':
+        return { value: 0, sublabel: 'kustomize apps' }
+      case 'operators':
+        return { value: 0, sublabel: 'operators' }
+      case 'deployed':
+        return { value: stats.synced, sublabel: 'synced', onClick: () => setStatusFilter('synced'), isClickable: stats.synced > 0 }
+      case 'failed':
+        return { value: stats.drifted, sublabel: 'drifted', onClick: () => setStatusFilter('drifted'), isClickable: stats.drifted > 0 }
+      case 'pending':
+        return { value: stats.checking, sublabel: 'checking' }
+      case 'other':
+        return { value: stats.healthy, sublabel: 'healthy' }
+      default:
+        return { value: 0 }
+    }
+  }, [stats, setStatusFilter])
+
+  // Transform card for ConfigureCardModal
+  const configureCard = configuringCard ? {
+    id: configuringCard.id,
+    card_type: configuringCard.card_type,
+    config: configuringCard.config,
+    title: configuringCard.title,
+  } : null
+
   return (
     <div className="pt-16">
+      {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-foreground">GitOps</h1>
-        <p className="text-muted-foreground">GitOps drift detection and sync status</p>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div>
+              <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+                <GitBranch className="w-6 h-6 text-purple-400" />
+                GitOps
+              </h1>
+              <p className="text-muted-foreground">GitOps drift detection and sync status</p>
+            </div>
+            {isRefreshing && (
+              <span className="flex items-center gap-1 text-xs text-amber-400 animate-pulse" title="Updating...">
+                <Hourglass className="w-3 h-3" />
+                <span>Updating</span>
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <label htmlFor="gitops-auto-refresh" className="flex items-center gap-1.5 cursor-pointer text-xs text-muted-foreground" title="Auto-refresh every 30s">
+              <input
+                type="checkbox"
+                id="gitops-auto-refresh"
+                checked={autoRefresh}
+                onChange={(e) => setAutoRefresh(e.target.checked)}
+                className="rounded border-border w-3.5 h-3.5"
+              />
+              Auto
+            </label>
+            <button
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              className="p-2 rounded-lg hover:bg-secondary transition-colors disabled:opacity-50"
+              title="Refresh data"
+            >
+              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* Stats Overview */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
-        <div className="glass p-4 rounded-lg">
-          <div className="text-3xl font-bold text-foreground">{stats.total}</div>
-          <div className="text-sm text-muted-foreground">Total Apps</div>
-        </div>
-        <div className="glass p-4 rounded-lg">
-          <div className="text-3xl font-bold text-green-400">{stats.synced}</div>
-          <div className="text-sm text-muted-foreground">In Sync</div>
-        </div>
-        <div className="glass p-4 rounded-lg">
-          <div className="text-3xl font-bold text-yellow-400">{stats.drifted}</div>
-          <div className="text-sm text-muted-foreground">Drifted</div>
-        </div>
-        <div className="glass p-4 rounded-lg">
-          <div className="text-3xl font-bold text-green-400">{stats.healthy}</div>
-          <div className="text-sm text-muted-foreground">Healthy</div>
-        </div>
-      </div>
+      {/* Configurable Stats Overview */}
+      <StatsOverview
+        dashboardType="gitops"
+        getStatValue={getStatValue}
+        hasData={stats.total > 0}
+        isLoading={isRefreshing}
+        lastUpdated={lastUpdated}
+        collapsedStorageKey="kubestellar-gitops-stats-collapsed"
+      />
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-4 mb-6">
@@ -430,6 +748,39 @@ export function GitOps() {
         </div>
       )}
 
+      {/* Cards Grid */}
+      {showCards && (
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext items={cards.map(c => c.id)} strategy={rectSortingStrategy}>
+            <div className="grid grid-cols-12 gap-4 pb-32">
+              {cards.map(card => (
+                <SortableCard
+                  key={card.id}
+                  card={card}
+                  onRemove={() => handleRemoveCard(card.id)}
+                  onConfigure={() => handleConfigureCard(card.id)}
+                  onWidthChange={(width) => handleWidthChange(card.id, width)}
+                  isDragging={activeId === card.id}
+                />
+              ))}
+            </div>
+          </SortableContext>
+
+          <DragOverlay>
+            {activeId ? (
+              <div className="opacity-80 rotate-3 scale-105">
+                <DragPreviewCard card={cards.find(c => c.id === activeId)!} />
+              </div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
+      )}
+
       {/* Info */}
       <div className="mt-8 p-4 rounded-lg bg-card/30 border border-border">
         <h3 className="text-lg font-semibold text-foreground mb-3">GitOps Integration</h3>
@@ -446,6 +797,39 @@ export function GitOps() {
           </button>
         </div>
       </div>
+
+      {/* Floating Actions */}
+      <FloatingDashboardActions
+        onAddCard={() => setShowAddCard(true)}
+        onOpenTemplates={() => setShowTemplates(true)}
+        onReset={reset}
+        isCustomized={isCustomized}
+      />
+
+      {/* Add Card Modal */}
+      <AddCardModal
+        isOpen={showAddCard}
+        onClose={() => setShowAddCard(false)}
+        onAddCards={handleAddCards}
+        existingCardTypes={cards.map(c => c.card_type)}
+      />
+
+      {/* Templates Modal */}
+      <TemplatesModal
+        isOpen={showTemplates}
+        onClose={() => setShowTemplates(false)}
+        onApplyTemplate={applyTemplate}
+      />
+
+      {/* Configure Card Modal */}
+      <ConfigureCardModal
+        isOpen={!!configuringCard}
+        card={configureCard}
+        onClose={() => setConfiguringCard(null)}
+        onSave={(cardId, config) => {
+          handleSaveCardConfig(cardId, config)
+        }}
+      />
 
       {/* Sync Dialog */}
       {syncDialogApp && (

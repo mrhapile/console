@@ -24,6 +24,7 @@ import { useClusters, usePVCs, PVC } from '../../hooks/useMCP'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { useShowCards } from '../../hooks/useShowCards'
 import { useDrillDownActions } from '../../hooks/useDrillDown'
+import { useDashboardReset } from '../../hooks/useDashboardReset'
 import { StatsOverview, StatBlockValue } from '../ui/StatsOverview'
 import { CardWrapper } from '../cards/CardWrapper'
 import { CARD_COMPONENTS, DEMO_DATA_CARDS } from '../cards/cardRegistry'
@@ -194,10 +195,6 @@ function saveStorageCards(cards: StorageCard[]) {
   localStorage.setItem(STORAGE_CARDS_KEY, JSON.stringify(cards))
 }
 
-function isCardsCustomized(): boolean {
-  return localStorage.getItem(STORAGE_CARDS_KEY) !== null
-}
-
 // Sortable card component with drag handle
 interface SortableStorageCardProps {
   card: StorageCard
@@ -295,17 +292,17 @@ export function Storage() {
 
   // Card state
   const [cards, setCards] = useState<StorageCard[]>(() => loadStorageCards())
-  const [cardsCustomized, setCardsCustomized] = useState(isCardsCustomized)
   // Stats collapsed state is now managed by StatsOverview component
   const { showCards, setShowCards, expandCards } = useShowCards('kubestellar-storage')
   const [showAddCard, setShowAddCard] = useState(false)
 
-  // Reset dashboard to default cards
-  const handleResetToDefaults = useCallback(() => {
-    setCards(DEFAULT_STORAGE_CARDS)
-    localStorage.removeItem(STORAGE_CARDS_KEY)
-    setCardsCustomized(false)
-  }, [])
+  // Reset functionality using shared hook
+  const { isCustomized, setCustomized, reset } = useDashboardReset({
+    storageKey: STORAGE_CARDS_KEY,
+    defaultCards: DEFAULT_STORAGE_CARDS,
+    setCards,
+    cards,
+  })
   const [showTemplates, setShowTemplates] = useState(false)
   const [configuringCard, setConfiguringCard] = useState<StorageCard | null>(null)
   const [autoRefresh, setAutoRefresh] = useState(true)
@@ -351,8 +348,8 @@ export function Storage() {
   // Save cards to localStorage when they change (mark as customized)
   useEffect(() => {
     saveStorageCards(cards)
-    setCardsCustomized(true)
-  }, [cards])
+    setCustomized(true)
+  }, [cards, setCustomized])
 
   // Handle addCard URL param - open modal and clear param
   useEffect(() => {
@@ -662,8 +659,8 @@ export function Storage() {
       <FloatingDashboardActions
         onAddCard={() => setShowAddCard(true)}
         onOpenTemplates={() => setShowTemplates(true)}
-        onResetToDefaults={handleResetToDefaults}
-        isCustomized={cardsCustomized}
+        onReset={reset}
+        isCustomized={isCustomized}
       />
 
       {/* Add Card Modal */}

@@ -16,6 +16,12 @@ import { Alerts } from './components/alerts/Alerts'
 import { Cost } from './components/cost/Cost'
 import { Compliance } from './components/compliance/Compliance'
 import { GPUReservations } from './components/gpu/GPUReservations'
+import { Nodes } from './components/nodes/Nodes'
+import { Deployments } from './components/deployments/Deployments'
+import { Services } from './components/services/Services'
+import { Operators } from './components/operators/Operators'
+import { HelmReleases } from './components/helm/HelmReleases'
+import { Logs } from './components/logs/Logs'
 import { CardHistory } from './components/history/CardHistory'
 import { CardHistoryEntry } from './hooks/useCardHistory'
 import { UserManagementPage } from './pages/UserManagement'
@@ -132,6 +138,78 @@ function App() {
               <OnboardedRoute>
                 <Layout>
                   <Workloads />
+                </Layout>
+              </OnboardedRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/nodes"
+          element={
+            <ProtectedRoute>
+              <OnboardedRoute>
+                <Layout>
+                  <Nodes />
+                </Layout>
+              </OnboardedRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/deployments"
+          element={
+            <ProtectedRoute>
+              <OnboardedRoute>
+                <Layout>
+                  <Deployments />
+                </Layout>
+              </OnboardedRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/services"
+          element={
+            <ProtectedRoute>
+              <OnboardedRoute>
+                <Layout>
+                  <Services />
+                </Layout>
+              </OnboardedRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/operators"
+          element={
+            <ProtectedRoute>
+              <OnboardedRoute>
+                <Layout>
+                  <Operators />
+                </Layout>
+              </OnboardedRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/helm"
+          element={
+            <ProtectedRoute>
+              <OnboardedRoute>
+                <Layout>
+                  <HelmReleases />
+                </Layout>
+              </OnboardedRoute>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/logs"
+          element={
+            <ProtectedRoute>
+              <OnboardedRoute>
+                <Layout>
+                  <Logs />
                 </Layout>
               </OnboardedRoute>
             </ProtectedRoute>

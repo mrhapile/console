@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, memo } from 'react'
 import { useLocation } from 'react-router-dom'
-import { DollarSign, RefreshCw, Activity, Hourglass, ChevronDown, ChevronRight, GripVertical } from 'lucide-react'
+import { DollarSign, RefreshCw, Hourglass, GripVertical } from 'lucide-react'
 import {
   DndContext,
   closestCenter,
@@ -23,7 +23,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { useClusters } from '../../hooks/useMCP'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { useShowCards } from '../../hooks/useShowCards'
-import { Skeleton } from '../ui/Skeleton'
+import { useDashboardReset } from '../../hooks/useDashboardReset'
 import { CardWrapper } from '../cards/CardWrapper'
 import { CARD_COMPONENTS, DEMO_DATA_CARDS } from '../cards/cardRegistry'
 import { AddCardModal } from '../dashboard/AddCardModal'
@@ -32,6 +32,7 @@ import { ConfigureCardModal } from '../dashboard/ConfigureCardModal'
 import { FloatingDashboardActions } from '../dashboard/FloatingDashboardActions'
 import { DashboardTemplate } from '../dashboard/templates'
 import { formatCardTitle } from '../../lib/formatCardTitle'
+import { StatsOverview, StatBlockValue } from '../ui/StatsOverview'
 
 interface CostCard {
   id: string
@@ -136,6 +137,8 @@ function DragPreviewCard({ card }: { card: CostCard }) {
   )
 }
 
+const COST_CARDS_KEY = 'kubestellar-cost-cards'
+
 // Default cards for the Cost dashboard
 const DEFAULT_COST_CARDS: CostCard[] = [
   { id: 'cost-1', card_type: 'cluster_costs', config: {}, position: { w: 6, h: 4 } },
@@ -145,28 +148,45 @@ const DEFAULT_COST_CARDS: CostCard[] = [
   { id: 'cost-5', card_type: 'resource_capacity', config: {}, position: { w: 3, h: 2 } },
 ]
 
+function loadCostCards(): CostCard[] {
+  try {
+    const stored = localStorage.getItem(COST_CARDS_KEY)
+    if (stored) {
+      return JSON.parse(stored)
+    }
+  } catch {
+    // Fall through to return defaults
+  }
+  return DEFAULT_COST_CARDS
+}
+
 export function Cost() {
   const location = useLocation()
   const { clusters, isLoading, refetch, lastUpdated, isRefreshing } = useClusters()
   const { selectedClusters: globalSelectedClusters, isAllClustersSelected } = useGlobalFilters()
   const { showCards, expandCards } = useShowCards('kubestellar-cost')
 
-  const [cards, setCards] = useState<CostCard[]>(() => {
-    const saved = localStorage.getItem('cost-dashboard-cards')
-    return saved ? JSON.parse(saved) : DEFAULT_COST_CARDS
-  })
+  const [cards, setCards] = useState<CostCard[]>(() => loadCostCards())
 
   const [showAddCard, setShowAddCard] = useState(false)
   const [showTemplates, setShowTemplates] = useState(false)
   const [configuringCard, setConfiguringCard] = useState<CostCard | null>(null)
   const [autoRefresh, setAutoRefresh] = useState(true)
-  const [showStats, setShowStats] = useState(true)
   const [activeId, setActiveId] = useState<string | null>(null)
 
-  // Save cards to localStorage
+  // Reset functionality using shared hook
+  const { isCustomized, setCustomized, reset } = useDashboardReset({
+    storageKey: COST_CARDS_KEY,
+    defaultCards: DEFAULT_COST_CARDS,
+    setCards,
+    cards,
+  })
+
+  // Save cards to localStorage (mark as customized)
   useEffect(() => {
-    localStorage.setItem('cost-dashboard-cards', JSON.stringify(cards))
-  }, [cards])
+    localStorage.setItem(COST_CARDS_KEY, JSON.stringify(cards))
+    setCustomized(true)
+  }, [cards, setCustomized])
 
   // DnD sensors
   const sensors = useSensors(
@@ -264,6 +284,32 @@ export function Cost() {
   const totalMemoryGB = reachableClusters.reduce((sum, c) => sum + (c.memoryGB || 0), 0)
   const totalStorageGB = reachableClusters.reduce((sum, c) => sum + (c.storageGB || 0), 0)
 
+  // Stats value getter for the configurable StatsOverview component
+  // Cost calculations are estimates based on typical cloud pricing
+  const getStatValue = useCallback((blockId: string): StatBlockValue => {
+    const cpuCostPerCore = 30 // ~$30/month per core
+    const memoryCostPerGB = 5 // ~$5/month per GB
+    const storageCostPerGB = 0.10 // ~$0.10/month per GB
+    const estimatedTotalCost = (totalCPU * cpuCostPerCore) + (totalMemoryGB * memoryCostPerGB) + (totalStorageGB * storageCostPerGB)
+
+    switch (blockId) {
+      case 'total_cost':
+        return { value: `$${estimatedTotalCost.toLocaleString()}`, sublabel: 'est. monthly' }
+      case 'cpu_cost':
+        return { value: `$${(totalCPU * cpuCostPerCore).toLocaleString()}`, sublabel: `${totalCPU} cores` }
+      case 'memory_cost':
+        return { value: `$${(totalMemoryGB * memoryCostPerGB).toLocaleString()}`, sublabel: `${Math.round(totalMemoryGB)} GB` }
+      case 'storage_cost':
+        return { value: `$${Math.round(totalStorageGB * storageCostPerGB).toLocaleString()}`, sublabel: totalStorageGB >= 1024 ? `${(totalStorageGB / 1024).toFixed(1)} TB` : `${Math.round(totalStorageGB)} GB` }
+      case 'network_cost':
+        return { value: '$0', sublabel: 'not tracked' }
+      case 'gpu_cost':
+        return { value: '$0', sublabel: 'not tracked' }
+      default:
+        return { value: 0 }
+    }
+  }, [totalCPU, totalMemoryGB, totalStorageGB])
+
   // Transform card for ConfigureCardModal
   const configureCard = configuringCard ? {
     id: configuringCard.id,
@@ -315,63 +361,15 @@ export function Cost() {
         </div>
       </div>
 
-      {/* Stats Overview - collapsible */}
-      <div className="mb-6">
-        <div className="flex items-center gap-3 mb-3">
-          <button
-            onClick={() => setShowStats(!showStats)}
-            className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <Activity className="w-4 h-4" />
-            <span>Resource Overview</span>
-            {showStats ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-          </button>
-          {lastUpdated && (
-            <span className="text-xs text-muted-foreground/60">
-              Updated {lastUpdated.toLocaleTimeString()}
-            </span>
-          )}
-        </div>
-
-        {showStats && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="glass rounded-lg p-4">
-              <div className="text-xs text-muted-foreground mb-1">Total Clusters</div>
-              {isLoading ? (
-                <Skeleton className="h-6 w-16" />
-              ) : (
-                <div className="text-xl font-bold text-foreground">{reachableClusters.length}</div>
-              )}
-            </div>
-            <div className="glass rounded-lg p-4">
-              <div className="text-xs text-muted-foreground mb-1">Total CPU</div>
-              {isLoading ? (
-                <Skeleton className="h-6 w-20" />
-              ) : (
-                <div className="text-xl font-bold text-foreground">{totalCPU} cores</div>
-              )}
-            </div>
-            <div className="glass rounded-lg p-4">
-              <div className="text-xs text-muted-foreground mb-1">Total Memory</div>
-              {isLoading ? (
-                <Skeleton className="h-6 w-20" />
-              ) : (
-                <div className="text-xl font-bold text-foreground">{Math.round(totalMemoryGB)} GB</div>
-              )}
-            </div>
-            <div className="glass rounded-lg p-4">
-              <div className="text-xs text-muted-foreground mb-1">Total Storage</div>
-              {isLoading ? (
-                <Skeleton className="h-6 w-20" />
-              ) : (
-                <div className="text-xl font-bold text-foreground">
-                  {totalStorageGB >= 1024 ? `${(totalStorageGB / 1024).toFixed(1)} TB` : `${Math.round(totalStorageGB)} GB`}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
+      {/* Configurable Stats Overview */}
+      <StatsOverview
+        dashboardType="cost"
+        getStatValue={getStatValue}
+        hasData={reachableClusters.length > 0}
+        isLoading={isLoading}
+        lastUpdated={lastUpdated}
+        collapsedStorageKey="kubestellar-cost-stats-collapsed"
+      />
 
       {/* Cards Grid */}
       {showCards && (
@@ -410,6 +408,8 @@ export function Cost() {
       <FloatingDashboardActions
         onAddCard={() => setShowAddCard(true)}
         onOpenTemplates={() => setShowTemplates(true)}
+        onReset={reset}
+        isCustomized={isCustomized}
       />
 
       {/* Add Card Modal */}

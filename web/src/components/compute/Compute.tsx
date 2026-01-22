@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import { useSearchParams, useLocation } from 'react-router-dom'
-import { Cpu, MemoryStick, Server, Layers, Plus, LayoutGrid, ChevronDown, ChevronRight, RefreshCw, Activity, Hourglass, GripVertical } from 'lucide-react'
+import { Cpu, Plus, LayoutGrid, ChevronDown, ChevronRight, RefreshCw, Hourglass, GripVertical } from 'lucide-react'
 import {
   DndContext,
   closestCenter,
@@ -24,7 +24,7 @@ import { useClusters } from '../../hooks/useMCP'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { useShowCards } from '../../hooks/useShowCards'
 import { useDrillDownActions } from '../../hooks/useDrillDown'
-import { Skeleton } from '../ui/Skeleton'
+import { useDashboardReset } from '../../hooks/useDashboardReset'
 import { CardWrapper } from '../cards/CardWrapper'
 import { CARD_COMPONENTS, DEMO_DATA_CARDS } from '../cards/cardRegistry'
 import { AddCardModal } from '../dashboard/AddCardModal'
@@ -33,6 +33,7 @@ import { ConfigureCardModal } from '../dashboard/ConfigureCardModal'
 import { FloatingDashboardActions } from '../dashboard/FloatingDashboardActions'
 import { DashboardTemplate } from '../dashboard/templates'
 import { formatCardTitle } from '../../lib/formatCardTitle'
+import { StatsOverview, StatBlockValue } from '../ui/StatsOverview'
 
 interface ComputeCard {
   id: string
@@ -165,10 +166,17 @@ export function Compute() {
 
   // Card state
   const [cards, setCards] = useState<ComputeCard[]>(() => loadComputeCards())
-  const [showStats, setShowStats] = useState(true)
   const { showCards, setShowCards, expandCards } = useShowCards('kubestellar-compute')
   const [showAddCard, setShowAddCard] = useState(false)
   const [showTemplates, setShowTemplates] = useState(false)
+
+  // Reset functionality using shared hook
+  const { isCustomized, setCustomized, reset } = useDashboardReset({
+    storageKey: COMPUTE_CARDS_KEY,
+    defaultCards: DEFAULT_COMPUTE_CARDS,
+    setCards,
+    cards,
+  })
   const [configuringCard, setConfiguringCard] = useState<ComputeCard | null>(null)
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -207,10 +215,11 @@ export function Compute() {
   // Only show skeletons when we have no data yet
   const showSkeletons = clusters.length === 0 && isLoading
 
-  // Save cards to localStorage when they change
+  // Save cards to localStorage when they change (mark as customized)
   useEffect(() => {
     saveComputeCards(cards)
-  }, [cards])
+    setCustomized(true)
+  }, [cards, setCustomized])
 
   // Handle addCard URL param - open modal and clear param
   useEffect(() => {
@@ -341,6 +350,43 @@ export function Compute() {
     return Math.max(0, value) // Never show negative
   }
 
+  // Calculate utilization from available data
+  const cpuUtilization = (() => {
+    const totalCPU = reachableClusters.reduce((sum, c) => sum + (c.cpuCores || 0), 0)
+    const requestedCPU = reachableClusters.reduce((sum, c) => sum + (c.cpuRequestsCores || 0), 0)
+    return totalCPU > 0 ? Math.round((requestedCPU / totalCPU) * 100) : 0
+  })()
+
+  const memoryUtilization = (() => {
+    const totalMemory = reachableClusters.reduce((sum, c) => sum + (c.memoryGB || 0), 0)
+    const requestedMemory = reachableClusters.reduce((sum, c) => sum + (c.memoryRequestsGB || 0), 0)
+    return totalMemory > 0 ? Math.round((requestedMemory / totalMemory) * 100) : 0
+  })()
+
+  // Stats value getter for the configurable StatsOverview component
+  const getStatValue = useCallback((blockId: string): StatBlockValue => {
+    switch (blockId) {
+      case 'nodes':
+        return { value: formatStatValue(stats?.totalNodes || 0, hasDataToShow), sublabel: 'total nodes', onClick: drillToResources, isClickable: hasDataToShow }
+      case 'cpus':
+        return { value: formatStatValue(stats?.totalCPUs || 0, hasDataToShow), sublabel: 'cores allocatable', onClick: drillToResources, isClickable: hasDataToShow }
+      case 'memory':
+        return { value: formatMemory(stats?.totalMemoryGB || 0, hasDataToShow), sublabel: 'allocatable', onClick: drillToResources, isClickable: hasDataToShow }
+      case 'gpus':
+        return { value: 0, sublabel: 'total GPUs', onClick: drillToResources, isClickable: hasDataToShow }
+      case 'tpus':
+        return { value: 0, sublabel: 'total TPUs', onClick: drillToResources, isClickable: hasDataToShow }
+      case 'pods':
+        return { value: formatStatValue(stats?.totalPods || 0, hasDataToShow), sublabel: 'running pods', onClick: drillToResources, isClickable: hasDataToShow }
+      case 'cpu_util':
+        return { value: hasDataToShow ? `${cpuUtilization}%` : '-', sublabel: 'average', onClick: drillToResources, isClickable: hasDataToShow }
+      case 'memory_util':
+        return { value: hasDataToShow ? `${memoryUtilization}%` : '-', sublabel: 'average', onClick: drillToResources, isClickable: hasDataToShow }
+      default:
+        return { value: '-', sublabel: '' }
+    }
+  }, [stats, hasDataToShow, cpuUtilization, memoryUtilization, drillToResources])
+
   // Transform card for ConfigureCardModal
   const configureCard = configuringCard ? {
     id: configuringCard.id,
@@ -392,96 +438,15 @@ export function Compute() {
         </div>
       </div>
 
-      {/* Stats Overview - collapsible */}
-      <div className="mb-6">
-        <div className="flex items-center gap-3 mb-3">
-          <button
-            onClick={() => setShowStats(!showStats)}
-            className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <Activity className="w-4 h-4" />
-            <span>Stats Overview</span>
-            {showStats ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-          </button>
-          {lastUpdated && (
-            <span className="text-xs text-muted-foreground/60">
-              Updated {lastUpdated.toLocaleTimeString()}
-            </span>
-          )}
-        </div>
-
-        {showStats && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {showSkeletons ? (
-              // Loading skeletons
-              <>
-                {[1, 2, 3, 4].map((i) => (
-                  <div key={i} className="glass p-4 rounded-lg">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Skeleton variant="circular" width={20} height={20} />
-                      <Skeleton variant="text" width={80} height={16} />
-                    </div>
-                    <Skeleton variant="text" width={60} height={36} className="mb-1" />
-                    <Skeleton variant="text" width={100} height={12} />
-                  </div>
-                ))}
-              </>
-            ) : (
-              // Real data - use cached stats during refresh
-              <>
-                <div
-                  className={`glass p-4 rounded-lg ${hasDataToShow ? 'cursor-pointer hover:bg-secondary/50' : ''} transition-colors`}
-                  onClick={hasDataToShow ? drillToResources : undefined}
-                  title={hasDataToShow ? `${stats?.totalCPUs || 0} CPU cores allocatable across ${reachableClusters.length} cluster${reachableClusters.length !== 1 ? 's' : ''} - Click to view resources` : 'No reachable clusters'}
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <Cpu className="w-5 h-5 text-blue-400" />
-                    <span className="text-sm text-muted-foreground">CPU</span>
-                  </div>
-                  <div className="text-3xl font-bold text-foreground">{formatStatValue(stats?.totalCPUs || 0, hasDataToShow)}</div>
-                  <div className="text-xs text-muted-foreground">cores allocatable</div>
-                </div>
-                <div
-                  className={`glass p-4 rounded-lg ${hasDataToShow ? 'cursor-pointer hover:bg-secondary/50' : ''} transition-colors`}
-                  onClick={hasDataToShow ? drillToResources : undefined}
-                  title={hasDataToShow ? `${formatMemory(stats?.totalMemoryGB || 0, hasDataToShow)} memory allocatable across ${reachableClusters.length} cluster${reachableClusters.length !== 1 ? 's' : ''} - Click to view resources` : 'No reachable clusters'}
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <MemoryStick className="w-5 h-5 text-green-400" />
-                    <span className="text-sm text-muted-foreground">Memory</span>
-                  </div>
-                  <div className="text-3xl font-bold text-foreground">{formatMemory(stats?.totalMemoryGB || 0, hasDataToShow)}</div>
-                  <div className="text-xs text-muted-foreground">allocatable</div>
-                </div>
-                <div
-                  className={`glass p-4 rounded-lg ${hasDataToShow ? 'cursor-pointer hover:bg-secondary/50' : ''} transition-colors`}
-                  onClick={hasDataToShow ? drillToResources : undefined}
-                  title={hasDataToShow ? `${stats?.totalNodes || 0} total nodes across ${reachableClusters.length} cluster${reachableClusters.length !== 1 ? 's' : ''} - Click to view resources` : 'No reachable clusters'}
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <Server className="w-5 h-5 text-cyan-400" />
-                    <span className="text-sm text-muted-foreground">Nodes</span>
-                  </div>
-                  <div className="text-3xl font-bold text-foreground">{formatStatValue(stats?.totalNodes || 0, hasDataToShow)}</div>
-                  <div className="text-xs text-muted-foreground">total nodes</div>
-                </div>
-                <div
-                  className={`glass p-4 rounded-lg ${hasDataToShow ? 'cursor-pointer hover:bg-secondary/50' : ''} transition-colors`}
-                  onClick={hasDataToShow ? drillToResources : undefined}
-                  title={hasDataToShow ? `${stats?.totalPods || 0} running pods across ${reachableClusters.length} cluster${reachableClusters.length !== 1 ? 's' : ''} - Click to view resources` : 'No reachable clusters'}
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <Layers className="w-5 h-5 text-purple-400" />
-                    <span className="text-sm text-muted-foreground">Pods</span>
-                  </div>
-                  <div className="text-3xl font-bold text-foreground">{formatStatValue(stats?.totalPods || 0, hasDataToShow)}</div>
-                  <div className="text-xs text-muted-foreground">running pods</div>
-                </div>
-              </>
-            )}
-          </div>
-        )}
-      </div>
+      {/* Stats Overview - configurable */}
+      <StatsOverview
+        dashboardType="compute"
+        getStatValue={getStatValue}
+        hasData={hasDataToShow}
+        isLoading={showSkeletons}
+        lastUpdated={lastUpdated}
+        collapsedStorageKey="kubestellar-compute-stats-collapsed"
+      />
 
       {/* Dashboard Cards Section */}
       <div className="mb-6">
@@ -555,6 +520,8 @@ export function Compute() {
       <FloatingDashboardActions
         onAddCard={() => setShowAddCard(true)}
         onOpenTemplates={() => setShowTemplates(true)}
+        onReset={reset}
+        isCustomized={isCustomized}
       />
 
       {/* Add Card Modal */}

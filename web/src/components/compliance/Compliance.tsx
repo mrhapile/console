@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, memo } from 'react'
 import { useLocation } from 'react-router-dom'
-import { Shield, AlertTriangle, XCircle, RefreshCw, Activity, ChevronDown, ChevronRight, Hourglass, GripVertical } from 'lucide-react'
+import { Shield, RefreshCw, Hourglass, GripVertical } from 'lucide-react'
 import {
   DndContext,
   closestCenter,
@@ -23,7 +23,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { useClusters } from '../../hooks/useMCP'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { useShowCards } from '../../hooks/useShowCards'
-import { Skeleton } from '../ui/Skeleton'
+import { useDashboardReset } from '../../hooks/useDashboardReset'
 import { CardWrapper } from '../cards/CardWrapper'
 import { CARD_COMPONENTS, DEMO_DATA_CARDS } from '../cards/cardRegistry'
 import { AddCardModal } from '../dashboard/AddCardModal'
@@ -32,6 +32,7 @@ import { ConfigureCardModal } from '../dashboard/ConfigureCardModal'
 import { FloatingDashboardActions } from '../dashboard/FloatingDashboardActions'
 import { DashboardTemplate } from '../dashboard/templates'
 import { formatCardTitle } from '../../lib/formatCardTitle'
+import { StatsOverview, StatBlockValue } from '../ui/StatsOverview'
 
 interface ComplianceCard {
   id: string
@@ -175,11 +176,18 @@ export function Compliance() {
     return saved ? JSON.parse(saved) : DEFAULT_COMPLIANCE_CARDS
   })
 
+  // Reset hook for dashboard
+  const { reset, isCustomized } = useDashboardReset({
+    storageKey: 'compliance-dashboard-cards',
+    defaultCards: DEFAULT_COMPLIANCE_CARDS,
+    setCards,
+    cards,
+  })
+
   const [showAddCard, setShowAddCard] = useState(false)
   const [showTemplates, setShowTemplates] = useState(false)
   const [configuringCard, setConfiguringCard] = useState<ComplianceCard | null>(null)
   const [autoRefresh, setAutoRefresh] = useState(true)
-  const [showStats, setShowStats] = useState(true)
   const [activeId, setActiveId] = useState<string | null>(null)
 
   // Save cards to localStorage
@@ -281,18 +289,25 @@ export function Compliance() {
   // Calculate compliance posture
   const posture = getCompliancePosture(reachableClusters.length || 1)
 
-  // Get score color
-  const getScoreColor = (score: number) => {
-    if (score >= 80) return 'text-green-400'
-    if (score >= 60) return 'text-yellow-400'
-    return 'text-red-400'
-  }
-
-  const getScoreBg = (score: number) => {
-    if (score >= 80) return 'bg-green-500/20 border-green-500/30'
-    if (score >= 60) return 'bg-yellow-500/20 border-yellow-500/30'
-    return 'bg-red-500/20 border-red-500/30'
-  }
+  // Stats value getter for the configurable StatsOverview component
+  const getStatValue = useCallback((blockId: string): StatBlockValue => {
+    switch (blockId) {
+      case 'score':
+        return { value: `${posture.score}%`, sublabel: 'compliance score' }
+      case 'total_checks':
+        return { value: posture.totalChecks, sublabel: 'total checks' }
+      case 'passing':
+        return { value: posture.passing, sublabel: 'passing' }
+      case 'failing':
+        return { value: posture.failing, sublabel: 'failing' }
+      case 'warning':
+        return { value: posture.warning, sublabel: 'warnings' }
+      case 'critical_findings':
+        return { value: posture.criticalFindings, sublabel: 'critical findings' }
+      default:
+        return { value: 0 }
+    }
+  }, [posture])
 
   // Transform card for ConfigureCardModal
   const configureCard = configuringCard ? {
@@ -345,108 +360,15 @@ export function Compliance() {
         </div>
       </div>
 
-      {/* Posture Overview - collapsible */}
-      <div className="mb-6">
-        <div className="flex items-center gap-3 mb-3">
-          <button
-            onClick={() => setShowStats(!showStats)}
-            className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <Activity className="w-4 h-4" />
-            <span>Security Posture</span>
-            {showStats ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-          </button>
-          {lastUpdated && (
-            <span className="text-xs text-muted-foreground/60">
-              Updated {lastUpdated.toLocaleTimeString()}
-            </span>
-          )}
-        </div>
-
-        {showStats && (
-          <div className="space-y-4">
-            {/* Compliance Score */}
-            <div className={`p-4 rounded-lg border ${getScoreBg(posture.score)}`}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">Compliance Score</p>
-                  <p className={`text-3xl font-bold ${getScoreColor(posture.score)}`}>{posture.score}%</p>
-                </div>
-                <div className="flex items-center gap-6">
-                  <div className="text-center">
-                    <p className="text-lg font-bold text-green-400">{posture.passing}</p>
-                    <p className="text-xs text-muted-foreground">Passing</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-lg font-bold text-yellow-400">{posture.warning}</p>
-                    <p className="text-xs text-muted-foreground">Warning</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-lg font-bold text-red-400">{posture.failing}</p>
-                    <p className="text-xs text-muted-foreground">Failing</p>
-                  </div>
-                </div>
-              </div>
-              {/* Progress bar */}
-              <div className="mt-3 h-2 bg-secondary rounded-full overflow-hidden flex">
-                <div className="bg-green-500 h-full" style={{ width: `${(posture.passing / posture.totalChecks) * 100}%` }} />
-                <div className="bg-yellow-500 h-full" style={{ width: `${(posture.warning / posture.totalChecks) * 100}%` }} />
-                <div className="bg-red-500 h-full" style={{ width: `${(posture.failing / posture.totalChecks) * 100}%` }} />
-              </div>
-            </div>
-
-            {/* Stats Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-              <div className="glass rounded-lg p-4">
-                <div className="text-xs text-muted-foreground mb-1">Total Checks</div>
-                {isLoading ? (
-                  <Skeleton className="h-6 w-16" />
-                ) : (
-                  <div className="text-xl font-bold text-foreground">{posture.totalChecks}</div>
-                )}
-              </div>
-              <div className="glass rounded-lg p-4 border-l-2 border-red-500">
-                <div className="text-xs text-red-400 mb-1 flex items-center gap-1">
-                  <XCircle className="w-3 h-3" />
-                  Critical
-                </div>
-                {isLoading ? (
-                  <Skeleton className="h-6 w-10" />
-                ) : (
-                  <div className="text-xl font-bold text-red-400">{posture.criticalFindings}</div>
-                )}
-              </div>
-              <div className="glass rounded-lg p-4 border-l-2 border-orange-500">
-                <div className="text-xs text-orange-400 mb-1 flex items-center gap-1">
-                  <AlertTriangle className="w-3 h-3" />
-                  High
-                </div>
-                {isLoading ? (
-                  <Skeleton className="h-6 w-10" />
-                ) : (
-                  <div className="text-xl font-bold text-orange-400">{posture.highFindings}</div>
-                )}
-              </div>
-              <div className="glass rounded-lg p-4 border-l-2 border-yellow-500">
-                <div className="text-xs text-yellow-400 mb-1">Medium</div>
-                {isLoading ? (
-                  <Skeleton className="h-6 w-10" />
-                ) : (
-                  <div className="text-xl font-bold text-yellow-400">{posture.mediumFindings}</div>
-                )}
-              </div>
-              <div className="glass rounded-lg p-4 border-l-2 border-blue-500">
-                <div className="text-xs text-blue-400 mb-1">Low</div>
-                {isLoading ? (
-                  <Skeleton className="h-6 w-10" />
-                ) : (
-                  <div className="text-xl font-bold text-blue-400">{posture.lowFindings}</div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+      {/* Configurable Stats Overview */}
+      <StatsOverview
+        dashboardType="compliance"
+        getStatValue={getStatValue}
+        hasData={posture.totalChecks > 0}
+        isLoading={isLoading}
+        lastUpdated={lastUpdated}
+        collapsedStorageKey="kubestellar-compliance-stats-collapsed"
+      />
 
       {/* Cards Grid */}
       {showCards && (
@@ -485,6 +407,8 @@ export function Compliance() {
       <FloatingDashboardActions
         onAddCard={() => setShowAddCard(true)}
         onOpenTemplates={() => setShowTemplates(true)}
+        onReset={reset}
+        isCustomized={isCustomized}
       />
 
       {/* Add Card Modal */}

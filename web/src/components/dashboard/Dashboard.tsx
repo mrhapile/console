@@ -39,6 +39,8 @@ import { TemplatesModal } from './TemplatesModal'
 import { FloatingDashboardActions } from './FloatingDashboardActions'
 import { DashboardTemplate } from './templates'
 import { formatCardTitle } from '../../lib/formatCardTitle'
+import { useDashboardReset } from '../../hooks/useDashboardReset'
+import { StatsOverview, StatBlockValue } from '../ui/StatsOverview'
 
 // Module-level cache for dashboard data (survives navigation)
 interface CachedDashboard {
@@ -48,6 +50,20 @@ interface CachedDashboard {
 }
 let dashboardCache: CachedDashboard | null = null
 const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+
+// Storage key and default cards for the main dashboard
+const DASHBOARD_STORAGE_KEY = 'kubestellar-main-dashboard-cards'
+
+// Default cards for the main dashboard - balanced multi-cluster overview
+const DEFAULT_DASHBOARD_CARDS: Card[] = [
+  { id: 'default-1', card_type: 'cluster_health', config: {}, position: { x: 0, y: 0, w: 4, h: 3 } },
+  { id: 'default-2', card_type: 'resource_usage', config: {}, position: { x: 4, y: 0, w: 4, h: 3 } },
+  { id: 'default-3', card_type: 'active_alerts', config: {}, position: { x: 8, y: 0, w: 4, h: 3 } },
+  { id: 'default-4', card_type: 'cluster_metrics', config: {}, position: { x: 0, y: 3, w: 6, h: 3 } },
+  { id: 'default-5', card_type: 'event_stream', config: {}, position: { x: 6, y: 3, w: 6, h: 4 } },
+  { id: 'default-6', card_type: 'deployment_status', config: {}, position: { x: 0, y: 6, w: 6, h: 3 } },
+  { id: 'default-7', card_type: 'pod_issues', config: {}, position: { x: 6, y: 7, w: 6, h: 3 } },
+]
 
 interface Card {
   id: string
@@ -98,8 +114,42 @@ export function Dashboard() {
   const { showToast } = useToast()
   const { recordCardRemoved, recordCardAdded, recordCardReplaced, recordCardConfigured } = useCardHistory()
 
-  // Cluster data for refresh functionality - most cards depend on this
-  const { isRefreshing, lastUpdated, refetch } = useClusters()
+  // Cluster data for refresh functionality and stats - most cards depend on this
+  const { clusters, isRefreshing, lastUpdated, refetch, isLoading: isClustersLoading } = useClusters()
+
+  // Reset hook for dashboard
+  const { reset, isCustomized } = useDashboardReset({
+    storageKey: DASHBOARD_STORAGE_KEY,
+    defaultCards: DEFAULT_DASHBOARD_CARDS,
+    setCards: setLocalCards,
+    cards: localCards,
+  })
+
+  // Stats calculations for StatsOverview
+  const healthyClusters = clusters.filter(c => c.healthy).length
+  const unhealthyClusters = clusters.filter(c => !c.healthy).length
+  const totalPods = clusters.reduce((sum, c) => sum + (c.podCount || 0), 0)
+  const totalNodes = clusters.reduce((sum, c) => sum + (c.nodeCount || 0), 0)
+
+  // Stats value getter for the configurable StatsOverview component
+  const getStatValue = useCallback((blockId: string): StatBlockValue => {
+    switch (blockId) {
+      case 'clusters':
+        return { value: clusters.length, sublabel: 'total clusters' }
+      case 'healthy':
+        return { value: healthyClusters, sublabel: 'healthy' }
+      case 'warnings':
+        return { value: 0, sublabel: 'warnings' }
+      case 'errors':
+        return { value: unhealthyClusters, sublabel: 'unhealthy' }
+      case 'namespaces':
+        return { value: totalNodes, sublabel: 'nodes' }
+      case 'pods':
+        return { value: totalPods, sublabel: 'pods' }
+      default:
+        return { value: 0 }
+    }
+  }, [clusters.length, healthyClusters, unhealthyClusters, totalNodes, totalPods])
 
   // Auto-refresh state (persisted in localStorage)
   const [autoRefresh, setAutoRefresh] = useState(() => {
@@ -588,10 +638,10 @@ export function Dashboard() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-foreground">
-            {dashboard?.name || 'Dashboard'}
+            Dashboard
           </h1>
           <p className="text-muted-foreground">
-            Your personalized multi-cluster overview
+            Multi-cluster overview and resource monitoring
           </p>
         </div>
         <div className="flex items-center gap-4">
@@ -623,6 +673,16 @@ export function Dashboard() {
           )}
         </div>
       </div>
+
+      {/* Configurable Stats Overview */}
+      <StatsOverview
+        dashboardType="dashboard"
+        getStatValue={getStatValue}
+        hasData={clusters.length > 0}
+        isLoading={isClustersLoading}
+        lastUpdated={lastUpdated}
+        collapsedStorageKey="kubestellar-dashboard-stats-collapsed"
+      />
 
       {/* AI Recommendations */}
       <div data-tour="recommendations">
@@ -703,6 +763,8 @@ export function Dashboard() {
       <FloatingDashboardActions
         onAddCard={openAddCardModal}
         onOpenTemplates={openTemplatesModal}
+        onReset={reset}
+        isCustomized={isCustomized}
       />
 
       {/* Add Card Modal */}

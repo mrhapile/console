@@ -1,10 +1,15 @@
+import { useState } from 'react'
 import { Plus, Layout, RotateCcw } from 'lucide-react'
 import { useMissions } from '../../hooks/useMissions'
+import { ResetMode } from '../../hooks/useDashboardReset'
+import { ResetDialog } from './ResetDialog'
 
 interface FloatingDashboardActionsProps {
   onAddCard: () => void
   onOpenTemplates: () => void
-  /** Optional: callback to reset dashboard to default cards */
+  /** Callback for reset with mode selection */
+  onReset?: (mode: ResetMode) => number
+  /** Legacy: callback to reset dashboard to default cards (replace mode only) */
   onResetToDefaults?: () => void
   /** Whether the dashboard has been customized from defaults */
   isCustomized?: boolean
@@ -19,10 +24,12 @@ interface FloatingDashboardActionsProps {
 export function FloatingDashboardActions({
   onAddCard,
   onOpenTemplates,
+  onReset,
   onResetToDefaults,
   isCustomized,
 }: FloatingDashboardActionsProps) {
   const { isSidebarOpen, isSidebarMinimized } = useMissions()
+  const [showResetDialog, setShowResetDialog] = useState(false)
 
   // Shift buttons left based on mission sidebar state
   // w-96 = 384px (full sidebar), w-12 = 48px (minimized)
@@ -33,43 +40,58 @@ export function FloatingDashboardActions({
   }
   const rightOffset = getRightOffset()
 
-  const handleResetToDefaults = () => {
-    if (onResetToDefaults && confirm('Reset dashboard to default cards? This will remove any customizations.')) {
+  const handleReset = (mode: ResetMode) => {
+    setShowResetDialog(false)
+    if (onReset) {
+      onReset(mode)
+    } else if (onResetToDefaults && mode === 'replace') {
+      // Legacy support for old onResetToDefaults prop
       onResetToDefaults()
     }
   }
 
+  const showResetButton = isCustomized && (onReset || onResetToDefaults)
+
   return (
-    <div className={`fixed bottom-20 ${rightOffset} z-40 flex flex-col gap-1.5 transition-all duration-300`}>
-      {/* Reset to Defaults button - only show if customized */}
-      {isCustomized && onResetToDefaults && (
+    <>
+      <div className={`fixed bottom-20 ${rightOffset} z-40 flex flex-col gap-1.5 transition-all duration-300`}>
+        {/* Reset button */}
+        {showResetButton && (
+          <button
+            onClick={() => setShowResetDialog(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground bg-card/95 hover:bg-card border border-border rounded-md shadow-md backdrop-blur-sm transition-all hover:shadow-lg"
+            title="Reset dashboard cards"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            Reset
+          </button>
+        )}
+        {/* Templates button */}
         <button
-          onClick={handleResetToDefaults}
+          onClick={onOpenTemplates}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground bg-card/95 hover:bg-card border border-border rounded-md shadow-md backdrop-blur-sm transition-all hover:shadow-lg"
-          title="Reset dashboard to default cards"
+          title="Browse dashboard templates"
         >
-          <RotateCcw className="w-3.5 h-3.5" />
-          Reset
+          <Layout className="w-3.5 h-3.5" />
+          Templates
         </button>
-      )}
-      {/* Templates button */}
-      <button
-        onClick={onOpenTemplates}
-        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground bg-card/95 hover:bg-card border border-border rounded-md shadow-md backdrop-blur-sm transition-all hover:shadow-lg"
-        title="Browse dashboard templates"
-      >
-        <Layout className="w-3.5 h-3.5" />
-        Templates
-      </button>
-      {/* Add Card button */}
-      <button
-        onClick={onAddCard}
-        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-gradient-ks text-foreground rounded-md shadow-md transition-all hover:shadow-lg hover:scale-105"
-        title="Add a new card"
-      >
-        <Plus className="w-3.5 h-3.5" />
-        Add Card
-      </button>
-    </div>
+        {/* Add Card button */}
+        <button
+          onClick={onAddCard}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-gradient-ks text-foreground rounded-md shadow-md transition-all hover:shadow-lg hover:scale-105"
+          title="Add a new card"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          Add Card
+        </button>
+      </div>
+
+      {/* Reset Dialog */}
+      <ResetDialog
+        isOpen={showResetDialog}
+        onClose={() => setShowResetDialog(false)}
+        onReset={handleReset}
+      />
+    </>
   )
 }

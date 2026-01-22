@@ -44,6 +44,8 @@ export type DashboardStatsType =
   | 'compute'
   | 'events'
   | 'cost'
+  | 'alerts'
+  | 'dashboard'
 
 /**
  * Default stat blocks for the Clusters dashboard
@@ -174,6 +176,29 @@ export const COST_STAT_BLOCKS: StatBlockConfig[] = [
 ]
 
 /**
+ * Default stat blocks for the Alerts dashboard
+ */
+export const ALERTS_STAT_BLOCKS: StatBlockConfig[] = [
+  { id: 'firing', name: 'Firing', icon: 'AlertCircle', visible: true, color: 'red' },
+  { id: 'pending', name: 'Pending', icon: 'Clock', visible: true, color: 'yellow' },
+  { id: 'resolved', name: 'Resolved', icon: 'CheckCircle2', visible: true, color: 'green' },
+  { id: 'rules_enabled', name: 'Rules Enabled', icon: 'Shield', visible: true, color: 'blue' },
+  { id: 'rules_disabled', name: 'Rules Disabled', icon: 'ShieldOff', visible: true, color: 'gray' },
+]
+
+/**
+ * Default stat blocks for the main Dashboard
+ */
+export const DASHBOARD_STAT_BLOCKS: StatBlockConfig[] = [
+  { id: 'clusters', name: 'Clusters', icon: 'Server', visible: true, color: 'blue' },
+  { id: 'healthy', name: 'Healthy', icon: 'CheckCircle2', visible: true, color: 'green' },
+  { id: 'warnings', name: 'Warnings', icon: 'AlertTriangle', visible: true, color: 'yellow' },
+  { id: 'errors', name: 'Errors', icon: 'XCircle', visible: true, color: 'red' },
+  { id: 'namespaces', name: 'Namespaces', icon: 'FolderTree', visible: true, color: 'purple' },
+  { id: 'pods', name: 'Pods', icon: 'Box', visible: true, color: 'cyan' },
+]
+
+/**
  * Get default stat blocks for a dashboard type
  */
 export function getDefaultStatBlocks(dashboardType: DashboardStatsType): StatBlockConfig[] {
@@ -198,6 +223,10 @@ export function getDefaultStatBlocks(dashboardType: DashboardStatsType): StatBlo
       return EVENTS_STAT_BLOCKS
     case 'cost':
       return COST_STAT_BLOCKS
+    case 'alerts':
+      return ALERTS_STAT_BLOCKS
+    case 'dashboard':
+      return DASHBOARD_STAT_BLOCKS
     default:
       return []
   }

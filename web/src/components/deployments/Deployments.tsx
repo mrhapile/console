@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, memo } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Globe, Plus, LayoutGrid, ChevronDown, ChevronRight, RefreshCw, Hourglass, GripVertical } from 'lucide-react'
+import { Rocket, RefreshCw, Hourglass, GripVertical, ChevronDown, ChevronRight, Plus, LayoutGrid } from 'lucide-react'
 import {
   DndContext,
   closestCenter,
@@ -20,12 +20,10 @@ import {
   rectSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { useServices } from '../../hooks/useMCP'
+import { useDeployments, useDeploymentIssues, useClusters } from '../../hooks/useMCP'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { useShowCards } from '../../hooks/useShowCards'
-import { useDrillDownActions } from '../../hooks/useDrillDown'
 import { useDashboardReset } from '../../hooks/useDashboardReset'
-// Skeleton imported but not used - removed to fix TS error
 import { StatsOverview, StatBlockValue } from '../ui/StatsOverview'
 import { CardWrapper } from '../cards/CardWrapper'
 import { CARD_COMPONENTS, DEMO_DATA_CARDS } from '../cards/cardRegistry'
@@ -36,7 +34,7 @@ import { FloatingDashboardActions } from '../dashboard/FloatingDashboardActions'
 import { DashboardTemplate } from '../dashboard/templates'
 import { formatCardTitle } from '../../lib/formatCardTitle'
 
-interface NetworkCard {
+interface DeploymentsCard {
   id: string
   card_type: string
   config: Record<string, unknown>
@@ -44,47 +42,48 @@ interface NetworkCard {
   position?: { w: number; h: number }
 }
 
-const NETWORK_CARDS_KEY = 'kubestellar-network-cards'
+const DEPLOYMENTS_CARDS_KEY = 'kubestellar-deployments-cards'
 
-// Default cards for the network dashboard
-const DEFAULT_NETWORK_CARDS: NetworkCard[] = [
-  { id: 'default-network-overview', card_type: 'network_overview', title: 'Network Overview', config: {}, position: { w: 4, h: 3 } },
-  { id: 'default-service-status', card_type: 'service_status', title: 'Service Status', config: {}, position: { w: 8, h: 3 } },
-  { id: 'default-cluster-network', card_type: 'cluster_network', title: 'Cluster Network', config: {}, position: { w: 6, h: 2 } },
+// Default cards for the deployments dashboard
+const DEFAULT_DEPLOYMENTS_CARDS: DeploymentsCard[] = [
+  { id: 'default-deployment-status', card_type: 'deployment_status', title: 'Deployment Status', config: {}, position: { w: 6, h: 3 } },
+  { id: 'default-deployment-progress', card_type: 'deployment_progress', title: 'Deployment Progress', config: {}, position: { w: 6, h: 3 } },
+  { id: 'default-deployment-issues', card_type: 'deployment_issues', title: 'Deployment Issues', config: {}, position: { w: 6, h: 3 } },
+  { id: 'default-app-status', card_type: 'app_status', title: 'Workload Status', config: {}, position: { w: 6, h: 3 } },
 ]
 
-function loadNetworkCards(): NetworkCard[] {
+function loadDeploymentsCards(): DeploymentsCard[] {
   try {
-    const stored = localStorage.getItem(NETWORK_CARDS_KEY)
+    const stored = localStorage.getItem(DEPLOYMENTS_CARDS_KEY)
     if (stored) {
       return JSON.parse(stored)
     }
   } catch {
     // Fall through to return defaults
   }
-  return DEFAULT_NETWORK_CARDS
+  return DEFAULT_DEPLOYMENTS_CARDS
 }
 
-function saveNetworkCards(cards: NetworkCard[]) {
-  localStorage.setItem(NETWORK_CARDS_KEY, JSON.stringify(cards))
+function saveDeploymentsCards(cards: DeploymentsCard[]) {
+  localStorage.setItem(DEPLOYMENTS_CARDS_KEY, JSON.stringify(cards))
 }
 
 // Sortable card component with drag handle
-interface SortableNetworkCardProps {
-  card: NetworkCard
+interface SortableDeploymentsCardProps {
+  card: DeploymentsCard
   onConfigure: () => void
   onRemove: () => void
   onWidthChange: (newWidth: number) => void
   isDragging: boolean
 }
 
-const SortableNetworkCard = memo(function SortableNetworkCard({
+const SortableDeploymentsCard = memo(function SortableDeploymentsCard({
   card,
   onConfigure,
   onRemove,
   onWidthChange,
   isDragging,
-}: SortableNetworkCardProps) {
+}: SortableDeploymentsCardProps) {
   const {
     attributes,
     listeners,
@@ -93,7 +92,7 @@ const SortableNetworkCard = memo(function SortableNetworkCard({
     transition,
   } = useSortable({ id: card.id })
 
-  const cardWidth = card.position?.w || 4
+  const cardWidth = card.position?.w || 6
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -136,8 +135,8 @@ const SortableNetworkCard = memo(function SortableNetworkCard({
 })
 
 // Drag preview for overlay
-function NetworkDragPreviewCard({ card }: { card: NetworkCard }) {
-  const cardWidth = card.position?.w || 4
+function DeploymentsDragPreviewCard({ card }: { card: DeploymentsCard }) {
+  const cardWidth = card.position?.w || 6
   return (
     <div
       className="glass rounded-lg p-4 shadow-xl"
@@ -153,30 +152,27 @@ function NetworkDragPreviewCard({ card }: { card: NetworkCard }) {
   )
 }
 
-export function Network() {
+export function Deployments() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const { services, isLoading: servicesLoading, isRefreshing: servicesRefreshing, lastUpdated, refetch } = useServices()
-  const {
-    selectedClusters: globalSelectedClusters,
-    isAllClustersSelected,
-  } = useGlobalFilters()
-  const { drillToService } = useDrillDownActions()
+  const { deployments, isLoading, isRefreshing, lastUpdated, refetch } = useDeployments()
+  const { issues: deploymentIssues, refetch: refetchIssues } = useDeploymentIssues()
+  const { clusters } = useClusters()
+  const { selectedClusters: globalSelectedClusters, isAllClustersSelected } = useGlobalFilters()
 
   // Card state
-  const [cards, setCards] = useState<NetworkCard[]>(() => loadNetworkCards())
-  // Stats collapsed state is now managed by StatsOverview component
-  const { showCards, setShowCards, expandCards } = useShowCards('kubestellar-network')
+  const [cards, setCards] = useState<DeploymentsCard[]>(() => loadDeploymentsCards())
+  const { showCards, setShowCards, expandCards } = useShowCards('kubestellar-deployments')
   const [showAddCard, setShowAddCard] = useState(false)
 
   // Reset functionality using shared hook
   const { isCustomized, setCustomized, reset } = useDashboardReset({
-    storageKey: NETWORK_CARDS_KEY,
-    defaultCards: DEFAULT_NETWORK_CARDS,
+    storageKey: DEPLOYMENTS_CARDS_KEY,
+    defaultCards: DEFAULT_DEPLOYMENTS_CARDS,
     setCards,
     cards,
   })
   const [showTemplates, setShowTemplates] = useState(false)
-  const [configuringCard, setConfiguringCard] = useState<NetworkCard | null>(null)
+  const [configuringCard, setConfiguringCard] = useState<DeploymentsCard | null>(null)
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [activeId, setActiveId] = useState<string | null>(null)
 
@@ -209,18 +205,13 @@ export function Network() {
     }
   }
 
-  // Show loading spinner when fetching (initial or refresh)
-  const isFetching = servicesLoading || servicesRefreshing
-  // Only show skeletons when we have no data yet
-  const showSkeletons = services.length === 0 && servicesLoading
-
-  // Save cards to localStorage when they change (mark as customized)
+  // Save cards to localStorage when they change
   useEffect(() => {
-    saveNetworkCards(cards)
+    saveDeploymentsCards(cards)
     setCustomized(true)
   }, [cards, setCustomized])
 
-  // Handle addCard URL param - open modal and clear param
+  // Handle addCard URL param
   useEffect(() => {
     if (searchParams.get('addCard') === 'true') {
       setShowAddCard(true)
@@ -231,20 +222,20 @@ export function Network() {
   // Auto-refresh every 30 seconds
   useEffect(() => {
     if (!autoRefresh) return
-
     const interval = setInterval(() => {
       refetch()
+      refetchIssues()
     }, 30000)
-
     return () => clearInterval(interval)
-  }, [autoRefresh, refetch])
+  }, [autoRefresh, refetch, refetchIssues])
 
   const handleRefresh = useCallback(() => {
     refetch()
-  }, [refetch])
+    refetchIssues()
+  }, [refetch, refetchIssues])
 
   const handleAddCards = useCallback((newCards: Array<{ type: string; title: string; config: Record<string, unknown> }>) => {
-    const cardsToAdd: NetworkCard[] = newCards.map(card => ({
+    const cardsToAdd: DeploymentsCard[] = newCards.map(card => ({
       id: `card-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       card_type: card.type,
       config: card.config,
@@ -253,7 +244,7 @@ export function Network() {
     setCards(prev => [...prev, ...cardsToAdd])
     expandCards()
     setShowAddCard(false)
-  }, [])
+  }, [expandCards])
 
   const handleRemoveCard = useCallback((cardId: string) => {
     setCards(prev => prev.filter(c => c.id !== cardId))
@@ -273,12 +264,12 @@ export function Network() {
 
   const handleWidthChange = useCallback((cardId: string, newWidth: number) => {
     setCards(prev => prev.map(c =>
-      c.id === cardId ? { ...c, position: { ...(c.position || { w: 4, h: 2 }), w: newWidth } } : c
+      c.id === cardId ? { ...c, position: { ...(c.position || { w: 6, h: 2 }), w: newWidth } } : c
     ))
   }, [])
 
   const applyTemplate = useCallback((template: DashboardTemplate) => {
-    const newCards: NetworkCard[] = template.cards.map(card => ({
+    const newCards: DeploymentsCard[] = template.cards.map(card => ({
       id: `card-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       card_type: card.card_type,
       config: card.config || {},
@@ -287,55 +278,33 @@ export function Network() {
     setCards(newCards)
     expandCards()
     setShowTemplates(false)
-  }, [])
+  }, [expandCards])
 
-  // Filter services based on global cluster selection
-  const filteredServices = services.filter(s =>
-    isAllClustersSelected || (s.cluster && globalSelectedClusters.includes(s.cluster))
+  // Filter deployments based on global selection
+  const filteredDeployments = deployments.filter(d =>
+    isAllClustersSelected || (d.cluster && globalSelectedClusters.includes(d.cluster))
   )
 
-  // Calculate service stats
-  const loadBalancers = filteredServices.filter(s => s.type === 'LoadBalancer').length
-  const nodePortServices = filteredServices.filter(s => s.type === 'NodePort').length
-  const clusterIPServices = filteredServices.filter(s => s.type === 'ClusterIP').length
+  // Calculate stats
+  const totalDeployments = filteredDeployments.length
+  const healthyDeployments = filteredDeployments.filter(d => d.readyReplicas === d.replicas && d.replicas > 0).length
+  const issueCount = deploymentIssues.length
 
   // Stats value getter for the configurable StatsOverview component
   const getStatValue = useCallback((blockId: string): StatBlockValue => {
-    const drillToFirstService = () => {
-      if (filteredServices.length > 0 && filteredServices[0]) {
-        drillToService(filteredServices[0].cluster || 'default', filteredServices[0].namespace || 'default', filteredServices[0].name)
-      }
-    }
-    const drillToLoadBalancer = () => {
-      const svc = filteredServices.find(s => s.type === 'LoadBalancer')
-      if (svc) drillToService(svc.cluster || 'default', svc.namespace || 'default', svc.name)
-    }
-    const drillToNodePort = () => {
-      const svc = filteredServices.find(s => s.type === 'NodePort')
-      if (svc) drillToService(svc.cluster || 'default', svc.namespace || 'default', svc.name)
-    }
-    const drillToClusterIP = () => {
-      const svc = filteredServices.find(s => s.type === 'ClusterIP')
-      if (svc) drillToService(svc.cluster || 'default', svc.namespace || 'default', svc.name)
-    }
-
     switch (blockId) {
-      case 'services':
-        return { value: filteredServices.length, sublabel: 'total services', onClick: drillToFirstService, isClickable: filteredServices.length > 0 }
-      case 'loadbalancers':
-        return { value: loadBalancers, sublabel: 'external access', onClick: drillToLoadBalancer, isClickable: loadBalancers > 0 }
-      case 'nodeport':
-        return { value: nodePortServices, sublabel: 'node-level access', onClick: drillToNodePort, isClickable: nodePortServices > 0 }
-      case 'clusterip':
-        return { value: clusterIPServices, sublabel: 'internal only', onClick: drillToClusterIP, isClickable: clusterIPServices > 0 }
-      case 'ingresses':
-        return { value: '-', sublabel: 'ingresses', isClickable: false }
-      case 'endpoints':
-        return { value: '-', sublabel: 'endpoints', isClickable: false }
+      case 'namespaces':
+        return { value: totalDeployments, sublabel: 'total deployments' }
+      case 'healthy':
+        return { value: healthyDeployments, sublabel: 'healthy' }
+      case 'warning':
+        return { value: totalDeployments - healthyDeployments - issueCount, sublabel: 'degraded' }
+      case 'critical':
+        return { value: issueCount, sublabel: 'with issues' }
       default:
-        return { value: '-', sublabel: '' }
+        return { value: 0 }
     }
-  }, [filteredServices, loadBalancers, nodePortServices, clusterIPServices, drillToService])
+  }, [totalDeployments, healthyDeployments, issueCount])
 
   // Transform card for ConfigureCardModal
   const configureCard = configuringCard ? {
@@ -353,12 +322,12 @@ export function Network() {
           <div className="flex items-center gap-3">
             <div>
               <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-                <Globe className="w-6 h-6 text-purple-400" />
-                Network
+                <Rocket className="w-6 h-6 text-purple-400" />
+                Deployments
               </h1>
-              <p className="text-muted-foreground">Monitor network resources across clusters</p>
+              <p className="text-muted-foreground">Monitor deployment health and rollout status</p>
             </div>
-            {servicesRefreshing && (
+            {isRefreshing && (
               <span className="flex items-center gap-1 text-xs text-amber-400 animate-pulse" title="Updating...">
                 <Hourglass className="w-3 h-3" />
                 <span>Updating</span>
@@ -366,10 +335,10 @@ export function Network() {
             )}
           </div>
           <div className="flex items-center gap-3">
-            <label htmlFor="network-auto-refresh" className="flex items-center gap-1.5 cursor-pointer text-xs text-muted-foreground" title="Auto-refresh every 30s">
+            <label htmlFor="deployments-auto-refresh" className="flex items-center gap-1.5 cursor-pointer text-xs text-muted-foreground" title="Auto-refresh every 30s">
               <input
                 type="checkbox"
-                id="network-auto-refresh"
+                id="deployments-auto-refresh"
                 checked={autoRefresh}
                 onChange={(e) => setAutoRefresh(e.target.checked)}
                 className="rounded border-border w-3.5 h-3.5"
@@ -378,51 +347,49 @@ export function Network() {
             </label>
             <button
               onClick={handleRefresh}
-              disabled={isFetching}
+              disabled={isRefreshing}
               className="p-2 rounded-lg hover:bg-secondary transition-colors disabled:opacity-50"
               title="Refresh data"
             >
-              <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
             </button>
           </div>
         </div>
       </div>
 
-      {/* Stats Overview - configurable */}
+      {/* Stats Overview */}
       <StatsOverview
-        dashboardType="network"
+        dashboardType="workloads"
         getStatValue={getStatValue}
-        hasData={services.length > 0 || !showSkeletons}
-        isLoading={showSkeletons}
+        hasData={totalDeployments > 0}
+        isLoading={isLoading}
         lastUpdated={lastUpdated}
-        collapsedStorageKey="kubestellar-network-stats-collapsed"
+        collapsedStorageKey="kubestellar-deployments-stats-collapsed"
       />
 
       {/* Dashboard Cards Section */}
       <div className="mb-6">
-        {/* Card section header with toggle and buttons */}
         <div className="flex items-center justify-between mb-3">
           <button
             onClick={() => setShowCards(!showCards)}
             className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
           >
             <LayoutGrid className="w-4 h-4" />
-            <span>Network Cards ({cards.length})</span>
+            <span>Deployment Cards ({cards.length})</span>
             {showCards ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
           </button>
         </div>
 
-        {/* Cards grid */}
         {showCards && (
           <>
             {cards.length === 0 ? (
               <div className="glass p-8 rounded-lg border-2 border-dashed border-border/50 text-center">
                 <div className="flex justify-center mb-4">
-                  <Globe className="w-12 h-12 text-muted-foreground" />
+                  <Rocket className="w-12 h-12 text-muted-foreground" />
                 </div>
-                <h3 className="text-lg font-medium text-foreground mb-2">Network Dashboard</h3>
+                <h3 className="text-lg font-medium text-foreground mb-2">Deployments Dashboard</h3>
                 <p className="text-muted-foreground text-sm max-w-md mx-auto mb-4">
-                  Add cards to monitor Ingresses, NetworkPolicies, and service mesh configurations across your clusters.
+                  Add cards to monitor deployment health, rollout progress, and issues across your clusters.
                 </p>
                 <button
                   onClick={() => setShowAddCard(true)}
@@ -442,7 +409,7 @@ export function Network() {
                 <SortableContext items={cards.map(c => c.id)} strategy={rectSortingStrategy}>
                   <div className="grid grid-cols-12 gap-4">
                     {cards.map(card => (
-                      <SortableNetworkCard
+                      <SortableDeploymentsCard
                         key={card.id}
                         card={card}
                         onConfigure={() => handleConfigureCard(card.id)}
@@ -456,7 +423,7 @@ export function Network() {
                 <DragOverlay>
                   {activeId ? (
                     <div className="opacity-80 rotate-3 scale-105">
-                      <NetworkDragPreviewCard card={cards.find(c => c.id === activeId)!} />
+                      <DeploymentsDragPreviewCard card={cards.find(c => c.id === activeId)!} />
                     </div>
                   ) : null}
                 </DragOverlay>
