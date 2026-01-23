@@ -20,7 +20,7 @@ import {
   rectSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { useClusters } from '../../hooks/useMCP'
+import { useClusters, useGPUNodes } from '../../hooks/useMCP'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { useShowCards } from '../../hooks/useShowCards'
 import { useDashboardReset } from '../../hooks/useDashboardReset'
@@ -156,6 +156,7 @@ function NodesDragPreviewCard({ card }: { card: NodesCard }) {
 export function Nodes() {
   const [searchParams, setSearchParams] = useSearchParams()
   const { clusters, isLoading, isRefreshing, lastUpdated, refetch } = useClusters()
+  const { nodes: gpuNodes } = useGPUNodes()
   const { selectedClusters: globalSelectedClusters, isAllClustersSelected } = useGlobalFilters()
 
   // Card state
@@ -286,11 +287,10 @@ export function Nodes() {
   const totalCPU = reachableClusters.reduce((sum, c) => sum + (c.cpuCores || 0), 0)
   const totalMemoryGB = reachableClusters.reduce((sum, c) => sum + (c.memoryGB || 0), 0)
   const totalPods = reachableClusters.reduce((sum, c) => sum + (c.podCount || 0), 0)
-  // GPU count from clusters that have GPU data
-  const totalGPUs = reachableClusters.reduce((sum, c) => {
-    // gpuCount may be on the cluster or we estimate from context
-    return sum + ((c as Record<string, unknown>).gpuCount as number || 0)
-  }, 0)
+  // GPU count from GPU nodes
+  const totalGPUs = gpuNodes
+    .filter(node => isAllClustersSelected || globalSelectedClusters.includes(node.cluster.split('/')[0]))
+    .reduce((sum, node) => sum + node.gpuCount, 0)
 
   // Calculate utilization from cluster data
   const currentCpuUtil = (() => {

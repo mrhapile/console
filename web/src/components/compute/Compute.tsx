@@ -20,7 +20,7 @@ import {
   rectSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { useClusters } from '../../hooks/useMCP'
+import { useClusters, useGPUNodes } from '../../hooks/useMCP'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { useShowCards } from '../../hooks/useShowCards'
 import { useDrillDownActions } from '../../hooks/useDrillDown'
@@ -158,6 +158,7 @@ export function Compute() {
   const [searchParams, setSearchParams] = useSearchParams()
   const location = useLocation()
   const { clusters, isLoading, isRefreshing, lastUpdated, refetch } = useClusters()
+  const { nodes: gpuNodes } = useGPUNodes()
   const {
     selectedClusters: globalSelectedClusters,
     isAllClustersSelected,
@@ -308,7 +309,9 @@ export function Compute() {
     totalMemoryGB: reachableClusters.reduce((sum, c) => sum + (c.memoryGB || 0), 0),
     totalNodes: reachableClusters.reduce((sum, c) => sum + (c.nodeCount || 0), 0),
     totalPods: reachableClusters.reduce((sum, c) => sum + (c.podCount || 0), 0),
-    totalGPUs: reachableClusters.reduce((sum, c) => sum + (c.gpuCount || 0), 0),
+    totalGPUs: gpuNodes
+      .filter(node => isAllClustersSelected || globalSelectedClusters.includes(node.cluster.split('/')[0]))
+      .reduce((sum, node) => sum + node.gpuCount, 0),
   }
 
   // Check if we have any reachable clusters with actual data (not refreshing)

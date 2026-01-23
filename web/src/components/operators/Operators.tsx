@@ -20,7 +20,7 @@ import {
   rectSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { useClusters } from '../../hooks/useMCP'
+import { useClusters, useGPUNodes } from '../../hooks/useMCP'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { useShowCards } from '../../hooks/useShowCards'
 import { useDashboardReset } from '../../hooks/useDashboardReset'
@@ -156,6 +156,7 @@ function OperatorsDragPreviewCard({ card }: { card: OperatorsCard }) {
 export function Operators() {
   const [searchParams, setSearchParams] = useSearchParams()
   const { clusters, isLoading, isRefreshing, lastUpdated, refetch } = useClusters()
+  const { nodes: gpuNodes } = useGPUNodes()
   const { selectedClusters: globalSelectedClusters, isAllClustersSelected } = useGlobalFilters()
 
   // Card state
@@ -286,7 +287,9 @@ export function Operators() {
   const totalCPU = reachableClusters.reduce((sum, c) => sum + (c.cpuCores || 0), 0)
   const totalMemoryGB = reachableClusters.reduce((sum, c) => sum + (c.memoryGB || 0), 0)
   const totalStorageGB = reachableClusters.reduce((sum, c) => sum + (c.storageGB || 0), 0)
-  const totalGPUs = reachableClusters.reduce((sum, c) => sum + (c.gpuCount || 0), 0)
+  const totalGPUs = gpuNodes
+    .filter(node => isAllClustersSelected || globalSelectedClusters.includes(node.cluster.split('/')[0]))
+    .reduce((sum, node) => sum + node.gpuCount, 0)
   const totalPods = reachableClusters.reduce((sum, c) => sum + (c.podCount || 0), 0)
 
   // Stats value getter for the configurable StatsOverview component
