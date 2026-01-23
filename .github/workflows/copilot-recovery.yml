@@ -11,6 +11,17 @@ on:
     types: [submitted]
   pull_request_review_comment:
     types: [created]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to test'
+        required: true
+        type: string
+      test_preview:
+        description: 'Run preview test'
+        required: false
+        default: true
+        type: boolean
 
 permissions:
   contents: write
@@ -479,5 +490,92 @@ jobs:
 
           ---
           *This notification was automatically generated.*
+          EOF
+          )"
+
+  # Manual preview test (triggered via workflow_dispatch)
+  manual-preview-test:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.test_preview == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test preview deployment
+        id: preview_test
+        run: |
+          PR_NUM="${{ github.event.inputs.pr_number }}"
+          PREVIEW_URL="https://deploy-preview-${PR_NUM}.console-deploy-preview.kubestellar.io"
+
+          echo "Testing preview for PR #$PR_NUM: $PREVIEW_URL"
+
+          # Wait for Netlify to be ready (up to 2 minutes)
+          for i in {1..12}; do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$PREVIEW_URL" --max-time 10 || echo "000")
+            echo "Attempt $i: HTTP $HTTP_CODE"
+
+            if [ "$HTTP_CODE" == "200" ]; then
+              echo "preview_status=success" >> $GITHUB_OUTPUT
+              echo "preview_url=$PREVIEW_URL" >> $GITHUB_OUTPUT
+              break
+            fi
+            sleep 10
+          done
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "preview_status=failed" >> $GITHUB_OUTPUT
+            echo "Preview not accessible after 2 minutes"
+          fi
+
+          # Check for JavaScript errors
+          CONTENT=$(curl -s "$PREVIEW_URL" --max-time 30 || echo "")
+
+          if echo "$CONTENT" | grep -qi "chunk.*failed\|module.*error\|syntax.*error"; then
+            echo "js_errors=true" >> $GITHUB_OUTPUT
+          else
+            echo "js_errors=false" >> $GITHUB_OUTPUT
+          fi
+
+          # Check if React app renders
+          if echo "$CONTENT" | grep -q 'id="root"' && [ ${#CONTENT} -gt 5000 ]; then
+            echo "app_renders=true" >> $GITHUB_OUTPUT
+          else
+            echo "app_renders=maybe" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Post test results
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUM="${{ github.event.inputs.pr_number }}"
+          PREVIEW_URL="https://deploy-preview-${PR_NUM}.console-deploy-preview.kubestellar.io"
+          PREVIEW_STATUS="${{ steps.preview_test.outputs.preview_status }}"
+          JS_ERRORS="${{ steps.preview_test.outputs.js_errors }}"
+          APP_RENDERS="${{ steps.preview_test.outputs.app_renders }}"
+
+          # Build status message
+          if [ "$PREVIEW_STATUS" == "success" ] && [ "$JS_ERRORS" == "false" ]; then
+            STATUS_EMOJI="✅"
+            STATUS_MSG="Preview is accessible and appears healthy."
+          elif [ "$PREVIEW_STATUS" == "failed" ]; then
+            STATUS_EMOJI="❌"
+            STATUS_MSG="Preview URL is not accessible."
+          elif [ "$JS_ERRORS" == "true" ]; then
+            STATUS_EMOJI="⚠️"
+            STATUS_MSG="Preview has JavaScript errors."
+          else
+            STATUS_EMOJI="✅"
+            STATUS_MSG="Preview deployed successfully."
+          fi
+
+          gh pr comment "$PR_NUM" --repo "${{ github.repository }}" --body "$(cat <<EOF
+          ## $STATUS_EMOJI Manual Preview Test Results
+
+          **Preview:** $PREVIEW_URL
+
+          - **Accessible:** $([ "$PREVIEW_STATUS" == "success" ] && echo "✅ Yes" || echo "❌ No")
+          - **JS Errors:** $([ "$JS_ERRORS" == "true" ] && echo "⚠️ Detected" || echo "✅ None")
+          - **App Renders:** $([ "$APP_RENDERS" == "true" ] && echo "✅ Yes" || echo "⚠️ Needs verification")
+
+          **Status:** $STATUS_MSG
+
+          *Manual test triggered via workflow_dispatch*
           EOF
           )"
