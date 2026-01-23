@@ -13,6 +13,7 @@ import (
 	"os"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -161,6 +162,9 @@ type GitHubIssue struct {
 		Login string `json:"login"`
 		ID    int    `json:"id"`
 	} `json:"user"`
+	ClosedBy *struct {
+		Login string `json:"login"`
+	} `json:"closed_by"`
 	Labels []struct {
 		Name string `json:"name"`
 	} `json:"labels"`
@@ -177,6 +181,11 @@ type QueueItem struct {
 	GitHubIssueNumber int    `json:"github_issue_number"`
 	GitHubIssueURL    string `json:"github_issue_url"`
 	Status            string `json:"status"`
+	PRNumber          int    `json:"pr_number,omitempty"`
+	PRURL             string `json:"pr_url,omitempty"`
+	PreviewURL        string `json:"netlify_preview_url,omitempty"`
+	CopilotSessionURL string `json:"copilot_session_url,omitempty"`
+	ClosedByUser      bool   `json:"closed_by_user,omitempty"`
 	CreatedAt         string `json:"created_at"`
 	UpdatedAt         string `json:"updated_at,omitempty"`
 }
@@ -202,6 +211,9 @@ func (h *FeedbackHandler) ListAllFeatureRequests(c *fiber.Ctx) error {
 		return h.listLocalFeatureRequests(c, userID)
 	}
 
+	// Fetch linked PRs for all issues
+	linkedPRs := h.fetchLinkedPRs(issues)
+
 	// Convert to queue items
 	queueItems := make([]QueueItem, 0, len(issues))
 	for _, issue := range issues {
@@ -211,7 +223,17 @@ func (h *FeedbackHandler) ListAllFeatureRequests(c *fiber.Ctx) error {
 		for _, label := range issue.Labels {
 			switch label.Name {
 			case "triage/accepted":
-				status = "triage_accepted"
+				if status == "needs_triage" {
+					status = "triage_accepted"
+				}
+			case "copilot/working", "feasibility-study":
+				status = "feasibility_study"
+			case "fix-ready", "copilot/fix-ready":
+				status = "fix_ready"
+			case "fix-complete":
+				status = "fix_complete"
+			case "unable-to-fix", "needs-human-review":
+				status = "unable_to_fix"
 			case "bug":
 				requestType = "bug"
 			case "enhancement", "feature":
@@ -219,8 +241,33 @@ func (h *FeedbackHandler) ListAllFeatureRequests(c *fiber.Ctx) error {
 			}
 		}
 
+		// Check for linked PR - if we have one, at minimum it's fix_ready
+		var prNumber int
+		var prURL string
+		var previewURL string
+		var copilotSessionURL string
+		if pr, ok := linkedPRs[issue.Number]; ok {
+			prNumber = pr.Number
+			prURL = pr.HTMLURL
+			// Build preview URL using KubeStellar domain
+			previewURL = fmt.Sprintf("https://deploy-preview-%d.console-deploy-preview.kubestellar.io", pr.Number)
+			copilotSessionURL = pr.HTMLURL
+			// If PR is merged (check MergedAt since Merged field isn't in list response), status is fix_complete
+			if pr.MergedAt != nil {
+				status = "fix_complete"
+			} else if status == "needs_triage" || status == "triage_accepted" || status == "feasibility_study" {
+				// If we have an open PR and status is still early, upgrade to fix_ready
+				status = "fix_ready"
+			}
+		}
+
+		// Handle closed issues without a merged PR
+		if issue.State == "closed" && status != "fix_complete" {
+			status = "closed"
+		}
+
 		isOwnedByUser := issue.User.Login == currentGitHubLogin
-		isTriaged := status == "triage_accepted"
+		isTriaged := status != "needs_triage"
 
 		title := issue.Title
 		description := issue.Body
@@ -229,6 +276,9 @@ func (h *FeedbackHandler) ListAllFeatureRequests(c *fiber.Ctx) error {
 			title = "[Pending Review]"
 			description = "This request is pending maintainer review."
 		}
+
+		// Check if issue was closed by the current user (the one viewing the queue)
+		closedByUser := issue.State == "closed" && issue.ClosedBy != nil && issue.ClosedBy.Login == currentGitHubLogin
 
 		queueItems = append(queueItems, QueueItem{
 			ID:                fmt.Sprintf("gh-%d", issue.Number),
@@ -240,6 +290,11 @@ func (h *FeedbackHandler) ListAllFeatureRequests(c *fiber.Ctx) error {
 			GitHubIssueNumber: issue.Number,
 			GitHubIssueURL:    issue.HTMLURL,
 			Status:            status,
+			PRNumber:          prNumber,
+			PRURL:             prURL,
+			PreviewURL:        previewURL,
+			CopilotSessionURL: copilotSessionURL,
+			ClosedByUser:      closedByUser,
 			CreatedAt:         issue.CreatedAt,
 			UpdatedAt:         issue.UpdatedAt,
 		})
@@ -248,13 +303,94 @@ func (h *FeedbackHandler) ListAllFeatureRequests(c *fiber.Ctx) error {
 	return c.JSON(queueItems)
 }
 
-// fetchGitHubIssues fetches open issues from the configured GitHub repo
+// GitHubPR represents a pull request from GitHub API
+type GitHubPR struct {
+	Number   int        `json:"number"`
+	HTMLURL  string     `json:"html_url"`
+	State    string     `json:"state"`
+	Title    string     `json:"title"`
+	Body     string     `json:"body"`
+	Merged   bool       `json:"merged"`
+	MergedAt *time.Time `json:"merged_at"`
+}
+
+// fetchLinkedPRs fetches PRs that are linked to the given issues
+func (h *FeedbackHandler) fetchLinkedPRs(issues []GitHubIssue) map[int]GitHubPR {
+	result := make(map[int]GitHubPR)
+	if h.githubToken == "" || h.repoOwner == "" || h.repoName == "" {
+		return result
+	}
+
+	// Build issue number set for quick lookup
+	issueNumbers := make(map[int]bool)
+	for _, issue := range issues {
+		issueNumbers[issue.Number] = true
+	}
+
+	// Match PRs to issues by looking for "Fixes #N", "Closes #N", or "Fixes owner/repo#N" in PR body
+	fixesPattern := regexp.MustCompile(`(?i)(?:fixes|closes|resolves)\s+(?:[a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+)?#(\d+)`)
+
+	// Fetch both open and closed PRs (closed includes merged)
+	for _, state := range []string{"open", "closed"} {
+		url := fmt.Sprintf("https://api.github.com/repos/%s/%s/pulls?state=%s&per_page=50&sort=updated&direction=desc",
+			h.repoOwner, h.repoName, state)
+
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			continue
+		}
+
+		req.Header.Set("Authorization", "Bearer "+h.githubToken)
+		req.Header.Set("Accept", "application/vnd.github.v3+json")
+
+		client := &http.Client{Timeout: 10 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			continue
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			continue
+		}
+
+		var prs []GitHubPR
+		if err := json.NewDecoder(resp.Body).Decode(&prs); err != nil {
+			resp.Body.Close()
+			continue
+		}
+		resp.Body.Close()
+
+		for _, pr := range prs {
+			matches := fixesPattern.FindAllStringSubmatch(pr.Body, -1)
+			for _, match := range matches {
+				if len(match) > 1 {
+					issueNum, err := strconv.Atoi(match[1])
+					if err == nil && issueNumbers[issueNum] {
+						// Prefer merged PRs > open PRs > closed-without-merge
+						existing, exists := result[issueNum]
+						prIsMerged := pr.MergedAt != nil
+						existingIsMerged := existing.MergedAt != nil
+						if !exists || prIsMerged || (pr.State == "open" && !existingIsMerged) {
+							result[issueNum] = pr
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return result
+}
+
+// fetchGitHubIssues fetches issues from the configured GitHub repo (both open and closed)
 func (h *FeedbackHandler) fetchGitHubIssues() ([]GitHubIssue, error) {
 	if h.githubToken == "" || h.repoOwner == "" || h.repoName == "" {
 		return nil, fmt.Errorf("GitHub not configured")
 	}
 
-	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/issues?state=open&per_page=50&sort=created&direction=desc",
+	// Fetch both open and closed issues so merged items stay in the queue
+	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/issues?state=all&per_page=50&sort=updated&direction=desc",
 		h.repoOwner, h.repoName)
 
 	req, err := http.NewRequest("GET", url, nil)
@@ -347,8 +483,33 @@ func (h *FeedbackHandler) GetFeatureRequest(c *fiber.Ctx) error {
 
 // CloseRequest closes a feature request
 func (h *FeedbackHandler) CloseRequest(c *fiber.Ctx) error {
+	idParam := c.Params("id")
+
+	// Handle GitHub-sourced items (format: gh-{issue_number})
+	if strings.HasPrefix(idParam, "gh-") {
+		issueNumStr := strings.TrimPrefix(idParam, "gh-")
+		issueNum, err := strconv.Atoi(issueNumStr)
+		if err != nil {
+			return fiber.NewError(fiber.StatusBadRequest, "Invalid GitHub issue number")
+		}
+
+		// Close the GitHub issue
+		if h.githubToken != "" {
+			go h.closeGitHubIssue(issueNum)
+		}
+
+		// Return a minimal response for GitHub items
+		return c.JSON(map[string]any{
+			"id":                  idParam,
+			"github_issue_number": issueNum,
+			"status":              "closed",
+			"message":             "Issue closed",
+		})
+	}
+
+	// Handle local database items (UUID format)
 	userID := middleware.GetUserID(c)
-	requestID, err := uuid.Parse(c.Params("id"))
+	requestID, err := uuid.Parse(idParam)
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "Invalid request ID")
 	}
@@ -381,8 +542,32 @@ func (h *FeedbackHandler) CloseRequest(c *fiber.Ctx) error {
 
 // RequestUpdate requests an update on a feature request (pings the issue)
 func (h *FeedbackHandler) RequestUpdate(c *fiber.Ctx) error {
+	idParam := c.Params("id")
+
+	// Handle GitHub-sourced items (format: gh-{issue_number})
+	if strings.HasPrefix(idParam, "gh-") {
+		issueNumStr := strings.TrimPrefix(idParam, "gh-")
+		issueNum, err := strconv.Atoi(issueNumStr)
+		if err != nil {
+			return fiber.NewError(fiber.StatusBadRequest, "Invalid GitHub issue number")
+		}
+
+		// Add a comment to the GitHub issue requesting an update
+		if h.githubToken != "" {
+			go h.addIssueComment(issueNum, "The user has requested an update on this issue.")
+		}
+
+		// Return a minimal response for GitHub items
+		return c.JSON(map[string]interface{}{
+			"id":                  idParam,
+			"github_issue_number": issueNum,
+			"message":             "Update requested",
+		})
+	}
+
+	// Handle local database items (UUID format)
 	userID := middleware.GetUserID(c)
-	requestID, err := uuid.Parse(c.Params("id"))
+	requestID, err := uuid.Parse(idParam)
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "Invalid request ID")
 	}

@@ -107,6 +107,15 @@ export const STATUS_DESCRIPTIONS: Record<RequestStatus, string> = {
   closed: 'This request has been closed',
 }
 
+/** Get status description, hiding it for user-closed items (badge is sufficient) */
+export function getStatusDescription(status: RequestStatus, closedByUser?: boolean): string {
+  if (status === 'closed' && closedByUser) {
+    return ''
+  }
+  return STATUS_DESCRIPTIONS[status]
+}
+
+
 // Demo mode mock data
 const DEMO_FEATURE_REQUESTS: FeatureRequest[] = [
   {

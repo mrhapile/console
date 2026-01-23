@@ -5,7 +5,7 @@ import {
   useFeatureRequests,
   useNotifications,
   STATUS_LABELS,
-  STATUS_DESCRIPTIONS,
+  getStatusDescription,
   isTriaged,
   type RequestType,
   type RequestStatus,
@@ -473,9 +473,11 @@ export function FeatureRequestModal({ isOpen, onClose }: FeatureRequestModalProp
                                     <span className={`px-1.5 py-0.5 text-[10px] font-medium rounded ${statusInfo.bgColor} ${statusInfo.color}`}>
                                       {statusInfo.label}
                                     </span>
-                                    <span className={`text-xs text-muted-foreground ${shouldBlur ? 'blur-sm select-none' : ''}`}>
-                                      {STATUS_DESCRIPTIONS[request.status]}
-                                    </span>
+                                    {getStatusDescription(request.status, request.closed_by_user) && (
+                                      <span className={`text-xs text-muted-foreground ${shouldBlur ? 'blur-sm select-none' : ''}`}>
+                                        {getStatusDescription(request.status, request.closed_by_user)}
+                                      </span>
+                                    )}
                                   </div>
                                 </>
                               )}
@@ -508,22 +510,68 @@ export function FeatureRequestModal({ isOpen, onClose }: FeatureRequestModalProp
                                   )}
                                 </div>
                               )}
-                              {/* Show PR link if fix is ready or complete */}
-                              {(request.status === 'fix_ready' || request.status === 'fix_complete') && request.pr_url && (
+                              {/* Show PR link if fix is ready */}
+                              {request.status === 'fix_ready' && request.pr_url && (
                                 <a
                                   href={request.pr_url}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className={`text-xs flex items-center gap-1 mt-1.5 ${
-                                    request.status === 'fix_complete'
-                                      ? 'text-emerald-400 hover:text-emerald-300'
-                                      : 'text-green-400 hover:text-green-300'
-                                  }`}
+                                  className="text-xs flex items-center gap-1 mt-1.5 text-green-400 hover:text-green-300"
                                   onClick={e => e.stopPropagation()}
                                 >
                                   <GitPullRequest className="w-3 h-3" />
-                                  {request.status === 'fix_complete' ? 'View Merged PR' : 'View PR'} #{request.pr_number}
+                                  View PR #{request.pr_number}
                                 </a>
+                              )}
+                              {/* Show merged celebration for fix_complete */}
+                              {request.status === 'fix_complete' && (
+                                <div className="mt-2 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <div className="flex items-center gap-1.5">
+                                      <Check className="w-4 h-4 text-emerald-400" />
+                                      <span className="text-xs font-semibold text-emerald-400">Merged</span>
+                                    </div>
+                                  </div>
+                                  <p className="text-xs text-emerald-300/80 mb-2">
+                                    Thank you for your feedback! Your {request.request_type === 'bug' ? 'bug fix' : 'feature'} has been merged and will be available in the next nightly build and weekly release.
+                                  </p>
+                                  <div className="flex items-center gap-3 flex-wrap">
+                                    <a
+                                      href="https://github.com/kubestellar/console/releases"
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-xs flex items-center gap-1 text-emerald-400 hover:text-emerald-300"
+                                      onClick={e => e.stopPropagation()}
+                                    >
+                                      <ExternalLink className="w-3 h-3" />
+                                      Releases
+                                    </a>
+                                    {request.pr_url && (
+                                      <a
+                                        href={request.pr_url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-xs flex items-center gap-1 text-emerald-400 hover:text-emerald-300"
+                                        onClick={e => e.stopPropagation()}
+                                      >
+                                        <GitPullRequest className="w-3 h-3" />
+                                        PR #{request.pr_number}
+                                      </a>
+                                    )}
+                                    {request.github_issue_url && (
+                                      <a
+                                        href={request.github_issue_url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-xs flex items-center gap-1 text-emerald-400 hover:text-emerald-300"
+                                        onClick={e => e.stopPropagation()}
+                                      >
+                                        <ExternalLink className="w-3 h-3" />
+                                        Issue #{request.github_issue_number}
+                                      </a>
+                                    )}
+                                  </div>
+                                </div>
                               )}
                               {/* Show latest comment if unable to fix */}
                               {request.status === 'unable_to_fix' && request.latest_comment && (
@@ -556,8 +604,8 @@ export function FeatureRequestModal({ isOpen, onClose }: FeatureRequestModalProp
                                   </div>
                                 </div>
                               )}
-                              {/* Simple preview link for other statuses */}
-                              {request.netlify_preview_url && request.status !== 'fix_ready' && (
+                              {/* Simple preview link for other statuses (hide for user-closed requests) */}
+                              {request.netlify_preview_url && request.status !== 'fix_ready' && !request.closed_by_user && (
                                 <a
                                   href={request.netlify_preview_url}
                                   target="_blank"
