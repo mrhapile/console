@@ -11,7 +11,7 @@ on:
       issue_number:
         description: 'Issue number to fix'
         required: true
-        type: number
+        type: string
       issue_title:
         description: 'Issue title (optional, for display)'
         required: false
