@@ -316,6 +316,9 @@ Please provide:
           case 'pod_crash':
             evaluatePodCrash(rule)
             break
+          case 'weather_alerts':
+            evaluateWeatherAlerts(rule)
+            break
           default:
             break
         }
@@ -457,6 +460,79 @@ Please provide:
       }
     },
     [podIssues, createAlert]
+  )
+
+  // Evaluate weather alerts condition - mock implementation
+  // TODO: Replace with actual weather API integration for production use
+  const evaluateWeatherAlerts = useCallback(
+    (rule: AlertRule) => {
+      // Mock weather data evaluation
+      // In production, this would integrate with a weather API
+      const mockWeatherCondition = rule.condition.weatherCondition || 'severe_storm'
+      
+      // Randomly trigger alerts for demo purposes (10% chance)
+      const shouldAlert = Math.random() < 0.1
+
+      if (shouldAlert) {
+        let message = ''
+        const details: Record<string, unknown> = {
+          weatherCondition: mockWeatherCondition,
+        }
+
+        switch (mockWeatherCondition) {
+          case 'severe_storm':
+            message = 'Severe storm warning in effect'
+            details.description = 'Thunderstorm with possible hail and strong winds'
+            break
+          case 'extreme_heat':
+            const temp = rule.condition.temperatureThreshold || 100
+            message = `Extreme heat alert - Temperature expected to exceed ${temp}°F`
+            details.temperature = temp + 5
+            details.threshold = temp
+            break
+          case 'heavy_rain':
+            message = 'Heavy rain warning - Flooding possible'
+            details.rainfall = '2-3 inches'
+            break
+          case 'snow':
+            message = 'Winter storm warning - Heavy snow expected'
+            details.snowfall = '6-12 inches'
+            break
+          case 'high_wind':
+            const windSpeed = rule.condition.windSpeedThreshold || 40
+            message = `High wind warning - Gusts up to ${windSpeed + 10} mph expected`
+            details.windSpeed = windSpeed + 10
+            details.threshold = windSpeed
+            break
+        }
+
+        createAlert(
+          rule,
+          message,
+          details,
+          undefined,
+          undefined,
+          'Weather',
+          'WeatherCondition'
+        )
+      } else {
+        // Auto-resolve if condition clears
+        setAlerts(prev => {
+          const firingAlert = prev.find(
+            a => a.ruleId === rule.id && a.status === 'firing'
+          )
+          if (firingAlert) {
+            return prev.map(a =>
+              a.id === firingAlert.id
+                ? { ...a, status: 'resolved' as const, resolvedAt: new Date().toISOString() }
+                : a
+            )
+          }
+          return prev
+        })
+      }
+    },
+    [createAlert]
   )
 
   // Periodic evaluation (every 30 seconds)

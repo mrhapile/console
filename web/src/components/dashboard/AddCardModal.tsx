@@ -93,6 +93,9 @@ const CARD_CATALOG = {
     { type: 'opa_policies', title: 'OPA Gatekeeper', description: 'Policy enforcement with OPA Gatekeeper - shows installed status per cluster', visualization: 'status' },
     { type: 'kyverno_policies', title: 'Kyverno Policies', description: 'Kubernetes-native policy management with Kyverno (demo)', visualization: 'status' },
   ],
+  'Misc': [
+    { type: 'weather', title: 'Weather', description: 'Weather conditions with multi-day forecasts and animated backgrounds', visualization: 'status' },
+  ],
 } as const
 
 interface CardSuggestion {

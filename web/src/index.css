@@ -477,6 +477,97 @@
   animation: spin-min 1s linear infinite;
 }
 
+/* Weather animations */
+@keyframes snow-fall {
+  0% { 
+    transform: translateY(-10px) translateX(0);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% { 
+    transform: translateY(100vh) translateX(10px);
+    opacity: 0;
+  }
+}
+
+@keyframes rain-drop {
+  0% { 
+    transform: translateY(-10px);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.8;
+  }
+  100% { 
+    transform: translateY(100vh);
+    opacity: 0;
+  }
+}
+
+@keyframes cloud-drift {
+  0% { 
+    transform: translateX(-10%);
+  }
+  100% { 
+    transform: translateX(110%);
+  }
+}
+
+@keyframes sun-rays {
+  0% { 
+    opacity: 0.5;
+    transform: rotate(0deg) scale(1);
+  }
+  50% { 
+    opacity: 0.8;
+    transform: rotate(180deg) scale(1.1);
+  }
+  100% { 
+    opacity: 0.5;
+    transform: rotate(360deg) scale(1);
+  }
+}
+
+@keyframes wind-blow {
+  0% { 
+    transform: translateX(-5px);
+    opacity: 0.3;
+  }
+  50% { 
+    transform: translateX(5px);
+    opacity: 0.6;
+  }
+  100% { 
+    transform: translateX(-5px);
+    opacity: 0.3;
+  }
+}
+
+.weather-snow {
+  animation: snow-fall linear infinite;
+}
+
+.weather-rain {
+  animation: rain-drop linear infinite;
+}
+
+.weather-cloud {
+  animation: cloud-drift linear infinite;
+}
+
+.weather-sun {
+  animation: sun-rays 8s ease-in-out infinite;
+}
+
+.weather-wind {
+  animation: wind-blow 2s ease-in-out infinite;
+}
+
 /* Theme-specific overrides */
 
 /* Batman theme - extra dark with yellow glow */

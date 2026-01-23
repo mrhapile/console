@@ -20,6 +20,7 @@ const CONDITION_TYPES: { value: AlertConditionType; label: string; description: 
   { value: 'node_not_ready', label: 'Node Not Ready', description: 'Alert when a node is not in Ready state' },
   { value: 'pod_crash', label: 'Pod Crash Loop', description: 'Alert when pod restarts exceed threshold' },
   { value: 'memory_pressure', label: 'Memory Pressure', description: 'Alert when memory usage exceeds threshold' },
+  { value: 'weather_alerts', label: 'Weather Alerts', description: 'Alert on severe weather conditions' },
 ]
 
 const SEVERITY_OPTIONS: { value: AlertSeverity; label: string; color: string }[] = [
@@ -51,6 +52,12 @@ export function AlertRuleEditor({ rule, onSave, onCancel }: AlertRuleEditorProps
   const [selectedNamespaces] = useState<string[]>(
     rule?.condition.namespaces || []
   )
+  // Weather alert specific state
+  const [weatherCondition, setWeatherCondition] = useState<'severe_storm' | 'extreme_heat' | 'heavy_rain' | 'snow' | 'high_wind'>(
+    rule?.condition.weatherCondition || 'severe_storm'
+  )
+  const [temperatureThreshold, setTemperatureThreshold] = useState(rule?.condition.temperatureThreshold || 100)
+  const [windSpeedThreshold, setWindSpeedThreshold] = useState(rule?.condition.windSpeedThreshold || 40)
 
   // Channels state
   const [channels, setChannels] = useState<AlertChannel[]>(
@@ -79,6 +86,15 @@ export function AlertRuleEditor({ rule, onSave, onCancel }: AlertRuleEditorProps
       }
     }
 
+    if (conditionType === 'weather_alerts') {
+      if (weatherCondition === 'extreme_heat' && (temperatureThreshold < -50 || temperatureThreshold > 150)) {
+        newErrors.temperatureThreshold = 'Temperature must be between -50 and 150'
+      }
+      if (weatherCondition === 'high_wind' && (windSpeedThreshold < 1 || windSpeedThreshold > 200)) {
+        newErrors.windSpeedThreshold = 'Wind speed must be between 1 and 200'
+      }
+    }
+
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
@@ -94,6 +110,10 @@ export function AlertRuleEditor({ rule, onSave, onCancel }: AlertRuleEditorProps
       duration: duration > 0 ? duration : undefined,
       clusters: selectedClusters.length > 0 ? selectedClusters : undefined,
       namespaces: selectedNamespaces.length > 0 ? selectedNamespaces : undefined,
+      // Weather alert specific fields
+      weatherCondition: conditionType === 'weather_alerts' ? weatherCondition : undefined,
+      temperatureThreshold: conditionType === 'weather_alerts' && weatherCondition === 'extreme_heat' ? temperatureThreshold : undefined,
+      windSpeedThreshold: conditionType === 'weather_alerts' && weatherCondition === 'high_wind' ? windSpeedThreshold : undefined,
     }
 
     onSave({
@@ -291,6 +311,76 @@ export function AlertRuleEditor({ rule, onSave, onCancel }: AlertRuleEditorProps
                   />
                   <span className="text-sm text-muted-foreground">restarts</span>
                 </div>
+              </div>
+            )}
+
+            {/* Weather alert configuration */}
+            {conditionType === 'weather_alerts' && (
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs text-muted-foreground mb-1">
+                    Weather Condition
+                  </label>
+                  <select
+                    value={weatherCondition}
+                    onChange={e => setWeatherCondition(e.target.value as any)}
+                    className="w-full px-3 py-2 rounded-lg bg-secondary border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="severe_storm">Severe Storm</option>
+                    <option value="extreme_heat">Extreme Heat</option>
+                    <option value="heavy_rain">Heavy Rain</option>
+                    <option value="snow">Snow</option>
+                    <option value="high_wind">High Wind</option>
+                  </select>
+                </div>
+
+                {weatherCondition === 'extreme_heat' && (
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1">
+                      Temperature Threshold (°F)
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={-50}
+                        max={150}
+                        value={temperatureThreshold}
+                        onChange={e => setTemperatureThreshold(Number(e.target.value))}
+                        className={`w-24 px-3 py-2 rounded-lg bg-secondary border text-foreground focus:outline-none focus:ring-2 focus:ring-purple-500 ${
+                          errors.temperatureThreshold ? 'border-red-500' : 'border-border'
+                        }`}
+                      />
+                      <span className="text-sm text-muted-foreground">°F</span>
+                    </div>
+                    {errors.temperatureThreshold && (
+                      <p className="text-xs text-red-400 mt-1">{errors.temperatureThreshold}</p>
+                    )}
+                  </div>
+                )}
+
+                {weatherCondition === 'high_wind' && (
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1">
+                      Wind Speed Threshold (mph)
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={1}
+                        max={200}
+                        value={windSpeedThreshold}
+                        onChange={e => setWindSpeedThreshold(Number(e.target.value))}
+                        className={`w-24 px-3 py-2 rounded-lg bg-secondary border text-foreground focus:outline-none focus:ring-2 focus:ring-purple-500 ${
+                          errors.windSpeedThreshold ? 'border-red-500' : 'border-border'
+                        }`}
+                      />
+                      <span className="text-sm text-muted-foreground">mph</span>
+                    </div>
+                    {errors.windSpeedThreshold && (
+                      <p className="text-xs text-red-400 mt-1">{errors.windSpeedThreshold}</p>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 

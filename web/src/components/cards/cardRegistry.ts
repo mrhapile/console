@@ -69,6 +69,8 @@ import { KubecostOverview } from './KubecostOverview'
 // Policy management cards
 import { OPAPolicies } from './OPAPolicies'
 import { KyvernoPolicies } from './KyvernoPolicies'
+// Weather card
+import { Weather } from './Weather'
 
 // Type for card component props
 export type CardComponentProps = { config?: Record<string, unknown> }
@@ -154,6 +156,8 @@ export const CARD_COMPONENTS: Record<string, CardComponent> = {
   // Policy management cards
   opa_policies: OPAPolicies,
   kyverno_policies: KyvernoPolicies,
+  // Weather card
+  weather: Weather,
 
   // Aliases - map catalog types to existing components with similar functionality
   gpu_list: GPUInventory,
@@ -237,6 +241,8 @@ export const CARD_DEFAULT_WIDTHS: Record<string, number> = {
   klaude_kubeconfig_audit: 6,
   klaude_health_check: 6,
   user_management: 6,
+  // Weather card
+  weather: 6,
 
   // Wide cards (7-8 columns) - charts and trends
   pod_health_trend: 8,

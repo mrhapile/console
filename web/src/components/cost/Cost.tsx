@@ -291,8 +291,37 @@ export function Cost() {
     openshift: { cpu: 0.048, memory: 0.012, gpu: 3.00 },
   }
 
+  // Read provider overrides from localStorage (same key as ClusterCosts card)
+  const [providerOverrides, setProviderOverrides] = useState<Record<string, CloudProvider>>(() => {
+    try {
+      const saved = localStorage.getItem('kubestellar-cluster-provider-overrides')
+      return saved ? JSON.parse(saved) : {}
+    } catch { return {} }
+  })
+
+  // Listen for localStorage changes (when user changes provider in ClusterCosts card)
+  useEffect(() => {
+    const handleStorageChange = () => {
+      try {
+        const saved = localStorage.getItem('kubestellar-cluster-provider-overrides')
+        setProviderOverrides(saved ? JSON.parse(saved) : {})
+      } catch { /* ignore */ }
+    }
+    window.addEventListener('storage', handleStorageChange)
+    // Also poll for changes since storage event doesn't fire for same-tab changes
+    const interval = setInterval(handleStorageChange, 1000)
+    return () => {
+      window.removeEventListener('storage', handleStorageChange)
+      clearInterval(interval)
+    }
+  }, [])
+
   // Detect cloud provider from cluster name (matches ClusterCosts logic)
   const detectClusterProvider = (name: string, context?: string): CloudProvider => {
+    // Check for manual override first
+    if (providerOverrides[name]) {
+      return providerOverrides[name]
+    }
     const searchStr = `${name} ${context || ''}`.toLowerCase()
     if (searchStr.includes('openshift') || searchStr.includes('ocp') || searchStr.includes('rosa') || searchStr.includes('aro')) return 'openshift'
     if (searchStr.includes('eks') || searchStr.includes('aws') || searchStr.includes('amazon')) return 'aws'
@@ -358,7 +387,7 @@ export function Cost() {
       gpuMonthly,
       storageMonthly,
     }
-  }, [reachableClusters, gpuByCluster])
+  }, [reachableClusters, gpuByCluster, providerOverrides])
 
   // Stats value getter for the configurable StatsOverview component
   const getStatValue = useCallback((blockId: string): StatBlockValue => {

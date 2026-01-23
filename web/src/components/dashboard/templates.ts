@@ -308,6 +308,18 @@ export const DASHBOARD_TEMPLATES: DashboardTemplate[] = [
       { card_type: 'resource_capacity', position: { w: 3, h: 2 } },
     ],
   },
+
+  // Weather template
+  {
+    id: 'weather-dashboard',
+    name: 'Weather Dashboard',
+    description: 'Weather conditions with multi-day forecasts and animated conditions',
+    icon: '🌤️',
+    category: 'custom',
+    cards: [
+      { card_type: 'weather', position: { w: 6, h: 4 } },
+    ],
+  },
 ]
 
 export const TEMPLATE_CATEGORIES = [

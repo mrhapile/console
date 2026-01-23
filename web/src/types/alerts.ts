@@ -6,6 +6,7 @@ export type AlertConditionType =
   | 'memory_pressure'
   | 'cpu_pressure'
   | 'disk_pressure'
+  | 'weather_alerts'
   | 'custom'
 
 // Alert severity levels
@@ -25,6 +26,10 @@ export interface AlertCondition {
   clusters?: string[] // specific clusters, empty = all
   namespaces?: string[] // specific namespaces
   customQuery?: string // for custom conditions
+  // Weather alert specific fields
+  weatherCondition?: 'severe_storm' | 'extreme_heat' | 'heavy_rain' | 'snow' | 'high_wind'
+  temperatureThreshold?: number // for extreme_heat
+  windSpeedThreshold?: number // for high_wind
 }
 
 // Alert channel configuration
@@ -156,6 +161,19 @@ export const PRESET_ALERT_RULES: Omit<AlertRule, 'id' | 'createdAt' | 'updatedAt
     channels: [{ type: 'browser', enabled: true, config: {} }],
     aiDiagnose: false,
   },
+  {
+    name: 'Severe Weather Alert',
+    description: 'Alert on extreme weather conditions',
+    enabled: false,
+    condition: {
+      type: 'weather_alerts',
+      weatherCondition: 'severe_storm',
+      duration: 300,
+    },
+    severity: 'warning',
+    channels: [{ type: 'browser', enabled: true, config: {} }],
+    aiDiagnose: false,
+  },
 ]
 
 // Helper to get severity color
@@ -201,6 +219,14 @@ export function formatCondition(condition: AlertCondition): string {
       return `CPU usage > ${condition.threshold}%`
     case 'disk_pressure':
       return `Disk usage > ${condition.threshold}%`
+    case 'weather_alerts':
+      if (condition.weatherCondition === 'extreme_heat') {
+        return `Temperature > ${condition.temperatureThreshold || 100}°F`
+      }
+      if (condition.weatherCondition === 'high_wind') {
+        return `Wind speed > ${condition.windSpeedThreshold || 40} mph`
+      }
+      return condition.weatherCondition?.replace(/_/g, ' ') || 'Weather alert'
     case 'custom':
       return condition.customQuery || 'Custom condition'
     default:

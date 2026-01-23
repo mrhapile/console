@@ -493,8 +493,8 @@ export function Events() {
   // Stats (based on globally filtered events)
   const stats = useMemo(() => {
     const warnings = globalFilteredWarningEvents.length
-    // Never show negative - clamp to 0
-    const normal = Math.max(0, globalFilteredAllEvents.length - warnings)
+    // Count normal events directly by type instead of subtracting warnings
+    const normal = globalFilteredAllEvents.filter(e => e.type === 'Normal').length
 
     // Reason counts for chart
     const reasonCounts = globalFilteredAllEvents.reduce((acc, e) => {
