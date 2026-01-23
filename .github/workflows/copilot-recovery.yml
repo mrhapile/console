@@ -202,13 +202,8 @@ jobs:
         run: |
           PR_NUM="${{ steps.pr_info.outputs.pr_number }}"
 
-          # Get the Netlify deploy preview URL from check run
-          PREVIEW_URL="${{ github.event.check_run.details_url }}"
-
-          # Or construct it from the PR number
-          if [ -z "$PREVIEW_URL" ]; then
-            PREVIEW_URL="https://deploy-preview-${PR_NUM}--kubestellarklaudeconsole.netlify.app"
-          fi
+          # Use custom domain (not blocked by Playwright like *.netlify.app)
+          PREVIEW_URL="https://deploy-preview-${PR_NUM}.console-deploy-preview.kubestellar.io"
 
           echo "preview_url=$PREVIEW_URL" >> $GITHUB_OUTPUT
           echo "Preview URL: $PREVIEW_URL"
