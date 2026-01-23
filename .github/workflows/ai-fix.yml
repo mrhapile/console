@@ -198,11 +198,27 @@ jobs:
         run: |
           REPO="${{ github.repository }}"
           ISSUE="${{ steps.issue.outputs.number }}"
+          PR_NUM="${{ github.event.pull_request.number }}"
 
           # Create label if it doesn't exist
           gh label create "ai-pr-ready" --repo "$REPO" --color "0e8a16" --description "Copilot PR is ready for review" 2>/dev/null || true
 
-          # Update status
+          # Update PR title: replace [WIP] with 🤖 or just clean it up
+          CURRENT_TITLE="${{ github.event.pull_request.title }}"
+          NEW_TITLE=$(echo "$CURRENT_TITLE" | sed 's/^\[WIP\] */🤖 [REVIEW] /')
+          if [ "$NEW_TITLE" != "$CURRENT_TITLE" ]; then
+            gh api repos/$REPO/pulls/$PR_NUM -X PATCH -f title="$NEW_TITLE"
+            echo "Updated PR title: $NEW_TITLE"
+          fi
+
+          # Get issue author and assign to PR via Prow command
+          ISSUE_AUTHOR=$(gh api repos/$REPO/issues/$ISSUE --jq '.user.login')
+          if [ -n "$ISSUE_AUTHOR" ]; then
+            gh pr comment "$PR_NUM" --repo "$REPO" --body "/assign @$ISSUE_AUTHOR"
+            echo "Assigned issue author @$ISSUE_AUTHOR to PR #$PR_NUM"
+          fi
+
+          # Update issue status
           gh issue edit "$ISSUE" --repo "$REPO" --remove-label "ai-pr-draft" 2>/dev/null || true
           gh issue edit "$ISSUE" --repo "$REPO" --remove-label "ai-awaiting-copilot" 2>/dev/null || true
           gh issue edit "$ISSUE" --repo "$REPO" --add-label "ai-pr-ready"
