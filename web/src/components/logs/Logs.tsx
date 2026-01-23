@@ -20,7 +20,7 @@ import {
   rectSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { useClusters } from '../../hooks/useMCP'
+import { useClusters, useEvents, useWarningEvents } from '../../hooks/useMCP'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { useShowCards } from '../../hooks/useShowCards'
 import { useDashboardReset } from '../../hooks/useDashboardReset'
@@ -48,7 +48,7 @@ const LOGS_CARDS_KEY = 'kubestellar-logs-cards'
 const DEFAULT_LOGS_CARDS: LogsCard[] = [
   { id: 'default-event-stream', card_type: 'event_stream', title: 'Event Stream', config: {}, position: { w: 12, h: 4 } },
   { id: 'default-namespace-events', card_type: 'namespace_events', title: 'Namespace Events', config: {}, position: { w: 6, h: 3 } },
-  { id: 'default-warning-events', card_type: 'warning_events', title: 'Warning Events', config: {}, position: { w: 6, h: 3 } },
+  { id: 'default-events-timeline', card_type: 'events_timeline', title: 'Events Timeline', config: {}, position: { w: 6, h: 3 } },
 ]
 
 function loadLogsCards(): LogsCard[] {
@@ -154,6 +154,8 @@ function LogsDragPreviewCard({ card }: { card: LogsCard }) {
 export function Logs() {
   const [searchParams, setSearchParams] = useSearchParams()
   const { clusters, isLoading, isRefreshing, lastUpdated, refetch } = useClusters()
+  const { events } = useEvents()
+  const { events: warningEvents } = useWarningEvents()
   const { selectedClusters: globalSelectedClusters, isAllClustersSelected } = useGlobalFilters()
 
   // Card state
@@ -279,6 +281,29 @@ export function Logs() {
   )
   const reachableClusters = filteredClusters.filter(c => c.reachable !== false)
 
+  // Filter events by selected clusters
+  const filteredEvents = events.filter(e =>
+    isAllClustersSelected || globalSelectedClusters.includes(e.cluster || '')
+  )
+  const filteredWarningEvents = warningEvents.filter(e =>
+    isAllClustersSelected || globalSelectedClusters.includes(e.cluster || '')
+  )
+
+  // Calculate event stats
+  const totalEvents = filteredEvents.length
+  const warningCount = filteredWarningEvents.length
+  const normalCount = filteredEvents.filter(e => e.type === 'Normal').length
+  const errorCount = filteredEvents.filter(e =>
+    e.type === 'Warning' && (e.reason?.toLowerCase().includes('error') || e.reason?.toLowerCase().includes('failed'))
+  ).length
+  // Recent events (last hour)
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000)
+  const recentCount = filteredEvents.filter(e => {
+    if (!e.lastTimestamp) return false
+    const eventTime = new Date(e.lastTimestamp)
+    return eventTime >= oneHourAgo
+  }).length
+
   // Stats value getter for the configurable StatsOverview component
   const getStatValue = useCallback((blockId: string): StatBlockValue => {
     switch (blockId) {
@@ -286,10 +311,20 @@ export function Logs() {
         return { value: reachableClusters.length, sublabel: 'clusters' }
       case 'healthy':
         return { value: reachableClusters.length, sublabel: 'monitored' }
+      case 'total':
+        return { value: totalEvents, sublabel: 'events' }
+      case 'warnings':
+        return { value: warningCount, sublabel: 'warning events' }
+      case 'normal':
+        return { value: normalCount, sublabel: 'normal events' }
+      case 'recent':
+        return { value: recentCount, sublabel: 'in last hour' }
+      case 'errors':
+        return { value: errorCount, sublabel: 'error events' }
       default:
         return { value: 0 }
     }
-  }, [reachableClusters.length])
+  }, [reachableClusters.length, totalEvents, warningCount, normalCount, recentCount, errorCount])
 
   // Transform card for ConfigureCardModal
   const configureCard = configuringCard ? {

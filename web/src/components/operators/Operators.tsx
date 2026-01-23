@@ -280,6 +280,14 @@ export function Operators() {
   )
   const reachableClusters = filteredClusters.filter(c => c.reachable !== false)
 
+  // Calculate compute stats from cluster data (like other working pages)
+  const totalNodes = reachableClusters.reduce((sum, c) => sum + (c.nodeCount || 0), 0)
+  const totalCPU = reachableClusters.reduce((sum, c) => sum + (c.cpuCores || 0), 0)
+  const totalMemoryGB = reachableClusters.reduce((sum, c) => sum + (c.memoryGB || 0), 0)
+  const totalStorageGB = reachableClusters.reduce((sum, c) => sum + (c.storageGB || 0), 0)
+  const totalGPUs = reachableClusters.reduce((sum, c) => sum + (c.gpuCount || 0), 0)
+  const totalPods = reachableClusters.reduce((sum, c) => sum + (c.podCount || 0), 0)
+
   // Stats value getter for the configurable StatsOverview component
   const getStatValue = useCallback((blockId: string): StatBlockValue => {
     switch (blockId) {
@@ -287,10 +295,22 @@ export function Operators() {
         return { value: reachableClusters.length, sublabel: 'clusters' }
       case 'healthy':
         return { value: reachableClusters.length, sublabel: 'with OLM' }
+      case 'nodes':
+        return { value: totalNodes, sublabel: 'total nodes' }
+      case 'cpus':
+        return { value: totalCPU, sublabel: 'CPU cores' }
+      case 'memory':
+        return { value: `${Math.round(totalMemoryGB)} GB`, sublabel: 'memory' }
+      case 'storage':
+        return { value: totalStorageGB >= 1024 ? `${(totalStorageGB / 1024).toFixed(1)} TB` : `${totalStorageGB} GB`, sublabel: 'storage' }
+      case 'gpus':
+        return { value: totalGPUs, sublabel: 'GPUs' }
+      case 'pods':
+        return { value: totalPods, sublabel: 'pods' }
       default:
         return { value: 0 }
     }
-  }, [reachableClusters.length])
+  }, [reachableClusters.length, totalNodes, totalCPU, totalMemoryGB, totalStorageGB, totalGPUs, totalPods])
 
   // Transform card for ConfigureCardModal
   const configureCard = configuringCard ? {
