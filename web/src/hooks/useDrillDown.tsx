@@ -21,6 +21,22 @@ export type DrillDownViewType =
   | 'yaml'
   | 'resources'
   | 'custom'
+  // Phase 2: GitOps and operational views
+  | 'helm'
+  | 'argoapp'
+  | 'kustomization'
+  | 'drift'
+  // Phase 2: Policy and compliance views
+  | 'policy'
+  | 'crd'
+  // Phase 2: Alerting and monitoring views
+  | 'alert'
+  | 'alertrule'
+  // Phase 2: Cost and RBAC views
+  | 'cost'
+  | 'rbac'
+  // Phase 2: Operator views
+  | 'operator'
 
 export interface DrillDownView {
   type: DrillDownViewType
