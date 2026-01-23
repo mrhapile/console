@@ -127,6 +127,7 @@ func (s *SQLiteStore) migrate() error {
 		status TEXT DEFAULT 'submitted',
 		pr_number INTEGER,
 		pr_url TEXT,
+		copilot_session_url TEXT,
 		netlify_preview_url TEXT,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME
@@ -874,10 +875,10 @@ func (s *SQLiteStore) CreateFeatureRequest(request *models.FeatureRequest) error
 		request.Status = models.RequestStatusOpen
 	}
 
-	_, err := s.db.Exec(`INSERT INTO feature_requests (id, user_id, title, description, request_type, github_issue_number, github_issue_url, status, pr_number, pr_url, netlify_preview_url, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	_, err := s.db.Exec(`INSERT INTO feature_requests (id, user_id, title, description, request_type, github_issue_number, github_issue_url, status, pr_number, pr_url, copilot_session_url, netlify_preview_url, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		request.ID.String(), request.UserID.String(), request.Title, request.Description, string(request.RequestType),
 		request.GitHubIssueNumber, nullString(request.GitHubIssueURL), string(request.Status),
-		request.PRNumber, nullString(request.PRURL), nullString(request.NetlifyPreviewURL), request.CreatedAt)
+		request.PRNumber, nullString(request.PRURL), nullString(request.CopilotSessionURL), nullString(request.NetlifyPreviewURL), request.CreatedAt)
 	return err
 }
 
@@ -1028,10 +1029,10 @@ func (s *SQLiteStore) UpdateFeatureRequest(request *models.FeatureRequest) error
 	now := time.Now()
 	request.UpdatedAt = &now
 
-	_, err := s.db.Exec(`UPDATE feature_requests SET title = ?, description = ?, request_type = ?, github_issue_number = ?, github_issue_url = ?, status = ?, pr_number = ?, pr_url = ?, netlify_preview_url = ?, updated_at = ? WHERE id = ?`,
+	_, err := s.db.Exec(`UPDATE feature_requests SET title = ?, description = ?, request_type = ?, github_issue_number = ?, github_issue_url = ?, status = ?, pr_number = ?, pr_url = ?, copilot_session_url = ?, netlify_preview_url = ?, updated_at = ? WHERE id = ?`,
 		request.Title, request.Description, string(request.RequestType),
 		request.GitHubIssueNumber, nullString(request.GitHubIssueURL), string(request.Status),
-		request.PRNumber, nullString(request.PRURL), nullString(request.NetlifyPreviewURL),
+		request.PRNumber, nullString(request.PRURL), nullString(request.CopilotSessionURL), nullString(request.NetlifyPreviewURL),
 		request.UpdatedAt, request.ID.String())
 	return err
 }

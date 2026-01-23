@@ -69,7 +69,7 @@ function getNotificationStatus(type: NotificationType): { label: string; color: 
     case 'triage_accepted':
       return { label: 'Triage Accepted', color: 'text-cyan-400', bgColor: 'bg-cyan-500/20' }
     case 'feasibility_study':
-      return { label: 'Claude Working', color: 'text-purple-400', bgColor: 'bg-purple-500/20' }
+      return { label: 'AI Working', color: 'text-purple-400', bgColor: 'bg-purple-500/20' }
     case 'fix_ready':
       return { label: 'PR Ready', color: 'text-green-400', bgColor: 'bg-green-500/20' }
     case 'fix_complete':
