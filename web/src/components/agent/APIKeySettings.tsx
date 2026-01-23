@@ -226,8 +226,17 @@ export function APIKeySettings({ isOpen, onClose }: APIKeySettingsProps) {
           ) : (
             <div className="space-y-4">
               {error && (
-                <div className="p-3 bg-destructive/10 border border-destructive/30 rounded-lg text-sm text-destructive">
-                  {error}
+                <div
+                  className="p-3 bg-destructive/10 border border-destructive/30 rounded-lg text-sm text-destructive cursor-help"
+                  title={error}
+                >
+                  {error.includes('not_found_error')
+                    ? 'API key validation failed - the model may not be available for your account'
+                    : error.includes('invalid_api_key') || error.includes('authentication')
+                    ? 'Invalid API key - please check and try again'
+                    : error.includes('rate_limit')
+                    ? 'Rate limit exceeded - please try again later'
+                    : 'Failed to validate API key - hover for details'}
                 </div>
               )}
 

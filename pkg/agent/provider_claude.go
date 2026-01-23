@@ -14,7 +14,7 @@ import (
 const (
 	claudeAPIURL     = "https://api.anthropic.com/v1/messages"
 	claudeAPIVersion = "2023-06-01"
-	defaultClaudeModel = "claude-sonnet-4-5-20250514"
+	defaultClaudeModel = "claude-opus-4-20250514"
 )
 
 // ClaudeProvider implements AIProvider for Anthropic Claude

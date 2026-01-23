@@ -1309,7 +1309,7 @@ export function _ClusterDetail({ clusterName, onClose, onRename }: _ClusterDetai
                         </div>
                         <div className="flex items-center gap-3">
                           <div className="w-16">
-                            <Gauge value={node.gpuAllocated} max={node.gpuCount} size="sm" />
+                            <Gauge value={node.gpuAllocated} max={node.gpuCount} size="sm" unit="" />
                           </div>
                           <span className="text-xs text-muted-foreground w-12 text-right">
                             {node.gpuAllocated}/{node.gpuCount}

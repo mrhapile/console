@@ -138,9 +138,9 @@ function MissionListItem({ mission, isActive, onClick, onDismiss, isCollapsed, o
         <button
           onClick={(e) => { e.stopPropagation(); onDismiss() }}
           className="p-0.5 hover:bg-red-500/20 rounded transition-colors flex-shrink-0"
-          title="Dismiss mission"
+          title="Delete mission"
         >
-          <X className="w-3.5 h-3.5 text-muted-foreground hover:text-red-400" />
+          <Trash2 className="w-3.5 h-3.5 text-muted-foreground hover:text-red-400" />
         </button>
       </div>
 
@@ -161,7 +161,7 @@ function MissionListItem({ mission, isActive, onClick, onDismiss, isCollapsed, o
 }
 
 function MissionChat({ mission, isFullScreen = false }: { mission: Mission; isFullScreen?: boolean }) {
-  const { sendMessage, cancelMission, dismissMission, rateMission } = useMissions()
+  const { sendMessage, cancelMission, rateMission, setActiveMission } = useMissions()
   const [input, setInput] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
@@ -360,11 +360,11 @@ function MissionChat({ mission, isFullScreen = false }: { mission: Mission; isFu
             <div className="flex items-center justify-between">
               <span className={cn('text-sm', config.color)}>{config.label}</span>
               <button
-                onClick={() => dismissMission(mission.id)}
+                onClick={() => setActiveMission(null)}
                 className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
               >
-                <Trash2 className="w-3 h-3" />
-                Dismiss
+                <ChevronLeft className="w-3 h-3" />
+                Minimize
               </button>
             </div>
             {/* Feedback buttons */}

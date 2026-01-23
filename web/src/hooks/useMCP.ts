@@ -2932,6 +2932,7 @@ export function useSecurityIssues(cluster?: string, namespace?: string) {
   const [error, setError] = useState<string | null>(null)
   const [consecutiveFailures, setConsecutiveFailures] = useState(0)
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null)
+  const [isUsingDemoData, setIsUsingDemoData] = useState(false)
 
   const refetch = useCallback(async (silent = false) => {
     // For silent (background) refreshes, don't update loading states - prevents UI flashing
@@ -2961,6 +2962,7 @@ export function useSecurityIssues(cluster?: string, namespace?: string) {
       setLastUpdated(now)
       setConsecutiveFailures(0)
       setLastRefresh(now)
+      setIsUsingDemoData(false)
     } catch (err) {
       // Only set demo data if we don't have existing data and not silent
       setConsecutiveFailures(prev => prev + 1)
@@ -2968,6 +2970,7 @@ export function useSecurityIssues(cluster?: string, namespace?: string) {
       if (!silent && hadNoData) {
         setError('Failed to fetch security issues')
         setIssues(getDemoSecurityIssues())
+        setIsUsingDemoData(true)
       }
     } finally {
       if (!silent) {
@@ -2991,6 +2994,7 @@ export function useSecurityIssues(cluster?: string, namespace?: string) {
     consecutiveFailures,
     isFailed: consecutiveFailures >= 3,
     lastRefresh,
+    isUsingDemoData,
   }
 }
 

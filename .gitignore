@@ -54,4 +54,4 @@ vendor/
 
 # Coordination file (local only)
 .claude-coord.md
-kkc-agent
+/kkc-agent

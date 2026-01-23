@@ -22,15 +22,15 @@ func main() {
 		os.Exit(0)
 	}
 
-	fmt.Print(`
+	fmt.Printf(`
  _    _                                    _
 | | _| | _____       __ _  __ _  ___ _ __ | |_
-| |/ / |/ / __|____ / _` + "`" + ` |/ _` + "`" + ` |/ _ \ '_ \| __|
+| |/ / |/ / __|____ / _`+"`"+` |/ _`+"`"+` |/ _ \ '_ \| __|
 |   <|   < (__/___ | (_| | (_| |  __/ | | | |_
 |_|\_\_|\_|\___|     \__,_|\__, |\___|_| |_|\__|
                          |___/
-KubeStellar Klaude Console - Local Agent
-`)
+KubeStellar Klaude Console - Local Agent v%s
+`, agent.Version)
 
 	server, err := agent.NewServer(agent.Config{Port: *port, Kubeconfig: *kubeconfig})
 	if err != nil {

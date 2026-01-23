@@ -628,7 +628,7 @@ export function GPUDetailModal({
               </div>
               <div className="flex items-center gap-4">
                 <div className="flex-1">
-                  <Gauge value={allocatedGPUs} max={totalGPUs} size="lg" label="Allocated" />
+                  <Gauge value={allocatedGPUs} max={totalGPUs} size="lg" label="Allocated" unit="" />
                 </div>
                 <div className="text-right">
                   <div className="text-sm text-muted-foreground">GPU Types</div>
@@ -663,7 +663,7 @@ export function GPUDetailModal({
                         </div>
                         <div className="flex items-center gap-4">
                           <div className="w-20">
-                            <Gauge value={info.allocated} max={info.total} size="sm" />
+                            <Gauge value={info.allocated} max={info.total} size="sm" unit="" />
                           </div>
                           <span className="text-sm text-muted-foreground w-16 text-right">{info.allocated}/{info.total}</span>
                         </div>
@@ -681,7 +681,7 @@ export function GPUDetailModal({
                                   <span className="text-xs text-muted-foreground">{node.gpuMemoryGB} GB mem</span>
                                 )}
                                 <div className="w-16">
-                                  <Gauge value={node.gpuAllocated} max={node.gpuCount} size="sm" />
+                                  <Gauge value={node.gpuAllocated} max={node.gpuCount} size="sm" unit="" />
                                 </div>
                                 <span className="text-xs text-muted-foreground w-10 text-right">{node.gpuAllocated}/{node.gpuCount}</span>
                               </div>

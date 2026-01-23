@@ -685,7 +685,7 @@ After I approve, help me execute the repairs step by step.`,
                       </div>
                       <div className="flex items-center gap-3">
                         <div className="w-24">
-                          <Gauge value={info.allocated} max={info.total} size="sm" />
+                          <Gauge value={info.allocated} max={info.total} size="sm" unit="" />
                         </div>
                         <span className="text-sm text-muted-foreground">{info.allocated}/{info.total} allocated</span>
                       </div>
@@ -700,7 +700,7 @@ After I approve, help me execute the repairs step by step.`,
                         </div>
                         <div className="flex items-center gap-3">
                           <div className="w-16">
-                            <Gauge value={node.gpuAllocated} max={node.gpuCount} size="sm" />
+                            <Gauge value={node.gpuAllocated} max={node.gpuCount} size="sm" unit="" />
                           </div>
                           <span className="text-xs text-muted-foreground w-12 text-right">
                             {node.gpuAllocated}/{node.gpuCount}
