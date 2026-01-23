@@ -16,7 +16,7 @@ import (
 	"github.com/kubestellar/console/pkg/agent/protocol"
 )
 
-const Version = "0.3.1"
+const Version = "0.3.4"
 
 // Config holds agent configuration
 type Config struct {
@@ -45,6 +45,15 @@ type Server struct {
 	clientsMux     sync.RWMutex
 	allowedOrigins []string
 	agentToken     string // Optional shared secret for authentication
+
+	// Token tracking
+	tokenMux         sync.RWMutex
+	sessionStart     time.Time
+	sessionTokensIn  int64
+	sessionTokensOut int64
+	todayTokensIn    int64
+	todayTokensOut   int64
+	todayDate        string // YYYY-MM-DD format to detect day change
 }
 
 // NewServer creates a new agent server
@@ -79,6 +88,7 @@ func NewServer(cfg Config) (*Server, error) {
 		log.Println("Agent token authentication enabled")
 	}
 
+	now := time.Now()
 	server := &Server{
 		config:         cfg,
 		kubectl:        kubectl,
@@ -86,6 +96,8 @@ func NewServer(cfg Config) (*Server, error) {
 		clients:        make(map[*websocket.Conn]bool),
 		allowedOrigins: allowedOrigins,
 		agentToken:     agentToken,
+		sessionStart:   now,
+		todayDate:      now.Format("2006-01-02"),
 	}
 
 	server.upgrader = websocket.Upgrader{
@@ -491,6 +503,9 @@ func (s *Server) handleChatMessage(msg protocol.Message, forceAgent string) prot
 		return s.errorResponse(msg.ID, "execution_error", fmt.Sprintf("Failed to execute %s: %s", agentName, err.Error()))
 	}
 
+	// Track token usage
+	s.addTokenUsage(resp.TokenUsage)
+
 	// Return response in format compatible with both legacy and new clients
 	return protocol.Message{
 		ID:   msg.ID,
@@ -599,13 +614,52 @@ func (s *Server) getClaudeInfo() *protocol.ClaudeInfo {
 		providerNames = append(providerNames, p.DisplayName)
 	}
 
+	// Get current token usage
+	s.tokenMux.RLock()
+	sessionIn := s.sessionTokensIn
+	sessionOut := s.sessionTokensOut
+	todayIn := s.todayTokensIn
+	todayOut := s.todayTokensOut
+	s.tokenMux.RUnlock()
+
 	return &protocol.ClaudeInfo{
 		Installed: true,
 		Version:   fmt.Sprintf("Multi-agent: %s", strings.Join(providerNames, ", ")),
-		// Token usage tracking would require aggregation across sessions
-		// For now, return empty usage
-		TokenUsage: protocol.TokenUsage{},
+		TokenUsage: protocol.TokenUsage{
+			Session: protocol.TokenCount{
+				Input:  sessionIn,
+				Output: sessionOut,
+			},
+			Today: protocol.TokenCount{
+				Input:  todayIn,
+				Output: todayOut,
+			},
+		},
 	}
+}
+
+// addTokenUsage accumulates token usage from a chat response
+func (s *Server) addTokenUsage(usage *ProviderTokenUsage) {
+	if usage == nil {
+		return
+	}
+
+	s.tokenMux.Lock()
+	defer s.tokenMux.Unlock()
+
+	// Check if day changed - reset daily counters
+	today := time.Now().Format("2006-01-02")
+	if today != s.todayDate {
+		s.todayDate = today
+		s.todayTokensIn = 0
+		s.todayTokensOut = 0
+	}
+
+	// Accumulate tokens
+	s.sessionTokensIn += int64(usage.InputTokens)
+	s.sessionTokensOut += int64(usage.OutputTokens)
+	s.todayTokensIn += int64(usage.InputTokens)
+	s.todayTokensOut += int64(usage.OutputTokens)
 }
 
 // KeyStatus represents the status of an API key for a provider
