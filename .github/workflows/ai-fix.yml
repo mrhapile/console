@@ -15,6 +15,14 @@ on:
         description: 'Issue title (optional, for display)'
         required: false
         type: string
+      model:
+        description: 'Claude model to use'
+        required: false
+        type: choice
+        default: 'sonnet'
+        options:
+          - sonnet
+          - opus
 
 run-name: "${{ github.event.issue.pull_request && startsWith(github.event.comment.body, '/ai-retry') && format('AI Retry PR #{0}', github.event.issue.number) || format('AI Fix #{0}: {1}', github.event.inputs.issue_number || github.event.issue.number, github.event.inputs.issue_title || github.event.issue.title || 'Processing...') }}"
 
@@ -138,8 +146,9 @@ jobs:
 
           # Run Claude Code in non-interactive mode with permission to edit files
           # Use --dangerously-skip-permissions to auto-approve file edits in CI
-          # Use Sonnet for cost efficiency (can change to opus for complex issues)
-          npx -y @anthropic-ai/claude-code --dangerously-skip-permissions --model sonnet "$PROMPT" || true
+          # --max-turns 30 limits cost to ~$0.50-0.75 for sonnet, ~$3-4 for opus
+          MODEL="${{ github.event.inputs.model || 'sonnet' }}"
+          npx -y @anthropic-ai/claude-code --dangerously-skip-permissions --model "$MODEL" --max-turns 30 "$PROMPT" || true
 
       - name: Check for changes
         id: check_changes
@@ -408,8 +417,8 @@ jobs:
 
           Please implement the improvements now."
 
-          # Use Sonnet for cost efficiency (can change to opus for complex issues)
-          npx -y @anthropic-ai/claude-code --dangerously-skip-permissions --model sonnet "$PROMPT" || true
+          # Use Sonnet for retries (cost efficient), --max-turns 30 for cost control
+          npx -y @anthropic-ai/claude-code --dangerously-skip-permissions --model sonnet --max-turns 30 "$PROMPT" || true
 
       - name: Check for changes
         id: check_changes
