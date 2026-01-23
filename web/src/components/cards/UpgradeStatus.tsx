@@ -1,5 +1,5 @@
-import { useMemo, useState, useEffect } from 'react'
-import { ArrowUp, CheckCircle, AlertTriangle, Rocket, WifiOff } from 'lucide-react'
+import { useMemo, useState, useEffect, useRef } from 'react'
+import { ArrowUp, CheckCircle, AlertTriangle, Rocket, WifiOff, Search } from 'lucide-react'
 import { useClusters } from '../../hooks/useMCP'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { useDrillDownActions } from '../../hooks/useDrillDown'
@@ -152,7 +152,7 @@ function getStatusIcon(status: string) {
 }
 
 export function UpgradeStatus({ config: _config }: UpgradeStatusProps) {
-  const { clusters: allClusters, isLoading, isRefreshing, refetch, isFailed, consecutiveFailures, lastRefresh } = useClusters()
+  const { clusters: allClusters, isLoading: isLoadingHook, isRefreshing, refetch, isFailed, consecutiveFailures, lastRefresh } = useClusters()
   const { drillToCluster } = useDrillDownActions()
   const { startMission } = useMissions()
   const { isConnected: agentConnected } = useLocalAgent()
@@ -161,16 +161,36 @@ export function UpgradeStatus({ config: _config }: UpgradeStatusProps) {
   const [sortBy, setSortBy] = useState<SortByOption>('status')
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
   const [limit, setLimit] = useState<number | 'unlimited'>(5)
+  const [localSearch, setLocalSearch] = useState('')
+
+  // Only show skeleton when no cached data exists - prevents flickering on refresh
+  const isLoading = isLoadingHook && allClusters.length === 0
   const {
     selectedClusters: globalSelectedClusters,
     isAllClustersSelected,
     customFilter,
   } = useGlobalFilters()
 
+  // Track previous agent connection state to detect reconnections
+  const prevAgentConnectedRef = useRef(agentConnected)
+
+  // Use a ref to track which clusters we've already fetched successfully
+  const fetchedClustersRef = useRef(new Set<string>())
+
+  // Clear fetch cache when agent reconnects (was disconnected, now connected)
+  useEffect(() => {
+    if (agentConnected && !prevAgentConnectedRef.current) {
+      // Agent just reconnected - clear the fetch cache to re-fetch all versions
+      fetchedClustersRef.current.clear()
+    }
+    prevAgentConnectedRef.current = agentConnected
+  }, [agentConnected])
+
   // Fetch real versions from clusters via KKC agent
   useEffect(() => {
     if (!agentConnected || allClusters.length === 0) {
       // If not connected, mark fetch as completed so we show '-' instead of 'loading...'
+      // But preserve any cached versions we already have
       setFetchCompleted(true)
       return
     }
@@ -178,22 +198,32 @@ export function UpgradeStatus({ config: _config }: UpgradeStatusProps) {
     setFetchCompleted(false)
 
     const fetchVersions = async () => {
-      const versions: Record<string, string> = {}
-
-      // Only fetch for healthy/reachable clusters
+      // Only fetch for healthy/reachable clusters that we haven't cached yet
       const reachableClusters = allClusters.filter(c => c.healthy !== false && c.nodeCount && c.nodeCount > 0)
 
+      // Build updates incrementally, preserving existing cached versions
+      const newVersions: Record<string, string> = {}
+      let hasNewData = false
+
       for (const cluster of reachableClusters) {
+        // Skip if we already have a valid cached version
+        if (fetchedClustersRef.current.has(cluster.name)) {
+          continue
+        }
+
         const version = await fetchClusterVersion(cluster.name)
         if (version) {
-          versions[cluster.name] = version
-        } else {
-          // Mark failed fetches so we don't show loading forever
-          versions[cluster.name] = '-'
+          newVersions[cluster.name] = version
+          fetchedClustersRef.current.add(cluster.name)
+          hasNewData = true
         }
+        // Don't mark as '-' immediately - let cached version persist if we have one
       }
 
-      setClusterVersions(versions)
+      // Merge new versions with existing, preserving cache
+      if (hasNewData) {
+        setClusterVersions(prev => ({ ...prev, ...newVersions }))
+      }
       setFetchCompleted(true)
     }
 
@@ -224,7 +254,7 @@ Please proceed step by step and ask for confirmation before making any changes.`
     })
   }
 
-  // Apply global filters
+  // Apply global filters and local search
   const clusters = useMemo(() => {
     let result = allClusters
 
@@ -240,8 +270,17 @@ Please proceed step by step and ask for confirmation before making any changes.`
       )
     }
 
+    // Apply local search filter
+    if (localSearch.trim()) {
+      const query = localSearch.toLowerCase()
+      result = result.filter(c =>
+        c.name.toLowerCase().includes(query) ||
+        c.context?.toLowerCase().includes(query)
+      )
+    }
+
     return result
-  }, [allClusters, globalSelectedClusters, isAllClustersSelected, customFilter])
+  }, [allClusters, globalSelectedClusters, isAllClustersSelected, customFilter, localSearch])
 
   if (isLoading) {
     return (
@@ -335,6 +374,18 @@ Please proceed step by step and ask for confirmation before making any changes.`
             size="sm"
           />
         </div>
+      </div>
+
+      {/* Local Search */}
+      <div className="relative mb-3">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+        <input
+          type="text"
+          value={localSearch}
+          onChange={(e) => setLocalSearch(e.target.value)}
+          placeholder="Search clusters..."
+          className="w-full pl-8 pr-3 py-1.5 text-xs bg-secondary rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+        />
       </div>
 
       {/* Clusters list */}

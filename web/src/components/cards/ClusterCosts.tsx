@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useCallback } from 'react'
-import { DollarSign, Server, Cpu, HardDrive, TrendingUp, Info, ExternalLink, ChevronDown, Sparkles, Settings2 } from 'lucide-react'
+import { DollarSign, Server, Cpu, HardDrive, TrendingUp, Info, ExternalLink, ChevronDown, Sparkles, Settings2, Search } from 'lucide-react'
 import { useClusters, useGPUNodes } from '../../hooks/useMCP'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { Skeleton } from '../ui/Skeleton'
@@ -169,6 +169,7 @@ export function ClusterCosts({ config }: ClusterCostsProps) {
   const [clusterProviderOverrides, setClusterProviderOverrides] = useState<Record<string, CloudProvider>>(
     () => loadPersistedOverrides(config?.clusterProviders)
   )
+  const [localSearch, setLocalSearch] = useState('')
 
   // Persist provider overrides to localStorage
   useEffect(() => {
@@ -210,7 +211,7 @@ export function ClusterCosts({ config }: ClusterCostsProps) {
     }
   }, [detectedProvider, config?.provider])
 
-  // Apply global filters
+  // Apply global filters and local search
   const clusters = useMemo(() => {
     let result = allClusters
 
@@ -226,8 +227,17 @@ export function ClusterCosts({ config }: ClusterCostsProps) {
       )
     }
 
+    // Apply local search filter
+    if (localSearch.trim()) {
+      const query = localSearch.toLowerCase()
+      result = result.filter(c =>
+        c.name.toLowerCase().includes(query) ||
+        c.context?.toLowerCase().includes(query)
+      )
+    }
+
     return result
-  }, [allClusters, globalSelectedClusters, isAllClustersSelected, customFilter])
+  }, [allClusters, globalSelectedClusters, isAllClustersSelected, customFilter, localSearch])
 
   // Get pricing from selected provider or custom config
   const pricing = CLOUD_PRICING[selectedProvider]
@@ -556,6 +566,18 @@ export function ClusterCosts({ config }: ClusterCostsProps) {
           )}
         </div>
       )}
+
+      {/* Local Search */}
+      <div className="relative mb-3">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+        <input
+          type="text"
+          value={localSearch}
+          onChange={(e) => setLocalSearch(e.target.value)}
+          placeholder="Search clusters..."
+          className="w-full pl-8 pr-3 py-1.5 text-xs bg-secondary rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+        />
+      </div>
 
       {/* Total costs */}
       <div className="p-4 rounded-lg bg-gradient-to-r from-green-500/20 to-emerald-500/20 border border-green-500/30 mb-4">

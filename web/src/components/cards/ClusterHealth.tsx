@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Server, CheckCircle, XCircle, WifiOff, Cpu, Loader2, ExternalLink } from 'lucide-react'
+import { Server, CheckCircle, XCircle, WifiOff, Cpu, Loader2, ExternalLink, Search } from 'lucide-react'
 import { useClusters, useGPUNodes, ClusterInfo } from '../../hooks/useMCP'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { CardControls, SortDirection } from '../ui/CardControls'
@@ -80,7 +80,7 @@ function getClusterStateFromInfo(cluster: ClusterInfo): ClusterState {
 export function ClusterHealth() {
   const {
     clusters: rawClusters,
-    isLoading,
+    isLoading: isLoadingHook,
     isRefreshing,
     error,
     refetch,
@@ -94,6 +94,10 @@ export function ClusterHealth() {
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
   const [limit, setLimit] = useState<number | 'unlimited'>('unlimited')
   const [selectedCluster, setSelectedCluster] = useState<string | null>(null)
+  const [localSearch, setLocalSearch] = useState('')
+
+  // Only show skeleton when no cached data exists - prevents flickering on refresh
+  const isLoading = isLoadingHook && rawClusters.length === 0
 
   // Calculate GPU counts per cluster
   const gpuByCluster = useMemo(() => {
@@ -105,12 +109,22 @@ export function ClusterHealth() {
     return map
   }, [gpuNodes])
 
-  // Filter by global cluster selection, then sort
+  // Filter by global cluster selection and local search, then sort
   const filteredAndSorted = useMemo(() => {
     // Apply global cluster filter
-    const filtered = isAllClustersSelected
+    let filtered = isAllClustersSelected
       ? rawClusters
       : rawClusters.filter(c => selectedClusters.includes(c.name))
+
+    // Apply local search filter
+    if (localSearch.trim()) {
+      const query = localSearch.toLowerCase()
+      filtered = filtered.filter(c =>
+        c.name.toLowerCase().includes(query) ||
+        c.context?.toLowerCase().includes(query) ||
+        c.server?.toLowerCase().includes(query)
+      )
+    }
 
     const sorted = [...filtered].sort((a, b) => {
       let result = 0
@@ -123,7 +137,7 @@ export function ClusterHealth() {
       return sortDirection === 'asc' ? result : -result
     })
     return sorted
-  }, [rawClusters, sortBy, sortDirection, selectedClusters, isAllClustersSelected])
+  }, [rawClusters, sortBy, sortDirection, selectedClusters, isAllClustersSelected, localSearch])
 
   // Use pagination hook
   const effectivePerPage = limit === 'unlimited' ? 1000 : limit
@@ -231,6 +245,18 @@ export function ClusterHealth() {
             onRefresh={() => refetch()}
           />
         </div>
+      </div>
+
+      {/* Local Search */}
+      <div className="relative mb-4">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+        <input
+          type="text"
+          value={localSearch}
+          onChange={(e) => setLocalSearch(e.target.value)}
+          placeholder="Search clusters..."
+          className="w-full pl-8 pr-3 py-1.5 text-xs bg-secondary rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+        />
       </div>
 
       {/* Stats */}

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { GitCompare, Server, Activity, Box, Cpu } from 'lucide-react'
 import { useClusters, useGPUNodes } from '../../hooks/useMCP'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
@@ -39,6 +39,13 @@ export function ClusterComparison({ config }: ClusterComparisonProps) {
 
     return result
   }, [rawClusters, globalSelectedClusters, isAllClustersSelected, customFilter])
+
+  // Reset local cluster selection when global filters change
+  useEffect(() => {
+    // Filter out any locally selected clusters that are no longer in the filtered set
+    const availableNames = new Set(allClusters.map(c => c.name))
+    setSelectedClusters(prev => prev.filter(name => availableNames.has(name)))
+  }, [allClusters])
 
   const gpuByCluster = useMemo(() => {
     const map: Record<string, number> = {}
