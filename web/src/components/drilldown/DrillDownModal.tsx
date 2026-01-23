@@ -23,6 +23,7 @@ import { OperatorDrillDown } from './views/OperatorDrillDown'
 import { PolicyDrillDown } from './views/PolicyDrillDown'
 import { KustomizationDrillDown } from './views/KustomizationDrillDown'
 import { CRDDrillDown } from './views/CRDDrillDown'
+import { DriftDrillDown } from './views/DriftDrillDown'
 
 // Helper to get status badge color for pods
 const getPodStatusColor = (status: string) => {
@@ -57,6 +58,7 @@ const getViewIcon = (type: string) => {
     case 'policy': return <Shield className="w-4 h-4 text-blue-400" />
     case 'kustomization': return <Layers className="w-4 h-4 text-indigo-400" />
     case 'crd': return <Package className="w-4 h-4 text-purple-400" />
+    case 'drift': return <GitBranch className="w-4 h-4 text-orange-400" />
     default: return null
   }
 }
@@ -158,6 +160,8 @@ export function DrillDownModal() {
         return <KustomizationDrillDown data={data} />
       case 'crd':
         return <CRDDrillDown data={data} />
+      case 'drift':
+        return <DriftDrillDown data={data} />
       case 'custom':
         return state.currentView?.customComponent || <div>Custom view</div>
       default:
