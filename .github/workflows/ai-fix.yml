@@ -73,6 +73,7 @@ jobs:
           gh issue edit "$ISSUE" --repo "$REPO" --add-label "ai-processing"
 
       - name: Assign Copilot to issue
+        id: assign_copilot
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -113,6 +114,7 @@ jobs:
 
           if [ -z "$COPILOT_ID" ]; then
             echo "::warning::Copilot agent not found in suggested actors. Copilot may not be enabled for this repository."
+            echo "assigned=false" >> $GITHUB_OUTPUT
             exit 0
           fi
 
@@ -149,8 +151,10 @@ jobs:
             }"
 
           echo "Copilot assigned to issue #$ISSUE_NUM"
+          echo "assigned=true" >> $GITHUB_OUTPUT
 
       - name: Update labels - copilot triggered
+        if: steps.assign_copilot.outputs.assigned == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -163,6 +167,36 @@ jobs:
           # Update status: remove processing, add awaiting copilot
           gh issue edit "$ISSUE" --repo "$REPO" --remove-label "ai-processing" 2>/dev/null || true
           gh issue edit "$ISSUE" --repo "$REPO" --add-label "ai-awaiting-fix"
+
+      - name: Handle Copilot unavailable
+        if: steps.assign_copilot.outputs.assigned != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          REPO="${{ github.repository }}"
+          ISSUE="${{ steps.issue.outputs.number }}"
+
+          # Create label if it doesn't exist
+          gh label create "ai-needs-human" --repo "$REPO" --color "d93f0b" --description "AI automation unavailable - needs human intervention" 2>/dev/null || true
+
+          # Update status: remove processing, add needs-human
+          gh issue edit "$ISSUE" --repo "$REPO" --remove-label "ai-processing" 2>/dev/null || true
+          gh issue edit "$ISSUE" --repo "$REPO" --add-label "ai-needs-human"
+
+          # Add comment explaining the situation
+          gh issue comment "$ISSUE" --repo "$REPO" --body "⚠️ **Copilot SWE Agent Unavailable**
+
+The AI fix workflow was triggered, but GitHub Copilot SWE Agent is not available for this repository.
+
+**Possible reasons:**
+- Copilot Workspace may not be enabled for this repository
+- The repository may not have access to Copilot SWE Agent features
+
+**Next steps:**
+- A maintainer can manually address this issue
+- Or enable Copilot Workspace for this repository and re-run the workflow
+
+/cc @${{ github.repository_owner }}"
 
   # Update issue labels when Copilot's PR changes state
   update-issue-on-pr:
