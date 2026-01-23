@@ -73,22 +73,61 @@ jobs:
           gh issue edit "$ISSUE" --repo "$REPO" --remove-label "ai-fix-requested" 2>/dev/null || true
           gh issue edit "$ISSUE" --repo "$REPO" --add-label "ai-processing"
 
-      - name: Trigger Copilot via comment
+      - name: Assign Copilot to issue
         id: assign_copilot
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          REPO_OWNER="${{ github.repository_owner }}"
+          REPO_NAME="${{ github.event.repository.name }}"
           ISSUE_NUM="${{ steps.issue.outputs.number }}"
-          ISSUE_TITLE="${{ steps.issue_details.outputs.title }}"
 
-          echo "Triggering Copilot for issue #$ISSUE_NUM..."
+          echo "Assigning Copilot to issue #$ISSUE_NUM..."
 
-          # Mention @copilot in a comment to start a coding session
-          # Copilot coding agent responds to @copilot mentions with instructions
-          COMMENT_RESULT=$(gh issue comment "$ISSUE_NUM" --repo "${{ github.repository }}" --body "$(cat <<EOF
+          # Get the issue node ID for GraphQL
+          ISSUE_NODE_ID=$(gh api graphql -f query="
+            query {
+              repository(owner: \"$REPO_OWNER\", name: \"$REPO_NAME\") {
+                issue(number: $ISSUE_NUM) {
+                  id
+                }
+              }
+            }" --jq '.data.repository.issue.id')
+
+          echo "Issue node ID: $ISSUE_NODE_ID"
+
+          # Copilot's node ID (this is constant for GitHub Copilot coding agent)
+          COPILOT_NODE_ID="BOT_kgDOC9w8XQ"
+
+          # Assign Copilot using GraphQL mutation (REST API doesn't work for bots)
+          ASSIGN_RESULT=$(gh api graphql -f query="
+            mutation {
+              addAssigneesToAssignable(input: {
+                assignableId: \"$ISSUE_NODE_ID\"
+                assigneeIds: [\"$COPILOT_NODE_ID\"]
+              }) {
+                assignable {
+                  ... on Issue {
+                    assignees(first: 10) {
+                      nodes {
+                        login
+                      }
+                    }
+                  }
+                }
+              }
+            }" 2>&1) && ASSIGN_SUCCESS=true || ASSIGN_SUCCESS=false
+
+          # Check if Copilot was successfully assigned
+          if echo "$ASSIGN_RESULT" | grep -q '"login":"Copilot"'; then
+            echo "Successfully assigned Copilot to issue #$ISSUE_NUM"
+            echo "copilot_assigned=true" >> $GITHUB_OUTPUT
+
+            # Also post a comment with instructions for Copilot
+            gh issue comment "$ISSUE_NUM" --repo "${{ github.repository }}" --body "$(cat <<EOF
           ## 🤖 AI Fix Requested
 
-          @copilot Please analyze this issue and create a fix.
+          @Copilot Please analyze this issue and create a fix.
 
           ### Instructions:
           1. Read the issue description carefully
@@ -103,16 +142,10 @@ jobs:
           - Keep changes focused on the issue scope
           - Use TypeScript for frontend code
           - Use Go for backend code
-
-          Please start working on this issue.
           EOF
-          )" 2>&1) && COMMENT_SUCCESS=true || COMMENT_SUCCESS=false
-
-          if [ "$COMMENT_SUCCESS" = "true" ]; then
-            echo "Successfully posted Copilot trigger comment on issue #$ISSUE_NUM"
-            echo "copilot_assigned=true" >> $GITHUB_OUTPUT
+          )" || true
           else
-            echo "::warning::Failed to post comment. Response: $COMMENT_RESULT"
+            echo "::warning::Failed to assign Copilot. Response: $ASSIGN_RESULT"
             echo "copilot_assigned=false" >> $GITHUB_OUTPUT
           fi
 
