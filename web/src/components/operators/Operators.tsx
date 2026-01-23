@@ -33,6 +33,7 @@ import { ConfigureCardModal } from '../dashboard/ConfigureCardModal'
 import { FloatingDashboardActions } from '../dashboard/FloatingDashboardActions'
 import { DashboardTemplate } from '../dashboard/templates'
 import { formatCardTitle } from '../../lib/formatCardTitle'
+import { formatMemoryStat } from '../../lib/formatStats'
 
 interface OperatorsCard {
   id: string
@@ -300,9 +301,9 @@ export function Operators() {
       case 'cpus':
         return { value: totalCPU, sublabel: 'CPU cores' }
       case 'memory':
-        return { value: `${Math.round(totalMemoryGB)} GB`, sublabel: 'memory' }
+        return { value: formatMemoryStat(totalMemoryGB), sublabel: 'memory' }
       case 'storage':
-        return { value: totalStorageGB >= 1024 ? `${(totalStorageGB / 1024).toFixed(1)} TB` : `${totalStorageGB} GB`, sublabel: 'storage' }
+        return { value: formatMemoryStat(totalStorageGB), sublabel: 'storage' }
       case 'gpus':
         return { value: totalGPUs, sublabel: 'GPUs' }
       case 'pods':

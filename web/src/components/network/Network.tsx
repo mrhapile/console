@@ -333,7 +333,7 @@ export function Network() {
       case 'ingresses':
         return { value: '-', sublabel: 'ingresses', isClickable: false }
       case 'endpoints':
-        return { value: '-', sublabel: 'endpoints', isClickable: false }
+        return { value: filteredServices.length, sublabel: 'endpoints', isClickable: false }
       default:
         return { value: '-', sublabel: '' }
     }

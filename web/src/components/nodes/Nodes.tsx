@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, memo } from 'react'
+import { useState, useEffect, useCallback, memo, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Server, RefreshCw, Hourglass, GripVertical, ChevronDown, ChevronRight, Plus, LayoutGrid } from 'lucide-react'
 import {
@@ -292,6 +292,26 @@ export function Nodes() {
     return sum + ((c as Record<string, unknown>).gpuCount as number || 0)
   }, 0)
 
+  // Calculate utilization from cluster data
+  const currentCpuUtil = (() => {
+    const requestedCPU = reachableClusters.reduce((sum, c) => sum + (c.cpuRequestsCores || 0), 0)
+    return totalCPU > 0 ? Math.round((requestedCPU / totalCPU) * 100) : 0
+  })()
+  const currentMemoryUtil = (() => {
+    const requestedMemory = reachableClusters.reduce((sum, c) => sum + (c.memoryRequestsGB || 0), 0)
+    return totalMemoryGB > 0 ? Math.round((requestedMemory / totalMemoryGB) * 100) : 0
+  })()
+
+  // Cache utilization values to prevent showing 0 during refresh
+  const cachedCpuUtil = useRef(currentCpuUtil)
+  const cachedMemoryUtil = useRef(currentMemoryUtil)
+  useEffect(() => {
+    if (currentCpuUtil > 0) cachedCpuUtil.current = currentCpuUtil
+    if (currentMemoryUtil > 0) cachedMemoryUtil.current = currentMemoryUtil
+  }, [currentCpuUtil, currentMemoryUtil])
+  const cpuUtilization = currentCpuUtil > 0 ? currentCpuUtil : cachedCpuUtil.current
+  const memoryUtilization = currentMemoryUtil > 0 ? currentMemoryUtil : cachedMemoryUtil.current
+
   // Stats value getter for the configurable StatsOverview component
   const getStatValue = useCallback((blockId: string): StatBlockValue => {
     switch (blockId) {
@@ -308,9 +328,9 @@ export function Nodes() {
       case 'pods':
         return { value: totalPods, sublabel: 'pods' }
       case 'cpu_util':
-        return { value: 0, sublabel: 'utilization' }
+        return { value: `${cpuUtilization}%`, sublabel: 'utilization' }
       case 'memory_util':
-        return { value: 0, sublabel: 'utilization' }
+        return { value: `${memoryUtilization}%`, sublabel: 'utilization' }
       // Legacy IDs for backwards compatibility
       case 'clusters':
         return { value: reachableClusters.length, sublabel: 'clusters' }
@@ -319,7 +339,7 @@ export function Nodes() {
       default:
         return { value: 0 }
     }
-  }, [reachableClusters.length, totalNodes, totalCPU, totalMemoryGB, totalPods, totalGPUs])
+  }, [reachableClusters.length, totalNodes, totalCPU, totalMemoryGB, totalPods, totalGPUs, cpuUtilization, memoryUtilization])
 
   // Transform card for ConfigureCardModal
   const configureCard = configuringCard ? {

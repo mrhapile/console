@@ -308,6 +308,7 @@ export function Compute() {
     totalMemoryGB: reachableClusters.reduce((sum, c) => sum + (c.memoryGB || 0), 0),
     totalNodes: reachableClusters.reduce((sum, c) => sum + (c.nodeCount || 0), 0),
     totalPods: reachableClusters.reduce((sum, c) => sum + (c.podCount || 0), 0),
+    totalGPUs: reachableClusters.reduce((sum, c) => sum + (c.gpuCount || 0), 0),
   }
 
   // Check if we have any reachable clusters with actual data (not refreshing)
@@ -323,7 +324,7 @@ export function Compute() {
     if (hasActualData && (currentStats.totalNodes > 0 || currentStats.totalCPUs > 0)) {
       cachedStats.current = currentStats
     }
-  }, [hasActualData, currentStats.totalNodes, currentStats.totalCPUs, currentStats.totalMemoryGB, currentStats.totalPods])
+  }, [hasActualData, currentStats.totalNodes, currentStats.totalCPUs, currentStats.totalMemoryGB, currentStats.totalPods, currentStats.totalGPUs])
 
   // Use cached stats during refresh, current stats when data is available
   // Show dash only when we've never had data (initial state with no clusters)
@@ -373,7 +374,7 @@ export function Compute() {
       case 'memory':
         return { value: formatMemory(stats?.totalMemoryGB || 0, hasDataToShow), sublabel: 'allocatable', onClick: drillToResources, isClickable: hasDataToShow }
       case 'gpus':
-        return { value: 0, sublabel: 'total GPUs', onClick: drillToResources, isClickable: hasDataToShow }
+        return { value: formatStatValue(stats?.totalGPUs || 0, hasDataToShow), sublabel: 'total GPUs', onClick: drillToResources, isClickable: hasDataToShow }
       case 'tpus':
         return { value: 0, sublabel: 'total TPUs', onClick: drillToResources, isClickable: hasDataToShow }
       case 'pods':

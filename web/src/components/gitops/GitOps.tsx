@@ -18,7 +18,7 @@ import {
   rectSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { useClusters } from '../../hooks/useMCP'
+import { useClusters, useHelmReleases } from '../../hooks/useMCP'
 import { StatusIndicator } from '../charts/StatusIndicator'
 import { useToast } from '../ui/Toast'
 import { useShowCards } from '../../hooks/useShowCards'
@@ -231,6 +231,7 @@ function getTimeAgo(timestamp: string | undefined): string {
 
 export function GitOps() {
   const { clusters, isRefreshing, refetch } = useClusters()
+  const { releases: helmReleases } = useHelmReleases()
   const { showToast } = useToast()
   const { showCards, expandCards } = useShowCards('kubestellar-gitops')
   const [selectedCluster, setSelectedCluster] = useState<string>('')
@@ -536,7 +537,7 @@ export function GitOps() {
       case 'total':
         return { value: stats.total, sublabel: 'apps configured' }
       case 'helm':
-        return { value: 0, sublabel: 'helm releases' }
+        return { value: helmReleases.length, sublabel: 'helm releases' }
       case 'kustomize':
         return { value: 0, sublabel: 'kustomize apps' }
       case 'operators':
@@ -552,7 +553,7 @@ export function GitOps() {
       default:
         return { value: 0 }
     }
-  }, [stats, setStatusFilter])
+  }, [stats, setStatusFilter, helmReleases.length])
 
   // Transform card for ConfigureCardModal
   const configureCard = configuringCard ? {

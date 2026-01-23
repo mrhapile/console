@@ -132,7 +132,7 @@ export const NETWORK_STAT_BLOCKS: StatBlockConfig[] = [
 export const SECURITY_STAT_BLOCKS: StatBlockConfig[] = [
   { id: 'issues', name: 'Issues', icon: 'ShieldAlert', visible: true, color: 'red' },
   { id: 'critical', name: 'Critical', icon: 'AlertCircle', visible: true, color: 'red' },
-  { id: 'high', name: 'High', icon: 'AlertTriangle', visible: true, color: 'orange' },
+  { id: 'high', name: 'High', icon: 'AlertTriangle', visible: true, color: 'red' },
   { id: 'medium', name: 'Medium', icon: 'AlertTriangle', visible: true, color: 'yellow' },
   { id: 'low', name: 'Low', icon: 'Info', visible: true, color: 'blue' },
   { id: 'privileged', name: 'Privileged', icon: 'ShieldOff', visible: true, color: 'red' },
