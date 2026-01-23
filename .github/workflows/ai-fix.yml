@@ -339,3 +339,79 @@ jobs:
           gh issue edit "$ISSUE" --repo "$REPO" --add-label "ai-processing-complete"
 
           echo "Updated issue #$ISSUE: ai-processing-complete"
+
+  # Handle build failures on Copilot PRs
+  handle-build-failure:
+    if: |
+      github.event_name == 'pull_request' &&
+      (github.event.pull_request.user.login == 'Copilot' || contains(github.event.pull_request.user.login, 'copilot')) &&
+      github.event.action == 'synchronize'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Wait for Netlify check to complete
+        id: wait_netlify
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUM="${{ github.event.pull_request.number }}"
+          COMMIT_SHA="${{ github.event.pull_request.head.sha }}"
+          MAX_ATTEMPTS=30
+          ATTEMPT=0
+
+          echo "Waiting for Netlify check on commit $COMMIT_SHA..."
+
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            ATTEMPT=$((ATTEMPT + 1))
+            echo "Attempt $ATTEMPT/$MAX_ATTEMPTS"
+
+            # Get check runs for the commit
+            CHECK_STATUS=$(gh api repos/${{ github.repository }}/commits/$COMMIT_SHA/check-runs \
+              --jq '.check_runs[] | select(.name | contains("netlify") or contains("deploy-preview")) | {name: .name, status: .status, conclusion: .conclusion}' 2>/dev/null || echo "")
+
+            if [ -n "$CHECK_STATUS" ]; then
+              echo "Check status: $CHECK_STATUS"
+
+              # Check if any check has completed
+              COMPLETED=$(echo "$CHECK_STATUS" | jq -r 'select(.status == "completed")' 2>/dev/null || echo "")
+              if [ -n "$COMPLETED" ]; then
+                CONCLUSION=$(echo "$COMPLETED" | jq -r '.conclusion' | head -1)
+                echo "netlify_conclusion=$CONCLUSION" >> $GITHUB_OUTPUT
+                echo "Netlify check completed with: $CONCLUSION"
+                exit 0
+              fi
+            fi
+
+            sleep 20
+          done
+
+          echo "Timeout waiting for Netlify check"
+          echo "netlify_conclusion=timeout" >> $GITHUB_OUTPUT
+
+      - name: Comment on PR if build failed
+        if: steps.wait_netlify.outputs.netlify_conclusion == 'failure'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUM="${{ github.event.pull_request.number }}"
+
+          gh pr comment "$PR_NUM" --repo "${{ github.repository }}" --body "$(cat <<'EOF'
+          ## ⚠️ Build Failed
+
+          @Copilot The Netlify deploy preview build has **failed**. Please check the build logs and fix the errors.
+
+          **Common issues to check:**
+          - TypeScript compilation errors (unused imports, type mismatches)
+          - Missing dependencies
+          - Syntax errors
+
+          **To fix:**
+          1. Check the Netlify deploy logs for the specific error
+          2. Fix the code issues
+          3. Push a new commit
+
+          The build must pass before this PR can be reviewed.
+          EOF
+          )"
+
+          echo "Posted build failure comment on PR #$PR_NUM"
