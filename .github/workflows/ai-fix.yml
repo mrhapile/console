@@ -149,9 +149,11 @@ jobs:
           - Use Go for backend code
 
           ### Testing Requirements:
-          - **You MUST use Playwright to test the Netlify preview deployment**
+          - **You MUST use Playwright to test the preview deployment**
           - Do not just take screenshots - actually interact with the UI
-          - Navigate to the Netlify preview URL and verify your changes work end-to-end
+          - **IMPORTANT: Use the kubestellar.io preview URL, NOT the raw Netlify URL**
+            - Use: \`https://console.preview.kubestellar.io/pr/{PR_NUMBER}/\`
+            - Do NOT use: \`deploy-preview-*--kubestellar-console.netlify.app\`
           - Test all user interactions (clicks, inputs, etc.) that your changes affect
           - Verify the expected behavior occurs after each interaction
           EOF
@@ -181,9 +183,11 @@ jobs:
           - Use Go for backend code
 
           ### Testing Requirements:
-          - **You MUST use Playwright to test the Netlify preview deployment**
+          - **You MUST use Playwright to test the preview deployment**
           - Do not just take screenshots - actually interact with the UI
-          - Navigate to the Netlify preview URL and verify your changes work end-to-end
+          - **IMPORTANT: Use the kubestellar.io preview URL, NOT the raw Netlify URL**
+            - Use: \`https://console.preview.kubestellar.io/pr/{PR_NUMBER}/\`
+            - Do NOT use: \`deploy-preview-*--kubestellar-console.netlify.app\`
           - Test all user interactions (clicks, inputs, etc.) that your changes affect
           - Verify the expected behavior occurs after each interaction
           EOF
