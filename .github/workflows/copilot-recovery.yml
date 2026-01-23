@@ -286,6 +286,29 @@ jobs:
           )"
           echo "Posted test request on PR #$PR_NUM"
 
+      - name: Auto-mark PR ready for review
+        if: steps.pr_info.outputs.is_copilot == 'true' && steps.pr_info.outputs.is_draft == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUM="${{ steps.pr_info.outputs.pr_number }}"
+
+          echo "Marking PR #$PR_NUM as ready for review..."
+
+          # Use GraphQL to mark PR as ready (removes draft status)
+          PR_NODE_ID=$(gh api repos/${{ github.repository }}/pulls/$PR_NUM --jq '.node_id')
+
+          gh api graphql -f query="
+            mutation {
+              markPullRequestReadyForReview(input: {pullRequestId: \"$PR_NODE_ID\"}) {
+                pullRequest {
+                  isDraft
+                }
+              }
+            }"
+
+          echo "PR #$PR_NUM marked as ready for review"
+
   # Handle workflow run completion (for more complex build pipelines)
   handle-workflow-completion:
     if: github.event_name == 'workflow_run'
