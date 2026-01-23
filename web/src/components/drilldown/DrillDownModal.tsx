@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Box, Server, Layers, Rocket, FileText, Zap, Cpu, Lock, User, Bell, Ship, GitBranch, Settings, Shield } from 'lucide-react'
+import { Box, Server, Layers, Rocket, FileText, Zap, Cpu, Lock, User, Bell, Ship, GitBranch, Settings, Shield, Package } from 'lucide-react'
 import { useDrillDown } from '../../hooks/useDrillDown'
 import { ClusterDrillDown } from './views/ClusterDrillDown'
 import { NamespaceDrillDown } from './views/NamespaceDrillDown'
@@ -21,6 +21,8 @@ import { HelmReleaseDrillDown } from './views/HelmReleaseDrillDown'
 import { ArgoAppDrillDown } from './views/ArgoAppDrillDown'
 import { OperatorDrillDown } from './views/OperatorDrillDown'
 import { PolicyDrillDown } from './views/PolicyDrillDown'
+import { KustomizationDrillDown } from './views/KustomizationDrillDown'
+import { CRDDrillDown } from './views/CRDDrillDown'
 
 // Helper to get status badge color for pods
 const getPodStatusColor = (status: string) => {
@@ -53,6 +55,8 @@ const getViewIcon = (type: string) => {
     case 'argoapp': return <GitBranch className="w-4 h-4 text-orange-400" />
     case 'operator': return <Settings className="w-4 h-4 text-purple-400" />
     case 'policy': return <Shield className="w-4 h-4 text-blue-400" />
+    case 'kustomization': return <Layers className="w-4 h-4 text-indigo-400" />
+    case 'crd': return <Package className="w-4 h-4 text-purple-400" />
     default: return null
   }
 }
@@ -150,6 +154,10 @@ export function DrillDownModal() {
         return <OperatorDrillDown data={data} />
       case 'policy':
         return <PolicyDrillDown data={data} />
+      case 'kustomization':
+        return <KustomizationDrillDown data={data} />
+      case 'crd':
+        return <CRDDrillDown data={data} />
       case 'custom':
         return state.currentView?.customComponent || <div>Custom view</div>
       default:
