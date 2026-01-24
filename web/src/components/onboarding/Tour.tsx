@@ -22,41 +22,125 @@ interface TooltipPosition {
   bottom?: number
   left?: number
   right?: number
+  // For clamping without CSS transform conflicts
+  useAbsoluteLeft?: boolean
 }
+
+const TOOLTIP_WIDTH = 320 // w-80 = 20rem = 320px
+const TOOLTIP_HEIGHT = 220 // Approximate height including all content
+const VIEWPORT_PADDING = 16 // Minimum distance from viewport edge
 
 function getTooltipPosition(
   targetRect: DOMRect,
   placement: TourStep['placement']
 ): TooltipPosition {
   const gap = 12
+  const vw = window.innerWidth
+  const vh = window.innerHeight
+
+  let position: TooltipPosition = {}
 
   switch (placement) {
-    case 'top':
-      return {
-        bottom: window.innerHeight - targetRect.top + gap,
-        left: targetRect.left + targetRect.width / 2,
+    case 'top': {
+      // Position above target, centered horizontally
+      let left = targetRect.left + targetRect.width / 2
+      // Clamp horizontal position to keep tooltip in viewport
+      const minLeft = TOOLTIP_WIDTH / 2 + VIEWPORT_PADDING
+      const maxLeft = vw - TOOLTIP_WIDTH / 2 - VIEWPORT_PADDING
+      left = Math.max(minLeft, Math.min(maxLeft, left))
+
+      position = {
+        bottom: vh - targetRect.top + gap,
+        left,
       }
-    case 'bottom':
-      return {
+      break
+    }
+    case 'bottom': {
+      // Position below target, centered horizontally
+      let left = targetRect.left + targetRect.width / 2
+      // Clamp horizontal position to keep tooltip in viewport
+      const minLeft = TOOLTIP_WIDTH / 2 + VIEWPORT_PADDING
+      const maxLeft = vw - TOOLTIP_WIDTH / 2 - VIEWPORT_PADDING
+      left = Math.max(minLeft, Math.min(maxLeft, left))
+
+      // Check if there's room below, otherwise flip to top
+      const spaceBelow = vh - targetRect.bottom - gap
+      if (spaceBelow < TOOLTIP_HEIGHT && targetRect.top > TOOLTIP_HEIGHT + gap) {
+        position = {
+          bottom: vh - targetRect.top + gap,
+          left,
+        }
+      } else {
+        position = {
+          top: targetRect.bottom + gap,
+          left,
+        }
+      }
+      break
+    }
+    case 'left': {
+      // Position to the left of target, centered vertically
+      let top = targetRect.top + targetRect.height / 2
+      // Clamp vertical position to keep tooltip in viewport
+      const minTop = TOOLTIP_HEIGHT / 2 + VIEWPORT_PADDING
+      const maxTop = vh - TOOLTIP_HEIGHT / 2 - VIEWPORT_PADDING
+      top = Math.max(minTop, Math.min(maxTop, top))
+
+      // Check if there's room to the left, otherwise flip to right
+      const spaceLeft = targetRect.left - gap
+      if (spaceLeft < TOOLTIP_WIDTH && (vw - targetRect.right - gap) > TOOLTIP_WIDTH) {
+        // Flip to right
+        position = {
+          top,
+          left: targetRect.right + gap,
+        }
+      } else {
+        position = {
+          top,
+          right: vw - targetRect.left + gap,
+        }
+      }
+      break
+    }
+    case 'right': {
+      // Position to the right of target, centered vertically
+      let top = targetRect.top + targetRect.height / 2
+      // Clamp vertical position to keep tooltip in viewport
+      const minTop = TOOLTIP_HEIGHT / 2 + VIEWPORT_PADDING
+      const maxTop = vh - TOOLTIP_HEIGHT / 2 - VIEWPORT_PADDING
+      top = Math.max(minTop, Math.min(maxTop, top))
+
+      // Check if there's room to the right, otherwise flip to left
+      const spaceRight = vw - targetRect.right - gap
+      if (spaceRight < TOOLTIP_WIDTH && (targetRect.left - gap) > TOOLTIP_WIDTH) {
+        // Flip to left
+        position = {
+          top,
+          right: vw - targetRect.left + gap,
+        }
+      } else {
+        position = {
+          top,
+          left: targetRect.right + gap,
+        }
+      }
+      break
+    }
+    default: {
+      // Default to bottom placement
+      let left = targetRect.left + targetRect.width / 2
+      const minLeft = TOOLTIP_WIDTH / 2 + VIEWPORT_PADDING
+      const maxLeft = vw - TOOLTIP_WIDTH / 2 - VIEWPORT_PADDING
+      left = Math.max(minLeft, Math.min(maxLeft, left))
+
+      position = {
         top: targetRect.bottom + gap,
-        left: targetRect.left + targetRect.width / 2,
+        left,
       }
-    case 'left':
-      return {
-        top: targetRect.top + targetRect.height / 2,
-        right: window.innerWidth - targetRect.left + gap,
-      }
-    case 'right':
-      return {
-        top: targetRect.top + targetRect.height / 2,
-        left: targetRect.right + gap,
-      }
-    default:
-      return {
-        top: targetRect.bottom + gap,
-        left: targetRect.left + targetRect.width / 2,
-      }
+    }
   }
+
+  return position
 }
 
 export function TourOverlay() {
@@ -77,16 +161,40 @@ export function TourOverlay() {
   useEffect(() => {
     if (!isActive || !currentStep) return
 
-    // Small delay to allow DOM to render
-    const timeoutId = setTimeout(() => {
+    let isCancelled = false
+
+    // Function to position tooltip based on current target position
+    const positionTooltip = () => {
+      if (isCancelled) return
       const target = document.querySelector(currentStep.target)
       if (target) {
         const rect = target.getBoundingClientRect()
         setTargetRect(rect)
         setTooltipPosition(getTooltipPosition(rect, currentStep.placement))
+      }
+    }
 
-        // Scroll target into view if needed
-        target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    // Small delay to allow DOM to render
+    const timeoutId = setTimeout(() => {
+      const target = document.querySelector(currentStep.target)
+      if (target) {
+        // Check if target is in viewport
+        const rect = target.getBoundingClientRect()
+        const isInViewport =
+          rect.top >= 0 &&
+          rect.left >= 0 &&
+          rect.bottom <= window.innerHeight &&
+          rect.right <= window.innerWidth
+
+        if (!isInViewport) {
+          // Scroll target into view first
+          target.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' })
+          // Wait for scroll to complete, then position tooltip
+          setTimeout(positionTooltip, 400)
+        } else {
+          // Target already visible, position immediately
+          positionTooltip()
+        }
       } else {
         // Center the tooltip when target not found
         setTargetRect(null)
@@ -97,7 +205,15 @@ export function TourOverlay() {
       }
     }, 100)
 
-    return () => clearTimeout(timeoutId)
+    // Reposition on window resize
+    const handleResize = () => positionTooltip()
+    window.addEventListener('resize', handleResize)
+
+    return () => {
+      isCancelled = true
+      clearTimeout(timeoutId)
+      window.removeEventListener('resize', handleResize)
+    }
   }, [isActive, currentStep, currentStepIndex])
 
   // Handle escape key
