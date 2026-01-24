@@ -127,28 +127,43 @@ function getTooltipPosition(
       break
     }
     case 'left': {
-      // Position to the left of target, centered vertically
+      // Position to the left of target
+      // For navbar items at the top, position tooltip top near the target top
+      // This avoids centering which pushes it down
       let top = targetRect.top + targetRect.height / 2
-      // More conservative clamping - account for actual rendered height being potentially larger
-      // The CSS transform -translate-y-1/2 shifts by 50% of actual element height
-      // Use a larger buffer to ensure tooltip stays in viewport
-      const effectiveHalfHeight = TOOLTIP_HEIGHT / 2 + 20 // Extra buffer for safety
-      const minTop = effectiveHalfHeight + VIEWPORT_PADDING
-      const maxTop = vh - effectiveHalfHeight - VIEWPORT_PADDING
-      top = Math.max(minTop, Math.min(maxTop, top))
 
+      // For items near the top of the viewport (like navbar), align tooltip top with target
+      // instead of centering. This keeps the tooltip near the top of the page.
+      const isNearTop = targetRect.top < 100
+      if (isNearTop) {
+        // Align top of tooltip with top of target, with small offset
+        top = targetRect.top - 10
+        // Ensure it doesn't go above viewport
+        top = Math.max(VIEWPORT_PADDING, top)
+      } else {
+        // For other elements, use centered positioning with clamping
+        const effectiveHalfHeight = TOOLTIP_HEIGHT / 2 + 20
+        const minTop = effectiveHalfHeight + VIEWPORT_PADDING
+        const maxTop = vh - effectiveHalfHeight - VIEWPORT_PADDING
+        top = Math.max(minTop, Math.min(maxTop, top))
+      }
+
+      // Use smaller gap for left placement (closer to target)
+      const leftGap = 8
       // Check if there's room to the left, otherwise flip to right
-      const spaceLeft = targetRect.left - gap
-      if (spaceLeft < TOOLTIP_WIDTH && (vw - targetRect.right - gap) > TOOLTIP_WIDTH) {
+      const spaceLeft = targetRect.left - leftGap
+      if (spaceLeft < TOOLTIP_WIDTH && (vw - targetRect.right - leftGap) > TOOLTIP_WIDTH) {
         // Flip to right
         position = {
           top,
-          left: targetRect.right + gap,
+          left: targetRect.right + leftGap,
+          useAbsoluteLeft: isNearTop, // Don't use transform for top-aligned items
         }
       } else {
         position = {
           top,
-          right: vw - targetRect.left + gap,
+          right: vw - targetRect.left + leftGap,
+          useAbsoluteLeft: isNearTop, // Don't use transform for top-aligned items
         }
       }
       break
@@ -234,6 +249,7 @@ export function TourOverlay() {
     if (!isActive || !currentStep) return
 
     let isCancelled = false
+    const timeoutIds: NodeJS.Timeout[] = []
 
     // Function to position tooltip based on current target position
     const positionTooltip = () => {
@@ -247,7 +263,7 @@ export function TourOverlay() {
     }
 
     // Small delay to allow DOM to render
-    const timeoutId = setTimeout(() => {
+    timeoutIds.push(setTimeout(() => {
       const target = document.querySelector(currentStep.target)
       if (target) {
         // Check if target is in viewport
@@ -262,7 +278,7 @@ export function TourOverlay() {
           // Scroll target into view first
           target.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' })
           // Wait for scroll to complete, then position tooltip
-          setTimeout(positionTooltip, 400)
+          timeoutIds.push(setTimeout(positionTooltip, 400))
         } else {
           // Target already visible, position immediately
           positionTooltip()
@@ -275,7 +291,13 @@ export function TourOverlay() {
           left: window.innerWidth / 2,
         })
       }
-    }, 100)
+    }, 100))
+
+    // For steps that may have layout shifts (e.g., after sidebar closes),
+    // reposition after a longer delay to catch the final layout
+    if (currentStep.id === 'add-card' || currentStep.id === 'templates') {
+      timeoutIds.push(setTimeout(positionTooltip, 500))
+    }
 
     // Reposition on window resize
     const handleResize = () => positionTooltip()
@@ -283,7 +305,7 @@ export function TourOverlay() {
 
     return () => {
       isCancelled = true
-      clearTimeout(timeoutId)
+      timeoutIds.forEach(id => clearTimeout(id))
       window.removeEventListener('resize', handleResize)
     }
   }, [isActive, currentStep, currentStepIndex])
@@ -352,8 +374,9 @@ export function TourOverlay() {
           // Center horizontally only for top/bottom placements when NOT using absolute edge positioning
           (currentStep.placement === 'top' || currentStep.placement === 'bottom' || !currentStep.placement) &&
             !tooltipPosition.useAbsoluteLeft && '-translate-x-1/2',
-          // Center vertically for left/right placements (which use top positioning)
-          (currentStep.placement === 'left' || currentStep.placement === 'right') && '-translate-y-1/2'
+          // Center vertically for left/right placements, unless using absolute positioning (navbar items)
+          (currentStep.placement === 'left' || currentStep.placement === 'right') &&
+            !tooltipPosition.useAbsoluteLeft && '-translate-y-1/2'
         )}
         style={{
           top: tooltipPosition.top,

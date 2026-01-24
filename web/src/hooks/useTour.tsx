@@ -55,7 +55,7 @@ const TOUR_STEPS: TourStep[] = [
     target: '[data-tour="recommendations"]',
     title: 'AI-Powered Recommendations',
     content: 'Claude analyzes your cluster activity and suggests relevant cards. It notices patterns like "You often check pod issues after deployments" and offers helpful cards.',
-    placement: 'right',
+    placement: 'bottom',
     highlight: true,
   },
   {
@@ -69,7 +69,7 @@ const TOUR_STEPS: TourStep[] = [
   {
     id: 'drilldown',
     target: '[data-tour="drilldown"]',
-    title: 'AI Drill-Down',
+    title: 'Drill-Down',
     content: 'Click any resource (pod, deployment, node) to open a detailed view. Use the AI Analysis tab to get Claude\'s insights, or the Shell tab to run kubectl commands.',
     placement: 'bottom',
     highlight: true,
@@ -77,7 +77,7 @@ const TOUR_STEPS: TourStep[] = [
   {
     id: 'search',
     target: '[data-tour="search"]',
-    title: 'AI-Powered Search',
+    title: 'Search',
     content: 'Press ⌘K to search across all clusters. Ask natural language questions like "Which pods are using the most memory?" or "Show deployments in staging".',
     placement: 'bottom',
     highlight: true,

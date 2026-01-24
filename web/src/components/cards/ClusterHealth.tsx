@@ -286,7 +286,7 @@ export function ClusterHealth() {
 
       {/* Cluster list */}
       <div className="flex-1 space-y-2 overflow-y-auto">
-        {clusters.map((cluster) => {
+        {clusters.map((cluster, idx) => {
           const clusterState = getClusterStateFromInfo(cluster)
           const clusterUnreachable = isUnreachable(cluster)
           const clusterLoading = isClusterLoading(cluster)
@@ -305,6 +305,7 @@ export function ClusterHealth() {
           return (
             <div
               key={cluster.name}
+              data-tour={idx === 0 ? 'drilldown' : undefined}
               className="flex items-center justify-between p-2 rounded-lg border border-border/30 bg-secondary/30 transition-all cursor-pointer hover:bg-secondary/50 hover:border-border/50"
               onClick={() => setSelectedCluster(cluster.name)}
               title={`Click to view details for ${cluster.name}`}
