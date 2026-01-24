@@ -492,7 +492,7 @@ export function TourPrompt() {
   if (hasCompletedTour || dismissed || isActive) return null
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 w-80 p-4 glass rounded-lg border border-purple-500/30 shadow-xl animate-fade-in-up">
+    <div className="fixed bottom-4 left-4 z-50 w-80 p-4 glass rounded-lg border border-purple-500/30 shadow-xl animate-fade-in-up">
       <div className="flex items-start gap-3">
         <div className="p-2 rounded-lg bg-purple-500/20 flex-shrink-0">
           <KubeStellarAIIcon className="w-6 h-6" />

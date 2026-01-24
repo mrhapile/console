@@ -187,9 +187,9 @@ export function AlertBadge() {
       >
         <Bell className="w-5 h-5" />
         <span
-          className={`absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] flex items-center justify-center text-[10px] font-bold text-white rounded-full ${getBadgeColor()}`}
+          className={`absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] flex items-center justify-center text-[10px] font-bold text-white rounded-full overflow-hidden ${getBadgeColor()}`}
         >
-          {stats.firing > 99 ? '99+' : stats.firing}
+          <AnimatedCounter value={stats.firing} />
         </span>
       </button>
 
