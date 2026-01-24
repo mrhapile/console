@@ -82,6 +82,46 @@ const TOUR_STEPS: TourStep[] = [
     placement: 'bottom',
     highlight: true,
   },
+  {
+    id: 'ai-missions',
+    target: '[data-tour="ai-missions"]',
+    title: 'AI Missions',
+    content: 'Launch complex AI-powered operations like cluster upgrades, troubleshooting, or analysis. Claude handles multi-step tasks autonomously while keeping you informed.',
+    placement: 'left',
+    highlight: true,
+  },
+  {
+    id: 'add-card',
+    target: '[data-tour="add-card"]',
+    title: 'Add Dashboard Cards',
+    content: 'Customize your dashboard by adding cards. Browse the card catalog to find monitoring views for clusters, workloads, security, GitOps, and more.',
+    placement: 'left',
+    highlight: true,
+  },
+  {
+    id: 'templates',
+    target: '[data-tour="templates"]',
+    title: 'Dashboard Templates',
+    content: 'Start with pre-configured dashboards for common workflows like SRE monitoring, security auditing, or GPU management. Templates give you a head start!',
+    placement: 'left',
+    highlight: true,
+  },
+  {
+    id: 'feedback',
+    target: '[data-tour="feedback"]',
+    title: 'Bug Reports & Feature Requests',
+    content: 'Found a bug or have an idea? Click here to report issues or request new features. We track your feedback and notify you when updates are available.',
+    placement: 'bottom',
+    highlight: true,
+  },
+  {
+    id: 'alerts',
+    target: '[data-tour="alerts"]',
+    title: 'Alert Notifications',
+    content: 'Monitor active alerts across all clusters. Click to see alert details, acknowledge them, or let Claude diagnose issues with AI-powered analysis.',
+    placement: 'bottom',
+    highlight: true,
+  },
 ]
 
 const TOUR_STORAGE_KEY = 'kubestellar-console-tour-completed'

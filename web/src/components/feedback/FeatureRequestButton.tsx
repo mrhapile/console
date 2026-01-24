@@ -15,6 +15,7 @@ export function FeatureRequestButton() {
     <>
       <button
         onClick={handleClick}
+        data-tour="feedback"
         className={`relative p-2 rounded-lg hover:bg-secondary/50 transition-colors ${
           unreadCount > 0 ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
         }`}

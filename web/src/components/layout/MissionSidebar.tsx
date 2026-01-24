@@ -618,6 +618,7 @@ export function MissionSidebarToggle() {
   return (
     <button
       onClick={openSidebar}
+      data-tour="ai-missions"
       className={cn(
         'fixed right-4 bottom-4 flex items-center gap-2 px-4 py-3 rounded-full shadow-lg transition-all z-50',
         needsAttention > 0

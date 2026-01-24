@@ -127,6 +127,7 @@ export function AlertBadge() {
   if (stats.firing === 0) {
     return (
       <button
+        data-tour="alerts"
         className="relative p-2 rounded-lg hover:bg-secondary/50 text-muted-foreground transition-colors"
         title="No active alerts"
       >
@@ -136,7 +137,7 @@ export function AlertBadge() {
   }
 
   return (
-    <div className="relative">
+    <div className="relative" data-tour="alerts">
       {/* Badge Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
