@@ -1,0 +1,244 @@
+import { useState, useEffect, useCallback } from 'react'
+
+// Types
+export interface Workload {
+  name: string
+  namespace: string
+  type: 'Deployment' | 'StatefulSet' | 'DaemonSet'
+  cluster: string
+  replicas: number
+  readyReplicas: number
+  status: 'Running' | 'Degraded' | 'Failed' | 'Pending'
+  image: string
+  createdAt: string
+}
+
+export interface ClusterCapability {
+  cluster: string
+  nodeCount: number
+  cpuCapacity: string
+  memCapacity: string
+  gpuType?: string
+  gpuCount?: number
+  available: boolean
+}
+
+export interface DeployRequest {
+  workloadName: string
+  namespace: string
+  sourceCluster: string
+  targetClusters: string[]
+  replicas?: number
+}
+
+export interface DeployResult {
+  success: boolean
+  cluster: string
+  message: string
+}
+
+// Fetch all workloads across clusters
+export function useWorkloads(options?: {
+  cluster?: string
+  namespace?: string
+  type?: string
+}) {
+  const [data, setData] = useState<Workload[] | undefined>(undefined)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<Error | null>(null)
+
+  const fetchData = useCallback(async () => {
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      const params = new URLSearchParams()
+      if (options?.cluster) params.set('cluster', options.cluster)
+      if (options?.namespace) params.set('namespace', options.namespace)
+      if (options?.type) params.set('type', options.type)
+
+      const queryString = params.toString()
+      const url = `/api/workloads${queryString ? `?${queryString}` : ''}`
+
+      const res = await fetch(url)
+      if (!res.ok) {
+        throw new Error(`Failed to fetch workloads: ${res.statusText}`)
+      }
+      const workloads = await res.json()
+      setData(workloads)
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error('Unknown error'))
+    } finally {
+      setIsLoading(false)
+    }
+  }, [options?.cluster, options?.namespace, options?.type])
+
+  useEffect(() => {
+    fetchData()
+    const interval = setInterval(fetchData, 30000)
+    return () => clearInterval(interval)
+  }, [fetchData])
+
+  return { data, isLoading, error, refetch: fetchData }
+}
+
+// Fetch cluster capabilities
+export function useClusterCapabilities() {
+  const [data, setData] = useState<ClusterCapability[] | undefined>(undefined)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<Error | null>(null)
+
+  const fetchData = useCallback(async () => {
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      const res = await fetch('/api/workloads/capabilities')
+      if (!res.ok) {
+        throw new Error(`Failed to fetch capabilities: ${res.statusText}`)
+      }
+      const capabilities = await res.json()
+      setData(capabilities)
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error('Unknown error'))
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchData()
+    const interval = setInterval(fetchData, 60000)
+    return () => clearInterval(interval)
+  }, [fetchData])
+
+  return { data, isLoading, error, refetch: fetchData }
+}
+
+// Deploy workload to clusters
+export function useDeployWorkload() {
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<Error | null>(null)
+
+  const mutate = useCallback(async (
+    request: DeployRequest,
+    options?: {
+      onSuccess?: (data: DeployResult[]) => void
+      onError?: (error: Error) => void
+    }
+  ) => {
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      const res = await fetch('/api/workloads/deploy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(request),
+      })
+      if (!res.ok) {
+        const errorData = await res.json()
+        throw new Error(errorData.error || 'Failed to deploy workload')
+      }
+      const result = await res.json()
+      options?.onSuccess?.(result)
+      return result
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Unknown error')
+      setError(error)
+      options?.onError?.(error)
+      throw error
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
+  return { mutate, isLoading, error }
+}
+
+// Scale workload
+export function useScaleWorkload() {
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<Error | null>(null)
+
+  const mutate = useCallback(async (
+    request: {
+      workloadName: string
+      namespace: string
+      targetClusters?: string[]
+      replicas: number
+    },
+    options?: {
+      onSuccess?: (data: DeployResult[]) => void
+      onError?: (error: Error) => void
+    }
+  ) => {
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      const res = await fetch('/api/workloads/scale', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(request),
+      })
+      if (!res.ok) {
+        const errorData = await res.json()
+        throw new Error(errorData.error || 'Failed to scale workload')
+      }
+      const result = await res.json()
+      options?.onSuccess?.(result)
+      return result
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Unknown error')
+      setError(error)
+      options?.onError?.(error)
+      throw error
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
+  return { mutate, isLoading, error }
+}
+
+// Delete workload
+export function useDeleteWorkload() {
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<Error | null>(null)
+
+  const mutate = useCallback(async (
+    params: {
+      cluster: string
+      namespace: string
+      name: string
+    },
+    options?: {
+      onSuccess?: () => void
+      onError?: (error: Error) => void
+    }
+  ) => {
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      const res = await fetch(`/api/workloads/${params.cluster}/${params.namespace}/${params.name}`, {
+        method: 'DELETE',
+      })
+      if (!res.ok) {
+        const errorData = await res.json()
+        throw new Error(errorData.error || 'Failed to delete workload')
+      }
+      options?.onSuccess?.()
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Unknown error')
+      setError(error)
+      options?.onError?.(error)
+      throw error
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
+  return { mutate, isLoading, error }
+}

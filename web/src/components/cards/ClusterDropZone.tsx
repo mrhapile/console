@@ -1,21 +1,10 @@
 import { useDroppable } from '@dnd-kit/core'
-import { Server, Check, Crown, Cpu, HardDrive, Layers } from 'lucide-react'
+import { Server, Check, Cpu, HardDrive, Layers, Loader2 } from 'lucide-react'
 import { cn } from '../../lib/cn'
 import { ClusterBadge } from '../ui/ClusterBadge'
+import { useClusterCapabilities, ClusterCapability } from '../../hooks/useWorkloads'
 
-// Types for cluster capabilities
-interface ClusterCapability {
-  cluster: string
-  nodeCount: number
-  cpuCapacity: string
-  memCapacity: string
-  gpuType?: string
-  gpuCount?: number
-  available: boolean
-  isControlCluster?: boolean
-}
-
-// Demo cluster data
+// Demo cluster data (fallback when no real clusters)
 const DEMO_CLUSTERS: ClusterCapability[] = [
   {
     cluster: 'us-east-1',
@@ -47,55 +36,66 @@ const DEMO_CLUSTERS: ClusterCapability[] = [
     gpuCount: 8,
     available: true,
   },
-  {
-    cluster: 'ks-control',
-    nodeCount: 1,
-    cpuCapacity: '4 cores',
-    memCapacity: '16Gi',
-    available: true,
-    isControlCluster: true,
-  },
 ]
+
+interface DraggedWorkload {
+  name: string
+  namespace: string
+  type: string
+  sourceCluster: string
+  currentClusters: string[]
+}
 
 interface ClusterDropZoneProps {
   isDragging: boolean
-  draggedWorkload?: {
-    name: string
-    namespace: string
-    type: string
-    currentClusters: string[]
-  } | null
-  clusters?: ClusterCapability[]
-  onDeploy?: (workload: { name: string; namespace: string }, cluster: string) => void
+  draggedWorkload?: DraggedWorkload | null
+  onDeploy?: (workload: { name: string; namespace: string; sourceCluster: string }, targetCluster: string) => void
 }
 
 export function ClusterDropZone({
   isDragging,
   draggedWorkload,
-  clusters = DEMO_CLUSTERS,
   onDeploy,
 }: ClusterDropZoneProps) {
+  const { data: realClusters, isLoading } = useClusterCapabilities()
+
   if (!isDragging || !draggedWorkload) return null
 
-  // Filter out clusters where workload is already deployed
+  // Use real clusters if available, otherwise demo data
+  const clusters = realClusters && realClusters.length > 0 ? realClusters : DEMO_CLUSTERS
+  const isDemo = !realClusters || realClusters.length === 0
+
+  // Filter out clusters where workload is already deployed and unavailable clusters
   const availableClusters = clusters.filter(
-    (c) => !draggedWorkload.currentClusters.includes(c.cluster) && !c.isControlCluster
+    (c: ClusterCapability) => !draggedWorkload.currentClusters.includes(c.cluster) && c.available
   )
 
   return (
     <div className="fixed right-6 top-24 z-50 animate-fade-in-up">
-      <div className="glass rounded-xl border border-border/50 p-4 w-72 shadow-2xl bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm">
+      <div className={cn(
+        'glass rounded-xl border p-4 w-72 shadow-2xl backdrop-blur-sm',
+        isDemo
+          ? 'border-yellow-500/50 bg-yellow-50/95 dark:bg-yellow-900/20'
+          : 'border-border/50 bg-white/95 dark:bg-gray-900/95'
+      )}>
         <div className="flex items-center gap-2 mb-3">
           <Server className="w-5 h-5 text-blue-500" />
           <div>
-            <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Deploy Workload</div>
+            <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+              Deploy Workload
+              {isDemo && <span className="ml-2 text-xs text-yellow-600 dark:text-yellow-400">(Demo)</span>}
+            </div>
             <div className="text-xs text-gray-500 dark:text-gray-400">
               {draggedWorkload.name} ({draggedWorkload.type})
             </div>
           </div>
         </div>
 
-        {availableClusters.length === 0 ? (
+        {isLoading ? (
+          <div className="flex items-center justify-center py-6">
+            <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+          </div>
+        ) : availableClusters.length === 0 ? (
           <div className="text-center py-4">
             <Layers className="w-8 h-8 mx-auto mb-2 text-gray-400" />
             <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -104,7 +104,7 @@ export function ClusterDropZone({
           </div>
         ) : (
           <div className="space-y-2 max-h-64 overflow-y-auto">
-            {availableClusters.map((cluster) => (
+            {availableClusters.map((cluster: ClusterCapability) => (
               <DroppableCluster
                 key={cluster.cluster}
                 cluster={cluster}
@@ -117,7 +117,7 @@ export function ClusterDropZone({
 
         <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
           <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
-            Drop workload on a cluster to deploy
+            {isDemo ? 'Connect clusters to enable real deployments' : 'Drop workload on a cluster to deploy'}
           </p>
         </div>
       </div>
@@ -127,12 +127,8 @@ export function ClusterDropZone({
 
 interface DroppableClusterProps {
   cluster: ClusterCapability
-  workload: {
-    name: string
-    namespace: string
-    type: string
-  }
-  onDeploy?: (workload: { name: string; namespace: string }, cluster: string) => void
+  workload: DraggedWorkload
+  onDeploy?: (workload: { name: string; namespace: string; sourceCluster: string }, targetCluster: string) => void
 }
 
 function DroppableCluster({ cluster, workload, onDeploy }: DroppableClusterProps) {
@@ -145,6 +141,14 @@ function DroppableCluster({ cluster, workload, onDeploy }: DroppableClusterProps
     },
   })
 
+  const handleClick = () => {
+    onDeploy?.({
+      name: workload.name,
+      namespace: workload.namespace,
+      sourceCluster: workload.sourceCluster
+    }, cluster.cluster)
+  }
+
   return (
     <div
       ref={setNodeRef}
@@ -154,14 +158,10 @@ function DroppableCluster({ cluster, workload, onDeploy }: DroppableClusterProps
           ? 'bg-blue-100 dark:bg-blue-900/30 border-blue-500 scale-[1.02] shadow-lg'
           : 'bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-600'
       )}
-      onClick={() => onDeploy?.(workload, cluster.cluster)}
+      onClick={handleClick}
     >
       <div className="flex-shrink-0 mt-0.5">
-        {cluster.isControlCluster ? (
-          <Crown className={cn('w-5 h-5', isOver ? 'text-purple-500' : 'text-purple-400')} />
-        ) : (
-          <Server className={cn('w-5 h-5', isOver ? 'text-blue-500' : 'text-blue-400')} />
-        )}
+        <Server className={cn('w-5 h-5', isOver ? 'text-blue-500' : 'text-blue-400')} />
       </div>
 
       <div className="flex-1 min-w-0">
@@ -195,4 +195,4 @@ function DroppableCluster({ cluster, workload, onDeploy }: DroppableClusterProps
   )
 }
 
-export type { ClusterCapability }
+export type { ClusterCapability, DraggedWorkload }

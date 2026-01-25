@@ -58,7 +58,9 @@ import { AddCardModal } from '../../components/dashboard/AddCardModal'
 import { TemplatesModal } from '../../components/dashboard/TemplatesModal'
 import { ConfigureCardModal } from '../../components/dashboard/ConfigureCardModal'
 import { FloatingDashboardActions } from '../../components/dashboard/FloatingDashboardActions'
-import { ClusterDropZone } from '../../components/cards/ClusterDropZone'
+import { ClusterDropZone, DraggedWorkload } from '../../components/cards/ClusterDropZone'
+import { useDeployWorkload } from '../../hooks/useWorkloads'
+import { useToast } from '../../components/ui/Toast'
 
 // ============================================================================
 // Dashboard Registry
@@ -178,12 +180,9 @@ export function DashboardRuntime({
   } = dashboard
 
   // Workload drag-drop state for deploying to clusters
-  const [draggedWorkload, setDraggedWorkload] = useState<{
-    name: string
-    namespace: string
-    type: string
-    currentClusters: string[]
-  } | null>(null)
+  const [draggedWorkload, setDraggedWorkload] = useState<DraggedWorkload | null>(null)
+  const deployWorkload = useDeployWorkload()
+  const { showToast } = useToast()
 
   // Extended drag handlers to support workload-to-cluster deployment
   const handleDragStart = useCallback((event: DragStartEvent) => {
@@ -207,16 +206,35 @@ export function DashboardRuntime({
 
     if (activeData?.type === 'workload' && overData?.type === 'cluster') {
       const workload = activeData.workload
-      const cluster = overData.cluster
+      const targetCluster = overData.cluster
 
-      // Trigger deploy action (could be a toast notification or API call)
-      console.log(`Deploying ${workload.name} to ${cluster}`)
-      // TODO: Call deploy API here
+      // Call deploy API
+      handleDeployWorkload(workload, targetCluster)
     }
 
     // Clear dragged workload state
     setDraggedWorkload(null)
   }, [dnd])
+
+  // Handle deploying workload to cluster
+  const handleDeployWorkload = useCallback((
+    workload: { name: string; namespace: string; sourceCluster: string },
+    targetCluster: string
+  ) => {
+    deployWorkload.mutate({
+      workloadName: workload.name,
+      namespace: workload.namespace,
+      sourceCluster: workload.sourceCluster,
+      targetClusters: [targetCluster],
+    }, {
+      onSuccess: () => {
+        showToast(`Deployed ${workload.name} to ${targetCluster}`, 'success')
+      },
+      onError: (error: Error) => {
+        showToast(`Failed to deploy: ${error.message}`, 'error')
+      },
+    })
+  }, [deployWorkload, showToast])
 
   // Get stats value getter from registry or props
   const getStatValue = useMemo(() => {
@@ -352,6 +370,7 @@ export function DashboardRuntime({
               <ClusterDropZone
                 isDragging={draggedWorkload !== null}
                 draggedWorkload={draggedWorkload}
+                onDeploy={handleDeployWorkload}
               />
             </DndContext>
           )}

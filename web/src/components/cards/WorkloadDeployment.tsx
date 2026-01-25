@@ -19,6 +19,7 @@ import {
 import { ClusterBadge } from '../ui/ClusterBadge'
 import { RefreshButton } from '../ui/RefreshIndicator'
 import { cn } from '../../lib/cn'
+import { useWorkloads, Workload as ApiWorkload } from '../../hooks/useWorkloads'
 
 // Workload types
 type WorkloadType = 'Deployment' | 'StatefulSet' | 'DaemonSet' | 'Job' | 'CronJob'
@@ -201,6 +202,9 @@ interface DraggableWorkloadItemProps {
 }
 
 function DraggableWorkloadItem({ workload, isSelected, onSelect }: DraggableWorkloadItemProps) {
+  // Source cluster is the first cluster in the list (where we'll copy from)
+  const sourceCluster = workload.targetClusters[0] || 'unknown'
+
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `workload-${workload.namespace}-${workload.name}`,
     data: {
@@ -209,6 +213,7 @@ function DraggableWorkloadItem({ workload, isSelected, onSelect }: DraggableWork
         name: workload.name,
         namespace: workload.namespace,
         type: workload.type,
+        sourceCluster,
         currentClusters: workload.targetClusters,
       },
     },
@@ -345,9 +350,53 @@ export function WorkloadDeployment({ onRefresh, isRefreshing = false }: Workload
   const [statusFilter, setStatusFilter] = useState<WorkloadStatus | 'All'>('All')
   const [selectedWorkload, setSelectedWorkload] = useState<Workload | null>(null)
 
-  // Using demo data
-  const workloads = DEMO_WORKLOADS
-  const stats = DEMO_STATS
+  // Fetch real workloads from API
+  const { data: realWorkloads, isLoading, refetch } = useWorkloads()
+
+  // Use real data if available, otherwise demo data
+  const isDemo = !realWorkloads || realWorkloads.length === 0
+  const workloads: Workload[] = useMemo(() => {
+    if (isDemo) return DEMO_WORKLOADS
+    // Transform API workloads to card format
+    return realWorkloads.map((w: ApiWorkload) => ({
+      name: w.name,
+      namespace: w.namespace,
+      type: w.type as WorkloadType,
+      status: w.status as WorkloadStatus,
+      replicas: w.replicas,
+      readyReplicas: w.readyReplicas,
+      image: w.image,
+      labels: {},
+      targetClusters: [w.cluster],
+      deployments: [{
+        cluster: w.cluster,
+        status: w.status as WorkloadStatus,
+        replicas: w.replicas,
+        readyReplicas: w.readyReplicas,
+        lastUpdated: w.createdAt,
+      }],
+      createdAt: w.createdAt,
+    }))
+  }, [realWorkloads, isDemo])
+
+  // Calculate stats from actual workloads
+  const stats = useMemo(() => {
+    if (isDemo) return DEMO_STATS
+    return {
+      totalWorkloads: workloads.length,
+      runningCount: workloads.filter(w => w.status === 'Running').length,
+      degradedCount: workloads.filter(w => w.status === 'Degraded').length,
+      pendingCount: workloads.filter(w => w.status === 'Pending').length,
+      failedCount: workloads.filter(w => w.status === 'Failed').length,
+      totalClusters: new Set(workloads.flatMap(w => w.targetClusters)).size,
+    }
+  }, [workloads, isDemo])
+
+  // Handle refresh
+  const handleRefresh = () => {
+    refetch()
+    onRefresh?.()
+  }
 
   const filteredWorkloads = useMemo(() => {
     return workloads.filter((w) => {
@@ -366,12 +415,17 @@ export function WorkloadDeployment({ onRefresh, isRefreshing = false }: Workload
   const workloadStatuses: (WorkloadStatus | 'All')[] = ['All', 'Running', 'Degraded', 'Pending', 'Failed']
 
   return (
-    <div className="h-full flex flex-col ring-2 ring-yellow-400/50 rounded-lg">
+    <div className={cn(
+      "h-full flex flex-col rounded-lg",
+      isDemo && "ring-2 ring-yellow-400/50"
+    )}>
       {/* Demo badge */}
-      <div className="bg-yellow-50 dark:bg-yellow-900/20 border-b border-yellow-200 dark:border-yellow-800 px-3 py-1 text-xs text-yellow-700 dark:text-yellow-400 flex items-center gap-1">
-        <AlertTriangle className="h-3 w-3" />
-        Demo data - Drag workloads to deploy to clusters
-      </div>
+      {isDemo && (
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 border-b border-yellow-200 dark:border-yellow-800 px-3 py-1 text-xs text-yellow-700 dark:text-yellow-400 flex items-center gap-1">
+          <AlertTriangle className="h-3 w-3" />
+          Demo data - Drag workloads to deploy to clusters
+        </div>
+      )}
 
       {/* Header */}
       <div className="flex items-center justify-between p-3 border-b border-gray-200 dark:border-gray-700">
@@ -379,7 +433,7 @@ export function WorkloadDeployment({ onRefresh, isRefreshing = false }: Workload
           <Box className="h-5 w-5 text-blue-500" />
           <h3 className="font-medium text-gray-900 dark:text-gray-100">Workload Deployment</h3>
         </div>
-        <RefreshButton onRefresh={onRefresh} isRefreshing={isRefreshing} />
+        <RefreshButton onRefresh={handleRefresh} isRefreshing={isRefreshing || isLoading} />
       </div>
 
       {/* Stats bar */}
