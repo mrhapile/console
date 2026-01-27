@@ -56,3 +56,9 @@ vendor/
 # Coordination file (local only)
 .claude-coord.md
 /kkc-agent
+
+# Claude Code local files
+.bob/
+CLAUDE.md
+TASKS.md
+bin/
