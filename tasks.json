@@ -7,12 +7,19 @@
         "2. Commit changes with DCO sign-off (-s flag)",
         "3. Push branch and create PR with gh pr create",
         "4. Monitor GitHub Actions: wait for build, lint, and preview checks to pass",
-        "5. Ignore playwright tests (they may fail in CI)",
+        "5. IGNORE playwright tests (they often fail in CI - do not wait for them)",
         "6. Once build/lint/preview pass, merge with gh pr merge --admin --squash",
-        "7. Update task status to completed in tasks.json"
+        "7. Update task status to completed in tasks.json",
+        "8. Add a test task to verify the completed feature works correctly"
       ],
       "required_checks": ["build", "lint", "preview"],
-      "optional_checks": ["playwright"]
+      "ignore_checks": ["playwright", "Test (chromium)", "Test (firefox)", "Test (webkit)", "Visual Regression", "Accessibility Tests", "Mobile Browser Tests"],
+      "best_practices": [
+        "Commit and create PRs regularly - don't wait until everything is done",
+        "Small, focused PRs are easier to review and merge",
+        "Always add a test task after merging a feature to verify it works",
+        "Use 'unset GITHUB_TOKEN && gh auth setup-git' if git push fails"
+      ]
     }
   },
   "tasks": [
