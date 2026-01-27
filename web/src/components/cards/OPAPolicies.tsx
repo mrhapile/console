@@ -7,7 +7,7 @@ import { useClusters } from '../../hooks/useMCP'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { useChartFilters } from '../../lib/cards'
 import { useMissions } from '../../hooks/useMissions'
-import { isAgentUnavailable } from '../../hooks/useLocalAgent'
+import { kubectlProxy } from '../../lib/kubectlProxy'
 
 // Violation detail interface
 interface Violation {
@@ -45,113 +45,32 @@ interface GatekeeperStatus {
   violations?: Violation[]
 }
 
-// WebSocket for checking Gatekeeper status
-let gatekeeperWs: WebSocket | null = null
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let gatekeeperPendingRequests: Map<string, (result: any) => void> = new Map()
-
-function ensureGatekeeperWs(): Promise<WebSocket> {
-  // Don't try to connect if agent is unavailable
-  if (isAgentUnavailable()) {
-    return Promise.reject(new Error('Agent unavailable'))
-  }
-
-  if (gatekeeperWs?.readyState === WebSocket.OPEN) {
-    return Promise.resolve(gatekeeperWs)
-  }
-
-  return new Promise((resolve, reject) => {
-    gatekeeperWs = new WebSocket('ws://127.0.0.1:8585/ws')
-
-    gatekeeperWs.onopen = () => resolve(gatekeeperWs!)
-
-    gatekeeperWs.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data)
-        const resolver = gatekeeperPendingRequests.get(msg.id)
-        if (resolver) {
-          gatekeeperPendingRequests.delete(msg.id)
-          // Pass the raw output for kubectl commands
-          if (msg.payload?.output !== undefined) {
-            resolver({ output: msg.payload.output, error: msg.payload?.error })
-          } else if (msg.payload?.error) {
-            resolver({ output: null, error: msg.payload.error })
-          } else {
-            resolver({ output: null })
-          }
-        }
-      } catch {
-        // Ignore parse errors
-      }
-    }
-
-    gatekeeperWs.onerror = () => reject(new Error('WebSocket error'))
-
-    gatekeeperWs.onclose = () => {
-      gatekeeperWs = null
-      gatekeeperPendingRequests.forEach((resolver) =>
-        resolver({ cluster: '', installed: false, loading: false, error: 'Connection closed' })
-      )
-      gatekeeperPendingRequests.clear()
-    }
-  })
-}
-
-// Send kubectl command and get response
-async function sendKubectlCommand(ws: WebSocket, clusterName: string, args: string[]): Promise<string | null> {
-  const requestId = `kubectl-${clusterName}-${Date.now()}-${Math.random().toString(36).slice(2)}`
-
-  return new Promise((resolve) => {
-    const timeout = setTimeout(() => {
-      gatekeeperPendingRequests.delete(requestId)
-      resolve(null)
-    }, 10000)
-
-    gatekeeperPendingRequests.set(requestId, (result: { output?: string; error?: string }) => {
-      clearTimeout(timeout)
-      if (result?.output) {
-        resolve(result.output)
-      } else {
-        resolve(null)
-      }
-    })
-
-    ws.send(JSON.stringify({
-      id: requestId,
-      type: 'kubectl',
-      payload: {
-        context: clusterName,
-        args
-      }
-    }))
-  })
-}
-
 async function checkGatekeeperStatus(clusterName: string): Promise<GatekeeperStatus> {
   try {
-    const ws = await ensureGatekeeperWs()
-
     // Step 1: Check if gatekeeper-system namespace exists
-    const nsCheck = await sendKubectlCommand(ws, clusterName, ['get', 'namespace', 'gatekeeper-system', '--ignore-not-found', '-o', 'name'])
+    const nsResult = await kubectlProxy.exec(
+      ['get', 'namespace', 'gatekeeper-system', '--ignore-not-found', '-o', 'name'],
+      { context: clusterName, timeout: 15000 }
+    )
 
-    if (!nsCheck || !nsCheck.includes('gatekeeper-system')) {
+    if (!nsResult.output || !nsResult.output.includes('gatekeeper-system')) {
       return { cluster: clusterName, installed: false, loading: false }
     }
 
     // Step 2: Fetch all constraints with violation counts
-    // Use a custom-columns output to get name, enforcement action, and violations
-    const constraintsOutput = await sendKubectlCommand(ws, clusterName, [
-      'get', 'constraints', '-A',
-      '-o', 'custom-columns=NAME:.metadata.name,KIND:.kind,ENFORCEMENT:.spec.enforcementAction,VIOLATIONS:.status.totalViolations',
-      '--no-headers'
-    ])
+    const constraintsResult = await kubectlProxy.exec(
+      ['get', 'constraints', '-A',
+       '-o', 'custom-columns=NAME:.metadata.name,KIND:.kind,ENFORCEMENT:.spec.enforcementAction,VIOLATIONS:.status.totalViolations',
+       '--no-headers'],
+      { context: clusterName, timeout: 15000 }
+    )
 
     const policies: Policy[] = []
     let totalViolations = 0
     let primaryMode: 'warn' | 'enforce' | 'dryrun' | 'deny' = 'warn'
 
-    if (constraintsOutput) {
-      const lines = constraintsOutput.trim().split('\n').filter(l => l.trim())
+    if (constraintsResult.output) {
+      const lines = constraintsResult.output.trim().split('\n').filter(l => l.trim())
       for (const line of lines) {
         const parts = line.trim().split(/\s+/)
         if (parts.length >= 4) {
@@ -182,15 +101,16 @@ async function checkGatekeeperStatus(clusterName: string): Promise<GatekeeperSta
       // Get violations from the first constraint with violations
       const policyWithViolations = policies.find(p => p.violations > 0)
       if (policyWithViolations) {
-        const violationsOutput = await sendKubectlCommand(ws, clusterName, [
-          'get', policyWithViolations.kind.toLowerCase(), policyWithViolations.name,
-          '-o', 'jsonpath={.status.violations[*]}'
-        ])
+        const violationsResult = await kubectlProxy.exec(
+          ['get', policyWithViolations.kind.toLowerCase(), policyWithViolations.name,
+           '-o', 'jsonpath={.status.violations[*]}'],
+          { context: clusterName, timeout: 15000 }
+        )
 
-        if (violationsOutput) {
+        if (violationsResult.output) {
           try {
             // Parse JSON violations array - the output is space-separated JSON objects
-            const violationData = JSON.parse(`[${violationsOutput.replace(/}\s*{/g, '},{')}]`)
+            const violationData = JSON.parse(`[${violationsResult.output.replace(/}\s*{/g, '},{')}]`)
             for (const v of violationData.slice(0, 20)) { // Limit to 20 violations
               violations.push({
                 name: v.name || 'Unknown',
@@ -218,7 +138,8 @@ async function checkGatekeeperStatus(clusterName: string): Promise<GatekeeperSta
       policies,
       violations
     }
-  } catch {
+  } catch (err) {
+    console.error('[OPA] Error checking gatekeeper on', clusterName, err)
     return { cluster: clusterName, installed: false, loading: false, error: 'Connection failed' }
   }
 }
