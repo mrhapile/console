@@ -46,10 +46,12 @@
       "id": "resource-usage-similar",
       "subject": "Why is resource usage card similar across clusters?",
       "description": "Investigate why the resource usage card shows similar values across different clusters. This could be a bug with data fetching, caching, or the card displaying the same data source for all clusters instead of cluster-specific metrics.",
-      "status": "pending",
+      "status": "completed",
       "priority": "medium",
       "created": "2025-01-27",
-      "tags": ["bug", "investigation", "resource-usage", "clusters"]
+      "completedAt": "2026-01-27",
+      "tags": ["bug", "investigation", "resource-usage", "clusters"],
+      "resolution": "Fixed by replacing hardcoded 67%/65% usage estimates with actual pod resource requests (cpuRequestsCores, memoryRequestsGB). Added getPodMetrics() to kubectlProxy to sum container requests."
     },
     {
       "id": "resource-capacity-zero",
@@ -89,6 +91,15 @@
       "created": "2026-01-27",
       "completed": "2026-01-27",
       "tags": ["documentation", "weekly-release", "demo-mode", "kubestellar-docs"]
+    },
+    {
+      "id": "pod-count-dynamic-updates",
+      "subject": "Verify pod counts update dynamically across UI",
+      "description": "Investigate whether pod counts are dynamically updated everywhere in the UI. The pod numbers should fluctuate as pods are created/deleted. Check: 1) Cluster cards show live pod counts, 2) Resource usage card reflects pod changes, 3) Pod-related drill-downs update in real-time, 4) Health checks poll frequently enough to catch changes.",
+      "status": "pending",
+      "priority": "medium",
+      "created": "2026-01-27",
+      "tags": ["investigation", "pods", "real-time", "ui"]
     }
   ]
 }

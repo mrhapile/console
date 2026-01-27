@@ -825,7 +825,7 @@ export interface UseChartFiltersResult {
   /** Available clusters for filtering (respects global filter) */
   availableClusters: { name: string }[]
   /** Filtered cluster list based on global + local filters */
-  filteredClusters: { name: string; reachable?: boolean; cpuCores?: number; memoryGB?: number; podCount?: number; nodeCount?: number }[]
+  filteredClusters: { name: string; reachable?: boolean; cpuCores?: number; cpuRequestsCores?: number; memoryGB?: number; memoryRequestsGB?: number; podCount?: number; nodeCount?: number }[]
   /** Whether cluster filter dropdown is showing */
   showClusterFilter: boolean
   /** Set cluster filter dropdown visibility */

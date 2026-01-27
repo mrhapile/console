@@ -260,15 +260,44 @@ class KubectlProxy {
   }
 
   /**
-   * Get pod count for a cluster
+   * Get pod count and resource requests for a cluster
    */
-  async getPodCount(context: string): Promise<number> {
+  async getPodMetrics(context: string): Promise<{ count: number; cpuRequestsMillicores: number; memoryRequestsBytes: number }> {
     const response = await this.exec(['get', 'pods', '-A', '-o', 'json'], { context, timeout: 20000 })
     if (response.exitCode !== 0) {
       throw new Error(response.error || 'Failed to get pods')
     }
     const data = JSON.parse(response.output)
-    return data.items?.length || 0
+    const pods = data.items || []
+
+    // Sum resource requests from all containers in all pods
+    let cpuRequestsMillicores = 0
+    let memoryRequestsBytes = 0
+
+    for (const pod of pods) {
+      const containers = pod.spec?.containers || []
+      for (const container of containers) {
+        const requests = container.resources?.requests || {}
+        // Parse CPU requests (can be "100m", "0.1", "1", etc.)
+        if (requests.cpu) {
+          cpuRequestsMillicores += parseResourceQuantityMillicores(requests.cpu)
+        }
+        // Parse memory requests (can be "128Mi", "1Gi", etc.)
+        if (requests.memory) {
+          memoryRequestsBytes += parseResourceQuantity(requests.memory)
+        }
+      }
+    }
+
+    return { count: pods.length, cpuRequestsMillicores, memoryRequestsBytes }
+  }
+
+  /**
+   * Get pod count for a cluster (legacy method for backward compatibility)
+   */
+  async getPodCount(context: string): Promise<number> {
+    const metrics = await this.getPodMetrics(context)
+    return metrics.count
   }
 
   /**
@@ -276,14 +305,14 @@ class KubectlProxy {
    */
   async getClusterHealth(context: string): Promise<ClusterHealth> {
     try {
-      const [nodes, podCount] = await Promise.all([
+      const [nodes, podMetrics] = await Promise.all([
         this.getNodes(context),
-        this.getPodCount(context),
+        this.getPodMetrics(context),
       ])
 
       const readyNodes = nodes.filter(n => n.ready).length
 
-      // Aggregate resource metrics from all nodes
+      // Aggregate resource metrics from all nodes (capacity)
       const totalCpuCores = nodes.reduce((sum, n) => sum + (n.cpuCores || 0), 0)
       const totalMemoryBytes = nodes.reduce((sum, n) => sum + (n.memoryBytes || 0), 0)
       const totalStorageBytes = nodes.reduce((sum, n) => sum + (n.storageBytes || 0), 0)
@@ -302,10 +331,14 @@ class KubectlProxy {
         reachable: true,
         nodeCount: nodes.length,
         readyNodes,
-        podCount,
+        podCount: podMetrics.count,
         cpuCores: Math.round(totalCpuCores),
+        cpuRequestsMillicores: podMetrics.cpuRequestsMillicores,
+        cpuRequestsCores: podMetrics.cpuRequestsMillicores / 1000,
         memoryBytes: totalMemoryBytes,
         memoryGB: Math.round(totalMemoryBytes / (1024 * 1024 * 1024)),
+        memoryRequestsBytes: podMetrics.memoryRequestsBytes,
+        memoryRequestsGB: podMetrics.memoryRequestsBytes / (1024 * 1024 * 1024),
         storageBytes: totalStorageBytes,
         storageGB: Math.round(totalStorageBytes / (1024 * 1024 * 1024)),
         lastSeen: new Date().toISOString(),
@@ -646,6 +679,23 @@ function parseResourceQuantity(value: string | undefined): number {
   }
 }
 
+// Helper to parse CPU resource quantities and return millicores
+// CPU can be "100m", "0.1", "1", "2.5" etc.
+function parseResourceQuantityMillicores(value: string | undefined): number {
+  if (!value) return 0
+  const trimmed = value.trim()
+
+  // Check for millicores suffix
+  if (trimmed.endsWith('m')) {
+    const num = parseFloat(trimmed.slice(0, -1))
+    return isNaN(num) ? 0 : num
+  }
+
+  // Otherwise it's in cores, convert to millicores
+  const num = parseFloat(trimmed)
+  return isNaN(num) ? 0 : num * 1000
+}
+
 // Export types used by hooks
 export interface NodeInfo {
   name: string
@@ -663,10 +713,15 @@ export interface ClusterHealth {
   nodeCount: number
   readyNodes: number
   podCount: number
+  // CPU capacity and requests
   cpuCores?: number
+  cpuRequestsMillicores?: number
+  cpuRequestsCores?: number
   // Memory metrics
   memoryBytes?: number
   memoryGB?: number
+  memoryRequestsBytes?: number
+  memoryRequestsGB?: number
   // Storage metrics
   storageBytes?: number
   storageGB?: number

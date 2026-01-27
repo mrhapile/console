@@ -31,18 +31,21 @@ export function ResourceUsage() {
 
   // Calculate totals from real cluster data
   const totals = useMemo(() => {
+    // Sum capacity from all clusters
     const totalCPUs = clusters.reduce((sum, c) => sum + (c.cpuCores || 0), 0)
+    const totalMemoryGB = clusters.reduce((sum, c) => sum + (c.memoryGB || 0), 0)
+
+    // Sum requests (allocated resources) from all clusters
+    const usedCPUs = clusters.reduce((sum, c) => sum + (c.cpuRequestsCores || 0), 0)
+    const usedMemoryGB = clusters.reduce((sum, c) => sum + (c.memoryRequestsGB || 0), 0)
+
+    // GPU data from GPU nodes
     const totalGPUs = gpuNodes.reduce((sum, n) => sum + n.gpuCount, 0)
     const allocatedGPUs = gpuNodes.reduce((sum, n) => sum + n.gpuAllocated, 0)
 
-    // For now, use estimates for memory and storage (would need node metrics in production)
-    // Estimate: ~32GB RAM per CPU core on average for cloud nodes
-    const totalMemoryGB = totalCPUs * 4 // Conservative estimate
-    const usedMemoryGB = Math.round(totalMemoryGB * 0.65) // Estimate 65% usage
-
     return {
-      cpu: { total: totalCPUs, used: Math.round(totalCPUs * 0.67) }, // Estimate 67% usage
-      memory: { total: totalMemoryGB, used: usedMemoryGB },
+      cpu: { total: totalCPUs, used: Math.round(usedCPUs) },
+      memory: { total: Math.round(totalMemoryGB), used: Math.round(usedMemoryGB) },
       gpu: { total: totalGPUs, used: allocatedGPUs },
     }
   }, [clusters, gpuNodes])
