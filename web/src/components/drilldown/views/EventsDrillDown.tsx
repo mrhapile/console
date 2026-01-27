@@ -164,8 +164,31 @@ export function EventsDrillDown({ data }: Props) {
       </div>
 
       {filteredEvents.length === 0 && (
-        <div className="text-center py-12">
-          <p className="text-muted-foreground">No events found</p>
+        <div className="space-y-4">
+          <div className="text-center py-6">
+            <p className="text-muted-foreground">No events found for {objectName || clusterShort}</p>
+            <p className="text-xs text-muted-foreground mt-1">Events may have expired or require authentication</p>
+          </div>
+
+          {/* Kubectl fallback */}
+          <div className="p-4 rounded-lg bg-card/50 border border-border">
+            <h4 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+              <Terminal className="w-4 h-4" />
+              Get Events via kubectl
+            </h4>
+            <div className="flex items-center justify-between p-2 rounded bg-background/50 font-mono text-xs">
+              <code className="text-muted-foreground truncate">
+                kubectl --context {clusterShort} get events{objectName ? ` --field-selector involvedObject.name=${objectName}` : ''}{namespace ? ` -n ${namespace}` : ' -A'} --sort-by=.lastTimestamp
+              </code>
+              <button
+                onClick={copyCommand}
+                className="ml-2 p-1 hover:bg-card rounded flex-shrink-0"
+                title="Copy command"
+              >
+                {copied ? <CheckCircle className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3 text-muted-foreground" />}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
