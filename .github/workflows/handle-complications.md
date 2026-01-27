@@ -44,7 +44,10 @@ You are an AI assistant that handles various complications that can arise with C
 **Actions:**
 1. Verify the PR author is a bot (Copilot, copilot-swe-agent, dependabot, etc.)
 2. Post the Prow override command: `/override dco`
-3. Post a comment noting that DCO has been overridden for bot commits
+3. **Fix the DCO labels:**
+   - Remove the `dco-signoff: no` label if present
+   - Add the `dco-signoff: yes` label
+4. Post a comment noting that DCO has been overridden for bot commits
 
 **Do NOT:**
 - Override DCO for human contributors

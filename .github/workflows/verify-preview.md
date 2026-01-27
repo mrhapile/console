@@ -159,34 +159,103 @@ After 3 attempts, I was unable to get all tests passing.
 Requesting human assistance. /cc @maintainers
 ```
 
-## Using Playwright for Testing
+## MANDATORY: Playwright Testing with Screenshots
 
-For complex interactions, use Playwright:
+**You MUST run Playwright tests and capture screenshots for EVERY Copilot PR.** This is not optional.
 
-```typescript
-import { test, expect } from '@playwright/test';
+### Step-by-Step Playwright Execution
 
-test('verify fix works', async ({ page }) => {
-  await page.goto('https://deploy-preview-{PR}.console-deploy-preview.kubestellar.io');
+1. **Create a test file** in the `web/` directory:
+   ```typescript
+   // web/e2e/verify-pr-{PR_NUMBER}.spec.ts
+   import { test, expect } from '@playwright/test';
 
-  // Wait for app to load
-  await page.waitForSelector('#root');
+   test.describe('PR #{PR_NUMBER} Verification', () => {
+     test.beforeEach(async ({ page }) => {
+       await page.goto('https://deploy-preview-{PR_NUMBER}.console-deploy-preview.kubestellar.io');
+       await page.waitForSelector('#root', { timeout: 30000 });
+     });
 
-  // Test specific functionality
-  await page.click('button[data-testid="my-button"]');
+     test('page loads without errors', async ({ page }) => {
+       // Check no error overlay
+       const errorOverlay = page.locator('[data-error-overlay]');
+       await expect(errorOverlay).not.toBeVisible();
 
-  // Verify expected behavior
-  await expect(page.locator('.result')).toBeVisible();
+       // Screenshot: Initial page load
+       await page.screenshot({ path: 'screenshots/01-page-load.png', fullPage: true });
+     });
 
-  // Take screenshot
-  await page.screenshot({ path: 'screenshot.png' });
-});
+     test('verify the specific fix works', async ({ page }) => {
+       // Navigate to the affected area based on the issue
+       // Example for breadcrumb fix:
+       // await page.click('[data-testid="cluster-selector"]');
+       // await page.click('text=different-cluster');
+
+       // Screenshot: Before action
+       await page.screenshot({ path: 'screenshots/02-before-fix.png' });
+
+       // Perform the action that was buggy
+       // ...
+
+       // Screenshot: After action showing fix works
+       await page.screenshot({ path: 'screenshots/03-fix-verified.png' });
+     });
+   });
+   ```
+
+2. **Run the tests:**
+   ```bash
+   cd web
+   npx playwright test e2e/verify-pr-{PR_NUMBER}.spec.ts --reporter=html
+   ```
+
+3. **Upload screenshots to the PR:**
+   - Use the GitHub API to upload images as comment attachments
+   - Or upload to a temporary image hosting service
+   - Include the image URLs in your verification comment
+
+### Screenshot Requirements
+
+| Screenshot | Required | Description |
+|------------|----------|-------------|
+| Page load | YES | Shows the app loads without errors |
+| Fix verification | YES | Shows the bug is fixed or feature works |
+| Edge cases | If applicable | Shows edge cases are handled |
+
+### Example Verification Comment with Screenshots
+
+```markdown
+## Preview Verification Complete
+
+**Preview URL:** https://deploy-preview-121.console-deploy-preview.kubestellar.io
+
+### Playwright Test Results
+
+| Test | Status | Screenshot |
+|------|--------|------------|
+| Page loads | PASS | ![Page Load](screenshot-url-1) |
+| No JS errors | PASS | - |
+| Bug fix verified | PASS | ![Fix Verified](screenshot-url-2) |
+
+### Screenshots
+
+**1. Initial Page Load**
+![Page loads successfully](screenshot-url-1)
+
+**2. Fix Verification - Breadcrumbs update correctly**
+![Breadcrumbs now update when cluster changes](screenshot-url-2)
+
+### Test Execution Log
+- Playwright version: 1.40.0
+- Browser: Chromium
+- All 3 tests passed in 8.2s
 ```
 
 ## Important Notes
 
 - Always use the custom domain URL, never `*.netlify.app`
+- **Screenshots are MANDATORY** - a PR without proof screenshots should NOT be marked ready
 - Take multiple screenshots showing different aspects of the fix
 - Be thorough but focused - test the specific fix, not the entire application
 - If you encounter network errors, retry with exponential backoff
-- Screenshots are REQUIRED - a PR without proof screenshots should not be marked ready
+- If Playwright is not available, use browser automation tools or manual fetch + screenshot tools
