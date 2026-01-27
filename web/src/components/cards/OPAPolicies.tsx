@@ -39,6 +39,7 @@ interface GatekeeperStatus {
   policyCount?: number
   violationCount?: number
   mode?: 'dryrun' | 'warn' | 'enforce' | 'deny'
+  modes?: ('warn' | 'enforce' | 'dryrun')[]  // All active modes for multi-badge display
   loading: boolean
   error?: string
   policies?: Policy[]
@@ -47,13 +48,17 @@ interface GatekeeperStatus {
 
 async function checkGatekeeperStatus(clusterName: string): Promise<GatekeeperStatus> {
   try {
+    console.log('[OPA] Checking gatekeeper on:', clusterName)
+
     // Step 1: Check if gatekeeper-system namespace exists
     const nsResult = await kubectlProxy.exec(
       ['get', 'namespace', 'gatekeeper-system', '--ignore-not-found', '-o', 'name'],
       { context: clusterName, timeout: 15000 }
     )
+    console.log('[OPA] Namespace result for', clusterName, ':', nsResult)
 
     if (!nsResult.output || !nsResult.output.includes('gatekeeper-system')) {
+      console.log('[OPA] Gatekeeper NOT installed on:', clusterName)
       return { cluster: clusterName, installed: false, loading: false }
     }
 
@@ -67,10 +72,10 @@ async function checkGatekeeperStatus(clusterName: string): Promise<GatekeeperSta
 
     const policies: Policy[] = []
     let totalViolations = 0
-    let primaryMode: 'warn' | 'enforce' | 'dryrun' | 'deny' = 'warn'
+    const modes = new Set<string>()
 
     if (constraintsResult.output) {
-      const lines = constraintsResult.output.trim().split('\n').filter(l => l.trim())
+      const lines = constraintsResult.output.trim().split('\n').filter((l: string) => l.trim())
       for (const line of lines) {
         const parts = line.trim().split(/\s+/)
         if (parts.length >= 4) {
@@ -79,20 +84,28 @@ async function checkGatekeeperStatus(clusterName: string): Promise<GatekeeperSta
           const enforcement = (parts[2] || 'warn').toLowerCase() as Policy['mode']
           const violations = parseInt(parts[3], 10) || 0
 
+          // Normalize deny to enforce for display
+          const normalizedMode = enforcement === 'deny' ? 'enforce' : enforcement as Policy['mode']
           policies.push({
             name,
             kind,
             violations,
-            mode: enforcement === 'deny' ? 'enforce' : enforcement as Policy['mode']
+            mode: normalizedMode
           })
           totalViolations += violations
-
-          // Set primary mode based on first enforce/deny policy
-          if (enforcement === 'deny' || enforcement === 'enforce') {
-            primaryMode = 'enforce'
-          }
+          modes.add(normalizedMode)
         }
       }
+    }
+
+    // Collect all modes for display (will show multiple badges if mixed)
+    const activeModes = Array.from(modes) as ('warn' | 'enforce' | 'dryrun')[]
+    // For backward compatibility, pick the most restrictive as primary
+    let primaryMode: 'warn' | 'enforce' | 'dryrun' | 'deny' = 'warn'
+    if (modes.has('enforce')) {
+      primaryMode = 'enforce'
+    } else if (modes.has('dryrun')) {
+      primaryMode = 'dryrun'
     }
 
     // Step 3: Fetch some sample violations for display
@@ -135,6 +148,7 @@ async function checkGatekeeperStatus(clusterName: string): Promise<GatekeeperSta
       policyCount: policies.length,
       violationCount: totalViolations,
       mode: primaryMode,
+      modes: activeModes,
       policies,
       violations
     }
@@ -451,30 +465,40 @@ export function OPAPolicies({ config: _config }: OPAPoliciesProps) {
 
   // Check Gatekeeper on filtered clusters
   const checkAllClusters = useCallback(async () => {
+    console.log('[OPA] checkAllClusters called, filteredClusters:', filteredClusters.map(c => c.name))
     if (filteredClusters.length === 0) return
 
     setIsRefreshing(true)
 
-    // Start with existing statuses (stale-while-revalidate pattern)
-    const newStatuses: Record<string, GatekeeperStatus> = { ...statusesRef.current }
+    try {
+      // Start with existing statuses (stale-while-revalidate pattern)
+      const newStatuses: Record<string, GatekeeperStatus> = { ...statusesRef.current }
 
-    // Check all clusters in parallel for better performance
-    const checkPromises = filteredClusters.map(async (cluster) => {
-      const status = await checkGatekeeperStatus(cluster.name)
-      return { name: cluster.name, status }
-    })
+      // Check all clusters in parallel for better performance
+      const checkPromises = filteredClusters.map(async (cluster) => {
+        try {
+          const status = await checkGatekeeperStatus(cluster.name)
+          return { name: cluster.name, status }
+        } catch (err) {
+          console.error('[OPA] Error checking', cluster.name, err)
+          return { name: cluster.name, status: { cluster: cluster.name, installed: false, loading: false, error: String(err) } }
+        }
+      })
 
-    const results = await Promise.all(checkPromises)
-    for (const { name, status } of results) {
-      newStatuses[name] = status
+      const results = await Promise.all(checkPromises)
+      for (const { name, status } of results) {
+        newStatuses[name] = status
+      }
+
+      setStatuses(newStatuses)
+    } finally {
+      setIsRefreshing(false)
+      setHasChecked(true)
     }
-
-    setStatuses(newStatuses)
-    setIsRefreshing(false)
-    setHasChecked(true)
   }, [filteredClusters])
 
   useEffect(() => {
+    console.log('[OPA] Effect: hasChecked=', hasChecked, 'filteredClusters=', filteredClusters.length)
     if (!hasChecked && filteredClusters.length > 0) {
       checkAllClusters()
     }
@@ -663,13 +687,15 @@ Let's start by discussing what kind of policy I need.`,
                           {status.violationCount} violations
                         </span>
                       )}
-                      <span className={`px-1.5 py-0.5 rounded text-[10px] ${
-                        status.mode === 'enforce' ? 'bg-red-500/20 text-red-400' :
-                        status.mode === 'warn' ? 'bg-amber-500/20 text-amber-400' :
-                        'bg-blue-500/20 text-blue-400'
-                      }`}>
-                        {status.mode}
-                      </span>
+                      {(status.modes && status.modes.length > 1 ? status.modes : [status.mode]).map((mode, idx) => (
+                        <span key={idx} className={`px-1.5 py-0.5 rounded text-[10px] ${
+                          mode === 'enforce' ? 'bg-red-500/20 text-red-400' :
+                          mode === 'warn' ? 'bg-amber-500/20 text-amber-400' :
+                          'bg-blue-500/20 text-blue-400'
+                        }`}>
+                          {mode}
+                        </span>
+                      ))}
                     </div>
                   </div>
                 ) : (
