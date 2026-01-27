@@ -21,12 +21,13 @@ permissions:
 jobs:
   copilot-automation:
     runs-on: ubuntu-latest
-    # Only run for Copilot PRs
+    # Always run - we filter inside the job
     if: |
-      (github.event_name == 'pull_request_target' && 
-       (github.event.pull_request.user.login == 'Copilot' || 
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request_target' &&
+       (github.event.pull_request.user.login == 'Copilot' ||
         contains(github.event.pull_request.user.login, 'copilot'))) ||
-      (github.event_name == 'check_run' && 
+      (github.event_name == 'check_run' &&
        github.event.check_run.pull_requests[0] != null) ||
       (github.event_name == 'status')
     steps:
@@ -36,8 +37,24 @@ jobs:
         with:
           script: |
             let prNumber, prAuthor, isDraft, title, headSha;
-            
-            if (context.eventName === 'pull_request_target') {
+
+            if (context.eventName === 'workflow_dispatch') {
+              // Manual trigger with PR number
+              prNumber = parseInt('${{ github.event.inputs.pr_number }}', 10);
+              if (!prNumber) {
+                core.setFailed('PR number is required for workflow_dispatch');
+                return;
+              }
+              const { data: pr } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber
+              });
+              prAuthor = pr.user.login;
+              isDraft = pr.draft;
+              title = pr.title;
+              headSha = pr.head.sha;
+            } else if (context.eventName === 'pull_request_target') {
               prNumber = context.payload.pull_request.number;
               prAuthor = context.payload.pull_request.user.login;
               isDraft = context.payload.pull_request.draft;
@@ -51,7 +68,6 @@ jobs:
               }
               prNumber = prs[0].number;
               headSha = context.payload.check_run.head_sha;
-              // Get PR details
               const { data: pr } = await github.rest.pulls.get({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -61,7 +77,6 @@ jobs:
               isDraft = pr.draft;
               title = pr.title;
             } else if (context.eventName === 'status') {
-              // Find PR by commit SHA
               const { data: prs } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -78,17 +93,19 @@ jobs:
               title = pr.title;
               headSha = context.payload.sha;
             }
-            
+
             // Check if this is a Copilot PR
-            const isCopilot = prAuthor === 'Copilot' || 
+            const isCopilot = prAuthor === 'Copilot' ||
                               prAuthor.toLowerCase().includes('copilot') ||
                               prAuthor === 'copilot-swe-agent[bot]';
-            
+
             if (!isCopilot) {
-              core.info(`PR #${prNumber} is not from Copilot (author: ${prAuthor})`);
+              core.info(`PR #${prNumber} is not from Copilot (author: ${prAuthor}), skipping`);
+              core.setOutput('is_copilot', 'false');
               return;
             }
-            
+
+            core.info(`Processing Copilot PR #${prNumber}`);
             core.setOutput('pr_number', prNumber);
             core.setOutput('pr_author', prAuthor);
             core.setOutput('is_draft', isDraft);
@@ -101,11 +118,16 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const prNumber = ${{ steps.pr-info.outputs.pr_number }};
+            const prNumber = parseInt('${{ steps.pr-info.outputs.pr_number }}', 10);
             const headSha = '${{ steps.pr-info.outputs.head_sha }}';
-            
-            if (!prNumber || !headSha) return;
-            
+
+            if (!prNumber || !headSha) {
+              core.warning('Missing PR number or head SHA');
+              return;
+            }
+
+            core.info(`Overriding DCO for PR #${prNumber}, SHA: ${headSha}`);
+
             // Set DCO status to success
             try {
               await github.rest.repos.createCommitStatus({
@@ -117,12 +139,12 @@ jobs:
                 description: 'DCO waived for Copilot',
                 target_url: 'https://github.com/kubestellar/console/blob/master/CONTRIBUTING.md'
               });
-              core.info(`Set DCO status to success for ${headSha}`);
+              core.info(`Set DCO status to success`);
             } catch (e) {
               core.warning(`Failed to set DCO status: ${e.message}`);
             }
-            
-            // Fix labels
+
+            // Remove dco-signoff: no label
             try {
               await github.rest.issues.removeLabel({
                 owner: context.repo.owner,
@@ -130,10 +152,12 @@ jobs:
                 issue_number: prNumber,
                 name: 'dco-signoff: no'
               });
+              core.info('Removed dco-signoff: no label');
             } catch (e) {
-              // Label might not exist
+              core.info('Label dco-signoff: no not present');
             }
-            
+
+            // Add dco-signoff: yes label
             try {
               await github.rest.issues.addLabels({
                 owner: context.repo.owner,
@@ -141,6 +165,7 @@ jobs:
                 issue_number: prNumber,
                 labels: ['dco-signoff: yes']
               });
+              core.info('Added dco-signoff: yes label');
             } catch (e) {
               core.warning(`Failed to add label: ${e.message}`);
             }
@@ -150,23 +175,27 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const prNumber = ${{ steps.pr-info.outputs.pr_number }};
-            const isDraft = ${{ steps.pr-info.outputs.is_draft }};
-            let title = `${{ steps.pr-info.outputs.title }}`;
-            
-            if (!prNumber) return;
-            
+            const prNumber = parseInt('${{ steps.pr-info.outputs.pr_number }}', 10);
+            const isDraft = '${{ steps.pr-info.outputs.is_draft }}' === 'true';
+            let title = '${{ steps.pr-info.outputs.title }}';
+
+            if (!prNumber) {
+              core.warning('Missing PR number');
+              return;
+            }
+
+            core.info(`Fixing title and draft status for PR #${prNumber}`);
+            core.info(`Current title: ${title}, isDraft: ${isDraft}`);
+
             // Fix title if it has [WIP]
             if (title.includes('[WIP]')) {
-              // Determine emoji based on linked issue or PR content
               let emoji = '🐛'; // Default to bug fix
-              
+
               // Remove [WIP] and add emoji
-              const newTitle = title.replace('[WIP] ', '').replace('[WIP]', '');
-              const finalTitle = newTitle.startsWith('🐛') || newTitle.startsWith('✨') || 
-                                 newTitle.startsWith('📖') || newTitle.startsWith('🌱') 
-                                 ? newTitle : `${emoji} ${newTitle}`;
-              
+              let newTitle = title.replace('[WIP] ', '').replace('[WIP]', '').trim();
+              const hasEmoji = /^[\u{1F300}-\u{1F9FF}]/u.test(newTitle);
+              const finalTitle = hasEmoji ? newTitle : `${emoji} ${newTitle}`;
+
               try {
                 await github.rest.pulls.update({
                   owner: context.repo.owner,
@@ -178,7 +207,7 @@ jobs:
               } catch (e) {
                 core.warning(`Failed to update title: ${e.message}`);
               }
-              
+
               // Remove do-not-merge/work-in-progress label
               try {
                 await github.rest.issues.removeLabel({
@@ -187,29 +216,39 @@ jobs:
                   issue_number: prNumber,
                   name: 'do-not-merge/work-in-progress'
                 });
+                core.info('Removed do-not-merge/work-in-progress label');
               } catch (e) {
-                // Label might not exist
+                core.info('Label do-not-merge/work-in-progress not present');
               }
             }
-            
+
             // Mark as ready for review if still draft
             if (isDraft) {
               try {
+                const { data: pr } = await github.rest.pulls.get({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: prNumber
+                });
+
                 await github.graphql(`
                   mutation($prId: ID!) {
                     markPullRequestReadyForReview(input: {pullRequestId: $prId}) {
                       pullRequest { id }
                     }
                   }
-                `, {
-                  prId: (await github.rest.pulls.get({
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    pull_number: prNumber
-                  })).data.node_id
-                });
+                `, { prId: pr.node_id });
                 core.info('Marked PR as ready for review');
               } catch (e) {
                 core.warning(`Failed to mark ready: ${e.message}`);
               }
             }
+
+      - name: Trigger gh-aw verification
+        if: steps.pr-info.outputs.is_copilot == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // This step exists to bridge plain GHA to gh-aw
+            // After mechanical fixes are done, we can trigger AI-powered verification
+            core.info('Mechanical fixes complete. gh-aw workflows can now handle AI tasks.');
