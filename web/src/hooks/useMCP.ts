@@ -632,12 +632,16 @@ function shareMetricsBetweenSameServerClusters(clusters: ClusterInfo[]): Cluster
     const source = serverMetrics.get(cluster.server)
     if (!source || !source.cpuCores) return cluster
 
-    // Copy metrics from the source cluster
+    // Copy metrics from the source cluster (both capacity and request metrics)
     return {
       ...cluster,
       cpuCores: source.cpuCores,
+      cpuRequestsMillicores: cluster.cpuRequestsMillicores ?? source.cpuRequestsMillicores,
+      cpuRequestsCores: cluster.cpuRequestsCores ?? source.cpuRequestsCores,
       memoryBytes: cluster.memoryBytes ?? source.memoryBytes,
       memoryGB: cluster.memoryGB ?? source.memoryGB,
+      memoryRequestsBytes: cluster.memoryRequestsBytes ?? source.memoryRequestsBytes,
+      memoryRequestsGB: cluster.memoryRequestsGB ?? source.memoryRequestsGB,
       storageBytes: cluster.storageBytes ?? source.storageBytes,
       storageGB: cluster.storageGB ?? source.storageGB,
     }
@@ -810,7 +814,7 @@ function updateSingleClusterInCache(clusterName: string, updates: Partial<Cluste
 
   // Share metrics between clusters pointing to the same server
   // This ensures aliases (like "prow") get metrics from their full-context counterparts
-  if (updates.cpuCores || updates.memoryGB || updates.storageGB) {
+  if (updates.cpuCores || updates.memoryGB || updates.storageGB || updates.cpuRequestsCores || updates.memoryRequestsGB) {
     updatedClusters = shareMetricsBetweenSameServerClusters(updatedClusters)
   }
 

@@ -53,8 +53,11 @@ export function ResourcesDrillDown({ data: _data }: Props) {
   // Calculate totals (using deduplicated GPU counts from clusterGPUs map)
   const totals = useMemo(() => {
     const totalCPUs = clusters.reduce((sum, c) => sum + (c.cpuCores || 0), 0)
+    const totalCPURequests = clusters.reduce((sum, c) => sum + (c.cpuRequestsCores || 0), 0)
     const totalNodes = clusters.reduce((sum, c) => sum + (c.nodeCount || 0), 0)
     const totalPods = clusters.reduce((sum, c) => sum + (c.podCount || 0), 0)
+    const totalMemoryGB = clusters.reduce((sum, c) => sum + (c.memoryGB || 0), 0)
+    const totalMemoryRequestsGB = clusters.reduce((sum, c) => sum + (c.memoryRequestsGB || 0), 0)
     // Use aggregated GPU counts from clusterGPUs (already deduplicated)
     let totalGPUs = 0
     let allocatedGPUs = 0
@@ -62,14 +65,14 @@ export function ResourcesDrillDown({ data: _data }: Props) {
       totalGPUs += gpu.total
       allocatedGPUs += gpu.allocated
     })
-    // Estimate memory based on CPU (would need actual metrics in production)
-    const totalMemoryGB = totalCPUs * 4
 
     return {
       cpus: totalCPUs,
+      cpuRequests: totalCPURequests,
       nodes: totalNodes,
       pods: totalPods,
       memoryGB: totalMemoryGB,
+      memoryRequestsGB: totalMemoryRequestsGB,
       gpus: totalGPUs,
       gpusAllocated: allocatedGPUs,
     }
@@ -116,8 +119,7 @@ export function ResourcesDrillDown({ data: _data }: Props) {
             <MemoryStick className="w-4 h-4 text-yellow-400" />
             <span className="text-sm text-muted-foreground">Memory</span>
           </div>
-          <div className="text-2xl font-bold text-foreground">{totals.memoryGB} GB</div>
-          <div className="text-xs text-muted-foreground">estimated</div>
+          <div className="text-2xl font-bold text-foreground">{Math.round(totals.memoryGB)} GB</div>
         </div>
 
         {totals.gpus > 0 && (
@@ -141,9 +143,14 @@ export function ResourcesDrillDown({ data: _data }: Props) {
         </h3>
         <div className="space-y-3">
           {clusters.map((cluster) => {
-            const cpuPercent = cluster.cpuCores ? Math.round((cluster.cpuCores * 0.67) / cluster.cpuCores * 100) : 0
-            const memoryGB = (cluster.cpuCores || 0) * 4
-            const memoryPercent = 65 // Estimated
+            // Calculate actual resource usage percentages from cluster data
+            const cpuPercent = cluster.cpuCores && cluster.cpuRequestsCores
+              ? Math.round((cluster.cpuRequestsCores / cluster.cpuCores) * 100)
+              : 0
+            const memoryGB = cluster.memoryGB || 0
+            const memoryPercent = cluster.memoryGB && cluster.memoryRequestsGB
+              ? Math.round((cluster.memoryRequestsGB / cluster.memoryGB) * 100)
+              : 0
             const gpuData = clusterGPUs[cluster.name] || { total: 0, allocated: 0 }
             // Cap at 100% - allocated should never exceed total (data issue if it does)
             const rawGpuPercent = gpuData.total > 0 ? Math.round((gpuData.allocated / gpuData.total) * 100) : 0
@@ -197,7 +204,7 @@ export function ResourcesDrillDown({ data: _data }: Props) {
                     />
                     <div className="flex items-center gap-1 mt-1">
                       <MemoryStick className="w-3 h-3 text-blue-400" />
-                      <span className="text-xs text-muted-foreground">{memoryGB} GB</span>
+                      <span className="text-xs text-muted-foreground">{Math.round(memoryGB)} GB</span>
                     </div>
                   </div>
 

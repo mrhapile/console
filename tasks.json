@@ -51,7 +51,7 @@
       "created": "2025-01-27",
       "completedAt": "2026-01-27",
       "tags": ["bug", "investigation", "resource-usage", "clusters"],
-      "resolution": "Fixed by replacing hardcoded 67%/65% usage estimates with actual pod resource requests (cpuRequestsCores, memoryRequestsGB). Added getPodMetrics() to kubectlProxy to sum container requests."
+      "resolution": "Fixed by: 1) Replacing hardcoded 67%/65% usage estimates with actual pod resource requests (cpuRequestsCores, memoryRequestsGB) in ResourceUsage.tsx and ResourcesDrillDown.tsx, 2) Adding getPodMetrics() to kubectlProxy to sum container requests, 3) Fixing shareMetricsBetweenSameServerClusters to copy request metrics between clusters with same server."
     },
     {
       "id": "resource-capacity-zero",
