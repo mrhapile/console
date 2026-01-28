@@ -17,6 +17,25 @@ safe-outputs:
     max: 2
 ---
 
+# ⚠️ MANDATORY: BUILD AND LINT BEFORE EVERY COMMIT ⚠️
+
+**THIS IS THE MOST IMPORTANT RULE. DO NOT SKIP THIS.**
+
+Before EVERY `git commit`, you MUST:
+
+```bash
+cd web && npm run build && npm run lint
+```
+
+- If build fails → FIX IT before committing
+- If lint fails → FIX IT before committing
+- NEVER push code that doesn't build
+- NEVER push code with lint errors
+
+**Pushing broken code = PR REJECTED. You will have to fix it anyway.**
+
+---
+
 # Implementation Workflow
 
 You are a workflow coordinator for the KubeStellar Console project.
@@ -35,17 +54,27 @@ Only process issues that have BOTH `ai-fix-requested` AND `triage/accepted` labe
 Once assigned, Copilot will:
 - Analyze the issue and explore the codebase
 - Post its implementation plan as a comment
+- **Run `npm run build && npm run lint` before every commit**
 - Create a PR with the fix
 - Post updates directly on the issue
 
 ## Project Context (for Copilot)
 
-When Copilot works on this issue, it should know:
-
 - **Frontend:** React + TypeScript in `/web/` directory
 - **Backend:** Go in `/` directory (main.go, handlers, etc.)
-- **Build:** `npm run build` in web directory
+- **Build command:** `cd web && npm run build`
+- **Lint command:** `cd web && npm run lint`
 - **Preview:** Netlify deploys preview at `https://deploy-preview-{PR}.console-deploy-preview.kubestellar.io`
+
+## Commit Workflow (FOLLOW EXACTLY)
+
+1. Make your code changes
+2. Run: `cd web && npm run build`
+3. If build fails → fix the error → go to step 2
+4. Run: `cd web && npm run lint`
+5. If lint fails → fix the error → go to step 2
+6. ONLY NOW: `git add . && git commit`
+7. Push to remote
 
 ## Code Guidelines
 
@@ -53,34 +82,17 @@ When Copilot works on this issue, it should know:
 - Always use explicit types (no `any`)
 - Use functional components with hooks
 - Use `ReturnType<typeof setTimeout>` instead of `NodeJS.Timeout`
+- Verify imported functions exist before using them
 
 ### Go (Backend)
 - Always handle errors
 - Use meaningful variable names
 
-## CRITICAL: Pre-Commit Checklist
+## Important Rules
 
-**Before EVERY commit, you MUST run these commands and verify they pass:**
-
-```bash
-cd web
-npm run build    # Must exit with code 0
-npm run lint     # Must have no errors
-```
-
-If either command fails:
-1. Read the error message carefully
-2. Fix the error
-3. Run both commands again
-4. Only commit after BOTH pass
-
-**DO NOT push commits that fail build or lint.** Pushing broken code wastes CI resources and delays the PR.
-
-## Important Rules for Copilot
-
-1. **NEVER commit code that doesn't build** - Run `npm run build` BEFORE every commit
-2. **NEVER commit code with lint errors** - Run `npm run lint` BEFORE every commit
+1. **RUN BUILD BEFORE EVERY COMMIT** - `cd web && npm run build`
+2. **RUN LINT BEFORE EVERY COMMIT** - `cd web && npm run lint`
 3. **NEVER add unrelated changes** - Stay focused on the issue
-4. **ALWAYS include `Fixes #ISSUE` in PR body** - This links the PR to the issue
-5. **ALWAYS post implementation plan before coding** - Transparency is key
-6. **If you call a function, verify it exists** - Search the codebase first
+4. **ALWAYS include `Fixes #ISSUE` in PR body** - Links PR to issue
+5. **ALWAYS post implementation plan before coding** - Transparency
+6. **Verify functions exist** - Search codebase before calling new functions
