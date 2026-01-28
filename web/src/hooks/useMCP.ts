@@ -1317,14 +1317,18 @@ async function processClusterHealth(cluster: ClusterInfo): Promise<void> {
 
     if (health) {
       console.log(`[HealthCheck] Result for "${cluster.name}": healthy=${health.healthy}, nodeCount=${health.nodeCount}`)
-      // Health data available - check if cluster is reachable
-      // If we have node data, the cluster is definitely reachable (we connected successfully)
+      
+      // If we got a health response (HTTP 200), the agent/backend is reachable
+      // This is the key fix: receiving ANY response means connectivity is restored,
+      // even if the response contains cached error data from a previous failure
+      clearClusterFailure(cluster.name)
+      
+      // Now check if the cluster itself is reachable based on the response data
       const hasValidData = health.nodeCount !== undefined && health.nodeCount > 0
-      const isReachable = hasValidData || health.reachable !== false
+      const isReachable = hasValidData || !health.errorMessage
 
       if (isReachable) {
-        // Cluster is reachable - clear failure tracking and update with fresh data
-        clearClusterFailure(cluster.name)
+        // Cluster is reachable - update with fresh data
 
         // Detect cluster distribution (async, non-blocking update)
         // Use cluster.context for kubectl commands
