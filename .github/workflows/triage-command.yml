@@ -85,11 +85,55 @@ jobs:
       - name: Assign Copilot to issue
         if: steps.check_perms.outputs.authorized == 'true'
         id: assign_copilot
-        continue-on-error: true
-        uses: otto-de/assign_issue_toCopilot_action@v1.0.1
-        with:
-          issue_number: ${{ github.event.issue.number }}
-          github_token: ${{ secrets.CONSOLE_AUTO }}
+        env:
+          GH_TOKEN: ${{ secrets.CONSOLE_AUTO }}
+        run: |
+          REPO="${{ github.repository }}"
+          ISSUE="${{ github.event.issue.number }}"
+
+          # Use the REST API to assign Copilot coding agent
+          RESPONSE=$(gh api --method POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            /repos/$REPO/issues/$ISSUE/assignees \
+            --input - <<< '{
+              "assignees": ["copilot-swe-agent[bot]"],
+              "agent_assignment": {
+                "target_repo": "'"$REPO"'",
+                "base_branch": "main"
+              }
+            }' 2>&1) && {
+            echo "success=true" >> $GITHUB_OUTPUT
+            echo "Copilot assigned to issue #$ISSUE"
+          } || {
+            echo "success=false" >> $GITHUB_OUTPUT
+            echo "::warning::REST assign failed, trying GraphQL fallback..."
+
+            # GraphQL fallback with required feature header
+            BOT_ID=$(gh api graphql \
+              -H "GraphQL-Features: issues_copilot_assignment_api_support,coding_agent_model_selection" \
+              -f query='query { repository(owner: "'"${REPO%%/*}"'", name: "'"${REPO##*/}"'") { suggestedActors(first: 1, capabilities: [COPILOT_CHAT_AGENT]) { nodes { id login } } } }' \
+              --jq '.data.repository.suggestedActors.nodes[0].id' 2>/dev/null || echo "")
+
+            if [ -n "$BOT_ID" ]; then
+              ISSUE_ID=$(gh api graphql \
+                -f query='query { repository(owner: "'"${REPO%%/*}"'", name: "'"${REPO##*/}"'") { issue(number: '"$ISSUE"') { id } } }' \
+                --jq '.data.repository.issue.id')
+
+              gh api graphql \
+                -H "GraphQL-Features: issues_copilot_assignment_api_support,coding_agent_model_selection" \
+                -f query='mutation { addAssigneesToAssignable(input: { assignableId: "'"$ISSUE_ID"'", assigneeIds: ["'"$BOT_ID"'"] }) { assignable { ... on Issue { assignees(first: 5) { nodes { login } } } } } }' && {
+                echo "success=true" >> $GITHUB_OUTPUT
+                echo "Copilot assigned via GraphQL"
+              } || {
+                echo "success=false" >> $GITHUB_OUTPUT
+                echo "::error::Both REST and GraphQL assignment failed"
+              }
+            else
+              echo "success=false" >> $GITHUB_OUTPUT
+              echo "::error::Could not find Copilot bot ID"
+            fi
+          }
 
       - name: Update labels on assignment success
         if: steps.check_perms.outputs.authorized == 'true' && steps.assign_copilot.outputs.success == 'true'
