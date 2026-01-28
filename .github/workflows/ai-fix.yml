@@ -103,10 +103,11 @@ jobs:
       - name: Assign Copilot to issue
         if: steps.check_processing.outputs.already_processing != 'true'
         id: assign_copilot
+        continue-on-error: true
         uses: otto-de/assign_issue_toCopilot_action@v1.0.1
         with:
           issue_number: ${{ steps.issue.outputs.number }}
-          github_token: ${{ secrets.COPILOT_PAT }}
+          github_token: ${{ secrets.COPILOT_GITHUB_TOKEN }}
 
       - name: Post instructions comment
         if: steps.check_processing.outputs.already_processing != 'true'

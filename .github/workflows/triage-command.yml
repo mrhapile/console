@@ -85,10 +85,11 @@ jobs:
       - name: Assign Copilot to issue
         if: steps.check_perms.outputs.authorized == 'true'
         id: assign_copilot
+        continue-on-error: true
         uses: otto-de/assign_issue_toCopilot_action@v1.0.1
         with:
           issue_number: ${{ github.event.issue.number }}
-          github_token: ${{ secrets.COPILOT_PAT }}
+          github_token: ${{ secrets.COPILOT_GITHUB_TOKEN }}
 
       - name: Update labels on assignment success
         if: steps.check_perms.outputs.authorized == 'true' && steps.assign_copilot.outputs.success == 'true'
