@@ -13,6 +13,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { useServices } from '../../hooks/useMCP'
+import { useUniversalStats, createMergedStatValueGetter } from '../../hooks/useUniversalStats'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { useDrillDownActions } from '../../hooks/useDrillDown'
 import { StatsOverview, StatBlockValue } from '../ui/StatsOverview'
@@ -125,15 +126,12 @@ export function Network() {
   const [searchParams, setSearchParams] = useSearchParams()
   const { services, isLoading: servicesLoading, isRefreshing: servicesRefreshing, lastUpdated, refetch } = useServices()
 
-  // DEBUG: Log when servicesRefreshing changes
-  useEffect(() => {
-    console.log('[Network] servicesRefreshing changed to:', servicesRefreshing)
-  }, [servicesRefreshing])
   const {
     selectedClusters: globalSelectedClusters,
     isAllClustersSelected,
   } = useGlobalFilters()
   const { drillToService } = useDrillDownActions()
+  const { getStatValue: getUniversalStatValue } = useUniversalStats()
 
   // Use the shared dashboard hook for cards, DnD, modals, auto-refresh
   const {
@@ -178,7 +176,6 @@ export function Network() {
   }, [searchParams, setSearchParams, setShowAddCard])
 
   const handleRefresh = useCallback(() => {
-    console.log('[Network] handleRefresh called, calling refetch()')
     refetch()
   }, [refetch])
 
@@ -228,7 +225,7 @@ export function Network() {
   const clusterIPServices = filteredServices.filter(s => s.type === 'ClusterIP').length
 
   // Stats value getter for the configurable StatsOverview component
-  const getStatValue = useCallback((blockId: string): StatBlockValue => {
+  const getDashboardStatValue = useCallback((blockId: string): StatBlockValue => {
     const drillToFirstService = () => {
       if (filteredServices.length > 0 && filteredServices[0]) {
         drillToService(filteredServices[0].cluster || 'default', filteredServices[0].namespace || 'default', filteredServices[0].name)
@@ -265,6 +262,11 @@ export function Network() {
     }
   }, [filteredServices, loadBalancers, nodePortServices, clusterIPServices, drillToService])
 
+  const getStatValue = useCallback(
+    (blockId: string) => createMergedStatValueGetter(getDashboardStatValue, getUniversalStatValue)(blockId),
+    [getDashboardStatValue, getUniversalStatValue]
+  )
+
   // Transform card for ConfigureCardModal
   const configureCardData = configuringCard ? {
     id: configuringCard.id,
@@ -286,11 +288,12 @@ export function Network() {
               </h1>
               <p className="text-muted-foreground">Monitor network resources across clusters</p>
             </div>
-            {/* DEBUG: Always show + show actual value */}
-            <span className="flex items-center gap-1 text-xs text-amber-400 animate-pulse" title="Updating...">
-              <Hourglass className="w-3 h-3" />
-              <span>Updating (refreshing={String(servicesRefreshing)})</span>
-            </span>
+            {servicesRefreshing && (
+              <span className="flex items-center gap-1 text-xs text-amber-400 animate-pulse" title="Updating...">
+                <Hourglass className="w-3 h-3" />
+                <span>Updating</span>
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-3">
             <label htmlFor="network-auto-refresh" className="flex items-center gap-1.5 cursor-pointer text-xs text-muted-foreground" title="Auto-refresh every 30s">
