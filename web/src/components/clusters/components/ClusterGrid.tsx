@@ -281,6 +281,17 @@ const ListClusterCard = memo(function ListClusterCard({
       }}
     >
       <div className="relative glass px-4 py-3 rounded-lg h-full overflow-hidden">
+        {/* Vendor watermark on right side - large with gradient fade */}
+        <div
+          className="absolute -right-4 top-1/2 -translate-y-1/2 pointer-events-none"
+          style={{
+            opacity: 0.15,
+            maskImage: 'linear-gradient(to left, rgba(0,0,0,0) 0%, rgba(0,0,0,1) 40%)',
+            WebkitMaskImage: 'linear-gradient(to left, rgba(0,0,0,0) 0%, rgba(0,0,0,1) 40%)',
+          }}
+        >
+          <CloudProviderIcon provider={provider} size={64} />
+        </div>
         <div className="flex items-center gap-4">
           {/* Status indicator */}
           <div className="flex-shrink-0">
