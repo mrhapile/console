@@ -1,10 +1,10 @@
 import { useMemo, useState, useEffect, useRef } from 'react'
-import { ArrowUp, CheckCircle, AlertTriangle, Rocket, WifiOff, Search } from 'lucide-react'
+import { ArrowUp, CheckCircle, AlertTriangle, Rocket, WifiOff, Search, Loader2 } from 'lucide-react'
 import { useClusters } from '../../hooks/useMCP'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { useDrillDownActions } from '../../hooks/useDrillDown'
 import { useMissions } from '../../hooks/useMissions'
-import { useLocalAgent, isAgentUnavailable } from '../../hooks/useLocalAgent'
+import { useLocalAgent } from '../../hooks/useLocalAgent'
 import { CardControls, SortDirection } from '../ui/CardControls'
 import { Pagination, usePagination } from '../ui/Pagination'
 import { RefreshButton } from '../ui/RefreshIndicator'
@@ -21,24 +21,76 @@ const SORT_OPTIONS = [
   { value: 'cluster' as const, label: 'Cluster' },
 ]
 
+// Module-level cache for cluster versions (persists across component remounts)
+const versionCache: Record<string, { version: string; timestamp: number }> = {}
+const VERSION_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+
+// Get cached version if still valid
+function getCachedVersion(clusterName: string): string | null {
+  const cached = versionCache[clusterName]
+  if (cached && Date.now() - cached.timestamp < VERSION_CACHE_TTL) {
+    return cached.version
+  }
+  return null
+}
+
+// Set cached version
+function setCachedVersion(clusterName: string, version: string) {
+  versionCache[clusterName] = { version, timestamp: Date.now() }
+}
+
 // Shared WebSocket for version fetching
 let versionWs: WebSocket | null = null
 let versionPendingRequests: Map<string, (version: string | null) => void> = new Map()
+let wsConnecting = false
 
 function ensureVersionWs(): Promise<WebSocket> {
-  // Don't try to connect if agent is unavailable
-  if (isAgentUnavailable()) {
-    return Promise.reject(new Error('Agent unavailable'))
-  }
-
+  // If WebSocket is already open, return it
   if (versionWs?.readyState === WebSocket.OPEN) {
     return Promise.resolve(versionWs)
   }
 
-  return new Promise((resolve, reject) => {
-    versionWs = new WebSocket('ws://127.0.0.1:8585/ws')
+  // If already connecting, wait a bit and check again
+  if (wsConnecting) {
+    return new Promise((resolve, reject) => {
+      const checkInterval = setInterval(() => {
+        if (versionWs?.readyState === WebSocket.OPEN) {
+          clearInterval(checkInterval)
+          resolve(versionWs)
+        }
+      }, 100)
+      // Timeout after 5 seconds
+      setTimeout(() => {
+        clearInterval(checkInterval)
+        reject(new Error('WebSocket connection timeout'))
+      }, 5000)
+    })
+  }
 
-    versionWs.onopen = () => resolve(versionWs!)
+  wsConnecting = true
+
+  return new Promise((resolve, reject) => {
+    try {
+      versionWs = new WebSocket('ws://127.0.0.1:8585/ws')
+    } catch (err) {
+      wsConnecting = false
+      reject(new Error('Failed to create WebSocket'))
+      return
+    }
+
+    const connectionTimeout = setTimeout(() => {
+      wsConnecting = false
+      if (versionWs?.readyState !== WebSocket.OPEN) {
+        versionWs?.close()
+        reject(new Error('WebSocket connection timeout'))
+      }
+    }, 10000)
+
+    versionWs.onopen = () => {
+      clearTimeout(connectionTimeout)
+      wsConnecting = false
+      resolve(versionWs!)
+    }
 
     versionWs.onmessage = (event) => {
       try {
@@ -62,9 +114,15 @@ function ensureVersionWs(): Promise<WebSocket> {
       }
     }
 
-    versionWs.onerror = () => reject(new Error('WebSocket error'))
+    versionWs.onerror = () => {
+      clearTimeout(connectionTimeout)
+      wsConnecting = false
+      reject(new Error('WebSocket error'))
+    }
 
     versionWs.onclose = () => {
+      clearTimeout(connectionTimeout)
+      wsConnecting = false
       versionWs = null
       // Reject all pending requests
       versionPendingRequests.forEach((resolver) => resolver(null))
@@ -73,8 +131,16 @@ function ensureVersionWs(): Promise<WebSocket> {
   })
 }
 
-// Fetch version from KKC agent for a cluster
-async function fetchClusterVersion(clusterName: string): Promise<string | null> {
+// Fetch version from KKC agent for a cluster (with caching)
+async function fetchClusterVersion(clusterName: string, forceRefresh = false): Promise<string | null> {
+  // Check cache first (unless forcing refresh)
+  if (!forceRefresh) {
+    const cached = getCachedVersion(clusterName)
+    if (cached) {
+      return cached
+    }
+  }
+
   try {
     const ws = await ensureVersionWs()
     const requestId = `version-${clusterName}-${Date.now()}`
@@ -82,19 +148,23 @@ async function fetchClusterVersion(clusterName: string): Promise<string | null> 
     return new Promise((resolve) => {
       const timeout = setTimeout(() => {
         versionPendingRequests.delete(requestId)
-        resolve(null)
+        // Return cached version on timeout instead of null
+        resolve(getCachedVersion(clusterName))
       }, 10000)
 
       versionPendingRequests.set(requestId, (version) => {
         clearTimeout(timeout)
-        resolve(version)
+        if (version) {
+          setCachedVersion(clusterName, version)
+        }
+        resolve(version || getCachedVersion(clusterName))
       })
 
       // Check WebSocket state before sending - it may have closed between await and send
       if (ws.readyState !== WebSocket.OPEN) {
         versionPendingRequests.delete(requestId)
         clearTimeout(timeout)
-        resolve(null)
+        resolve(getCachedVersion(clusterName))
         return
       }
 
@@ -105,7 +175,8 @@ async function fetchClusterVersion(clusterName: string): Promise<string | null> 
       }))
     })
   } catch {
-    return null
+    // Return cached version on error
+    return getCachedVersion(clusterName)
   }
 }
 
@@ -146,6 +217,8 @@ function getStatusIcon(status: string) {
       return <AlertTriangle className="w-4 h-4 text-red-400" />
     case 'unreachable':
       return <WifiOff className="w-4 h-4 text-yellow-400" />
+    case 'loading':
+      return <Loader2 className="w-4 h-4 text-muted-foreground animate-spin" />
     default:
       return null
   }
@@ -320,9 +393,17 @@ Please proceed step by step and ask for confirmation before making any changes.`
   // Build version data from real cluster versions
   const clusterVersionData = useMemo(() => {
     const data = clusters.map((c) => {
-      const isUnreachable = c.healthy === false || !c.nodeCount || c.nodeCount === 0
-      // Show loading only while actively fetching, otherwise show version or '-'
-      const currentVersion = clusterVersions[c.name] || (isUnreachable ? '-' : (!fetchCompleted && agentConnected ? 'loading...' : '-'))
+      // A cluster is reachable if it has nodes (same logic as other components)
+      const hasNodes = c.nodeCount && c.nodeCount > 0
+      const isUnreachable = c.reachable === false || (!hasNodes && c.healthy === false)
+      const isStillLoading = !hasNodes && c.nodeCount === undefined && c.reachable === undefined
+
+      // Try cached version first, then component state, then show appropriate fallback
+      const cachedVersion = getCachedVersion(c.name)
+      const stateVersion = clusterVersions[c.name]
+      const currentVersion = stateVersion || cachedVersion ||
+        (isUnreachable ? '-' : (isStillLoading || (!fetchCompleted && agentConnected) ? 'loading...' : '-'))
+
       const targetVersion = getRecommendedUpgrade(currentVersion)
       const hasUpgrade = targetVersion && targetVersion !== currentVersion && currentVersion !== '-' && currentVersion !== 'loading...'
 
@@ -330,14 +411,17 @@ Please proceed step by step and ask for confirmation before making any changes.`
         name: c.name,
         currentVersion,
         targetVersion: hasUpgrade ? targetVersion : currentVersion,
-        status: isUnreachable ? 'unreachable' as const : hasUpgrade ? 'available' as const : 'current' as const,
+        status: isUnreachable ? 'unreachable' as const :
+                isStillLoading ? 'loading' as const :
+                hasUpgrade ? 'available' as const : 'current' as const,
         progress: 0,
         isUnreachable,
+        isLoading: isStillLoading,
       }
     })
 
     // Sort
-    const statusOrder: Record<string, number> = { available: 0, unreachable: 1, current: 2 }
+    const statusOrder: Record<string, number> = { available: 0, loading: 1, unreachable: 2, current: 3 }
     return data.sort((a, b) => {
       let compare = 0
       switch (sortBy) {
