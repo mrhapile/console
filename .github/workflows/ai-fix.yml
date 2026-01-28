@@ -28,11 +28,11 @@ permissions:
 
 jobs:
   trigger-copilot:
-    # Trigger when triage/accepted is added AND ai-fix-requested label exists, OR via manual dispatch.
-    # Guard: skip if ai-processing is already set (triage-command.yml or copilot-assigned.yml handled it).
-    if: |
-      (github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'triage/accepted' && contains(github.event.issue.labels.*.name, 'ai-fix-requested') && !contains(github.event.issue.labels.*.name, 'ai-processing') && !contains(github.event.issue.labels.*.name, 'ai-awaiting-fix')) ||
-      github.event_name == 'workflow_dispatch'
+    # Only trigger via manual dispatch. The /triage accepted flow is handled by triage-command.yml
+    # which adds labels and assigns Copilot in a single workflow, avoiding race conditions.
+    # The issues:labeled trigger was removed because triage-command.yml adds triage/accepted
+    # BEFORE ai-processing, causing ai-fix.yml to fire before the guard label exists.
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
 
     steps:
