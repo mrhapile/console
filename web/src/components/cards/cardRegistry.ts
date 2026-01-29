@@ -156,6 +156,8 @@ import { WorkloadDeployment } from './WorkloadDeployment'
 import { ClusterGroups } from './ClusterGroups'
 // Missions card (deploy progress tracking)
 import { Missions } from './Missions'
+// Resource Marshall card (dependency tree explorer)
+import { ResourceMarshall } from './ResourceMarshall'
 
 // Type for card component props
 export type CardComponentProps = { config?: Record<string, unknown> }
@@ -329,7 +331,9 @@ export const CARD_COMPONENTS: Record<string, CardComponent> = {
   // Cluster Groups card (drag-and-drop deploy target)
   cluster_groups: ClusterGroups,
   // Missions card (deploy progress tracking)
-  missions: Missions,
+  deployment_missions: Missions,
+  // Resource Marshall card (dependency tree explorer)
+  resource_marshall: ResourceMarshall,
 
   // Aliases - map catalog types to existing components with similar functionality
   gpu_list: GPUInventory,
@@ -356,8 +360,7 @@ export const DEMO_DATA_CARDS = new Set([
   'gateway_status',
   // Service Topology - demo visualization
   'service_topology',
-  // Workload Deployment - demo until real workloads are listed
-  'workload_deployment',
+  // Workload Deployment - now uses real data via useWorkloads hook
   // ArgoCD cards - all use mock data
   'argocd_applications',
   'argocd_health',
@@ -421,8 +424,8 @@ export const LIVE_DATA_CARDS = new Set([
   'llm_models',
   // cert-manager card with real data
   'cert_manager',
-  // Missions card - polls deploy status in real time
-  'missions',
+  // Deployment Missions card - polls deploy status in real time
+  'deployment_missions',
 ])
 
 /**
@@ -457,8 +460,10 @@ export const CARD_DEFAULT_WIDTHS: Record<string, number> = {
 
   // Cluster Groups card
   cluster_groups: 4,
-  // Missions card
-  missions: 5,
+  // Deployment Missions card
+  deployment_missions: 5,
+  // Resource Marshall card
+  resource_marshall: 6,
 
   // Event dashboard cards
   event_summary: 6,
