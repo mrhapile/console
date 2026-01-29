@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { Shield, AlertTriangle, CheckCircle, ExternalLink, XCircle, Info, ChevronRight, RefreshCw, Search, Plus, Edit3, Trash2, FileCode, LayoutTemplate, Sparkles, Copy } from 'lucide-react'
 import { BaseModal } from '../../lib/modals'
-import { RefreshButton } from '../ui/RefreshIndicator'
 import { ClusterFilterDropdown } from '../ui/ClusterFilterDropdown'
 import { CardControls } from '../ui/CardControls'
 import { Pagination } from '../ui/Pagination'
@@ -1088,7 +1087,7 @@ export function OPAPolicies({ config: _config }: OPAPoliciesProps) {
     }
     return {}
   })
-  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [, setIsRefreshing] = useState(false)
 
   // Persist statuses to localStorage when they change (only completed statuses, not loading)
   useEffect(() => {
@@ -1388,11 +1387,6 @@ Let's start by discussing what kind of policy I need.`,
             onSortChange={setSortBy}
             sortDirection={sortDirection}
             onSortDirectionChange={setSortDirection}
-          />
-          <RefreshButton
-            isRefreshing={isRefreshing}
-            onRefresh={handleRefresh}
-            size="sm"
           />
           <a
             href="https://open-policy-agent.github.io/gatekeeper/website/docs/"

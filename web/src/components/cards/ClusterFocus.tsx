@@ -5,7 +5,6 @@ import { useCachedPodIssues, useCachedDeploymentIssues } from '../../hooks/useCa
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { useDrillDownActions } from '../../hooks/useDrillDown'
 import { Skeleton } from '../ui/Skeleton'
-import { RefreshButton } from '../ui/RefreshIndicator'
 
 interface ClusterFocusProps {
   config?: {
@@ -15,7 +14,7 @@ interface ClusterFocusProps {
 
 export function ClusterFocus({ config }: ClusterFocusProps) {
   const selectedCluster = config?.cluster
-  const { deduplicatedClusters: allClusters, isLoading: clustersLoading, isRefreshing, refetch, isFailed, consecutiveFailures, lastRefresh } = useClusters()
+  const { deduplicatedClusters: allClusters, isLoading: clustersLoading } = useClusters()
   const { nodes: gpuNodes } = useGPUNodes()
   const { issues: podIssues } = useCachedPodIssues(selectedCluster)
   const { issues: deploymentIssues } = useCachedDeploymentIssues(selectedCluster)
@@ -120,14 +119,6 @@ export function ClusterFocus({ config }: ClusterFocusProps) {
               ))}
             </select>
           )}
-          <RefreshButton
-            isRefreshing={isRefreshing}
-            isFailed={isFailed}
-            consecutiveFailures={consecutiveFailures}
-            lastRefresh={lastRefresh}
-            onRefresh={refetch}
-            size="sm"
-          />
         </div>
       </div>
 

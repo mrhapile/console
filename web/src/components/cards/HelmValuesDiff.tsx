@@ -6,7 +6,6 @@ import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { Skeleton } from '../ui/Skeleton'
 import { ClusterBadge } from '../ui/ClusterBadge'
 import { CardControls, SortDirection } from '../ui/CardControls'
-import { RefreshButton } from '../ui/RefreshIndicator'
 import { useChartFilters } from '../../lib/cards'
 
 interface HelmValuesDiffProps {
@@ -129,10 +128,6 @@ export function HelmValuesDiff({ config }: HelmValuesDiffProps) {
     format,
     isLoading: valuesLoading,
     isRefreshing: valuesRefreshing,
-    refetch: refetchValues,
-    isFailed,
-    consecutiveFailures,
-    lastRefresh
   } = useHelmValues(
     selectedCluster || undefined,
     selectedRelease || undefined,
@@ -285,14 +280,6 @@ export function HelmValuesDiff({ config }: HelmValuesDiffProps) {
             onSortChange={setSortBy}
             sortDirection={sortDirection}
             onSortDirectionChange={setSortDirection}
-          />
-          <RefreshButton
-            isRefreshing={valuesRefreshing || valuesLoading}
-            isFailed={isFailed}
-            consecutiveFailures={consecutiveFailures}
-            lastRefresh={lastRefresh}
-            onRefresh={refetchValues}
-            size="sm"
           />
         </div>
       </div>

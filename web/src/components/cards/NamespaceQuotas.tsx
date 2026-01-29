@@ -1,7 +1,6 @@
 import { useState, useMemo } from 'react'
 import { Gauge, Cpu, HardDrive, Box, Loader2, ChevronRight, Plus, Pencil, Trash2, Zap, Search, Server, Filter, ChevronDown } from 'lucide-react'
 import { BaseModal } from '../../lib/modals'
-import { RefreshButton } from '../ui/RefreshIndicator'
 import {
   useClusters,
   useNamespaces,
@@ -310,7 +309,7 @@ function QuotaModal({
 }
 
 export function NamespaceQuotas({ config }: NamespaceQuotasProps) {
-  const { deduplicatedClusters: allClusters, isLoading: clustersLoading, refetch: refetchClusters } = useClusters()
+  const { deduplicatedClusters: allClusters, isLoading: clustersLoading } = useClusters()
   const { selectedClusters: globalSelectedClusters, isAllClustersSelected } = useGlobalFilters()
   const [selectedCluster, setSelectedCluster] = useState<string>(config?.cluster || 'all')
   const [selectedNamespace, setSelectedNamespace] = useState<string>(config?.namespace || 'all')
@@ -347,21 +346,13 @@ export function NamespaceQuotas({ config }: NamespaceQuotasProps) {
     selectedCluster !== 'all' ? selectedCluster : undefined,
     selectedNamespace !== 'all' ? selectedNamespace : undefined
   )
-  const { limitRanges, isLoading: limitsLoading, refetch: refetchLimits } = useLimitRanges(
+  const { limitRanges, isLoading: limitsLoading } = useLimitRanges(
     selectedCluster !== 'all' ? selectedCluster : undefined,
     selectedNamespace !== 'all' ? selectedNamespace : undefined
   )
 
   const isInitialLoading = clustersLoading
   const isFetchingData = quotasLoading || limitsLoading
-
-  const refetch = () => {
-    refetchClusters()
-    if (selectedCluster) {
-      refetchQuotas()
-      refetchLimits()
-    }
-  }
 
   // Handle save quota
   const handleSaveQuota = async (spec: { cluster: string; namespace: string; name: string; hard: Record<string, string> }) => {
@@ -623,11 +614,6 @@ export function NamespaceQuotas({ config }: NamespaceQuotasProps) {
             onSortChange={setSortBy}
             sortDirection={sortDirection}
             onSortDirectionChange={setSortDirection}
-          />
-          <RefreshButton
-            isRefreshing={!!isFetchingData}
-            onRefresh={refetch}
-            size="sm"
           />
           <button
             onClick={() => {

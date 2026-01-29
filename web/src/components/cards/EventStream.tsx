@@ -7,7 +7,6 @@ import { ClusterBadge } from '../ui/ClusterBadge'
 import { CardControls, SortDirection } from '../ui/CardControls'
 import { Pagination, usePagination } from '../ui/Pagination'
 import { LimitedAccessWarning } from '../ui/LimitedAccessWarning'
-import { RefreshButton } from '../ui/RefreshIndicator'
 import { Skeleton } from '../ui/Skeleton'
 import { useChartFilters } from '../../lib/cards'
 
@@ -28,12 +27,7 @@ export function EventStream() {
   const {
     events: rawEvents,
     isLoading: hookLoading,
-    isRefreshing,
     error,
-    refetch,
-    isFailed,
-    consecutiveFailures,
-    lastRefresh
   } = useCachedEvents(undefined, undefined, { limit: 100, category: 'realtime' })
   const { filterByCluster } = useGlobalFilters()
 
@@ -210,13 +204,6 @@ export function EventStream() {
             onSortChange={setSortBy}
             sortDirection={sortDirection}
             onSortDirectionChange={setSortDirection}
-          />
-          <RefreshButton
-            isRefreshing={isRefreshing}
-            isFailed={isFailed}
-            consecutiveFailures={consecutiveFailures}
-            lastRefresh={lastRefresh}
-            onRefresh={() => refetch()}
           />
         </div>
       </div>

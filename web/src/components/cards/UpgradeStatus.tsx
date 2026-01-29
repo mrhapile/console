@@ -7,7 +7,6 @@ import { useMissions } from '../../hooks/useMissions'
 import { useLocalAgent } from '../../hooks/useLocalAgent'
 import { CardControls, SortDirection } from '../ui/CardControls'
 import { Pagination, usePagination } from '../ui/Pagination'
-import { RefreshButton } from '../ui/RefreshIndicator'
 import { useChartFilters } from '../../lib/cards'
 
 interface UpgradeStatusProps {
@@ -226,7 +225,7 @@ function getStatusIcon(status: string) {
 }
 
 export function UpgradeStatus({ config: _config }: UpgradeStatusProps) {
-  const { deduplicatedClusters: allClusters, isLoading: isLoadingHook, isRefreshing, refetch, isFailed, consecutiveFailures, lastRefresh } = useClusters()
+  const { deduplicatedClusters: allClusters, isLoading: isLoadingHook } = useClusters()
   const { drillToCluster } = useDrillDownActions()
   const { startMission } = useMissions()
   const { isConnected: agentConnected } = useLocalAgent()
@@ -544,14 +543,6 @@ Please proceed step by step and ask for confirmation before making any changes.`
             onSortChange={setSortBy}
             sortDirection={sortDirection}
             onSortDirectionChange={setSortDirection}
-          />
-          <RefreshButton
-            isRefreshing={isRefreshing}
-            isFailed={isFailed}
-            consecutiveFailures={consecutiveFailures}
-            lastRefresh={lastRefresh}
-            onRefresh={refetch}
-            size="sm"
           />
         </div>
       </div>

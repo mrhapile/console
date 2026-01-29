@@ -7,7 +7,6 @@ import { Skeleton } from '../ui/Skeleton'
 import { ClusterBadge } from '../ui/ClusterBadge'
 import { CardControls, SortDirection } from '../ui/CardControls'
 import { Pagination, usePagination } from '../ui/Pagination'
-import { RefreshButton } from '../ui/RefreshIndicator'
 import { useChartFilters } from '../../lib/cards'
 
 interface HelmHistoryProps {
@@ -105,10 +104,6 @@ export function HelmHistory({ config }: HelmHistoryProps) {
     history: rawHistory,
     isLoading: historyLoading,
     isRefreshing: historyRefreshing,
-    refetch: refetchHistory,
-    isFailed,
-    consecutiveFailures,
-    lastRefresh
   } = useHelmHistory(
     selectedCluster || undefined,
     selectedRelease || undefined,
@@ -307,14 +302,6 @@ export function HelmHistory({ config }: HelmHistoryProps) {
             onSortChange={setSortBy}
             sortDirection={sortDirection}
             onSortDirectionChange={setSortDirection}
-          />
-          <RefreshButton
-            isRefreshing={historyRefreshing || historyLoading}
-            isFailed={isFailed}
-            consecutiveFailures={consecutiveFailures}
-            lastRefresh={lastRefresh}
-            onRefresh={refetchHistory}
-            size="sm"
           />
         </div>
       </div>

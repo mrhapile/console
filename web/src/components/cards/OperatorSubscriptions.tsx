@@ -7,7 +7,6 @@ import { ClusterBadge } from '../ui/ClusterBadge'
 import { useDrillDownActions } from '../../hooks/useDrillDown'
 import { CardControls, SortDirection } from '../ui/CardControls'
 import { Pagination, usePagination } from '../ui/Pagination'
-import { RefreshButton } from '../ui/RefreshIndicator'
 
 interface OperatorSubscriptionsProps {
   config?: {
@@ -25,7 +24,7 @@ const SORT_OPTIONS = [
 ]
 
 export function OperatorSubscriptions({ config: _config }: OperatorSubscriptionsProps) {
-  const { isLoading: clustersLoading, isRefreshing: clustersRefreshing, refetch: refetchClusters, isFailed, consecutiveFailures, lastRefresh } = useClusters()
+  const { isLoading: clustersLoading } = useClusters()
 
   // Use chart filters hook for cluster filtering
   const {
@@ -46,13 +45,7 @@ export function OperatorSubscriptions({ config: _config }: OperatorSubscriptions
   const { drillToOperator } = useDrillDownActions()
 
   // Fetch subscriptions - pass undefined to get all clusters
-  const { subscriptions: rawSubscriptions, isLoading: subscriptionsLoading, isRefreshing: subscriptionsRefreshing, refetch: refetchSubscriptions } = useOperatorSubscriptions(undefined)
-
-  const isRefreshing = clustersRefreshing || subscriptionsRefreshing
-  const refetch = () => {
-    refetchClusters()
-    refetchSubscriptions()
-  }
+  const { subscriptions: rawSubscriptions, isLoading: subscriptionsLoading } = useOperatorSubscriptions(undefined)
 
   // Filter and sort subscriptions
   const sortedSubscriptions = useMemo(() => {
@@ -202,14 +195,6 @@ export function OperatorSubscriptions({ config: _config }: OperatorSubscriptions
             onSortChange={setSortBy}
             sortDirection={sortDirection}
             onSortDirectionChange={setSortDirection}
-          />
-          <RefreshButton
-            isRefreshing={isRefreshing}
-            isFailed={isFailed}
-            consecutiveFailures={consecutiveFailures}
-            lastRefresh={lastRefresh}
-            onRefresh={refetch}
-            size="sm"
           />
         </div>
       </div>

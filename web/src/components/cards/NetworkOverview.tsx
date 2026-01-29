@@ -4,18 +4,12 @@ import { useClusters } from '../../hooks/useMCP'
 import { useCachedServices } from '../../hooks/useCachedData'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { useDrillDownActions } from '../../hooks/useDrillDown'
-import { RefreshButton } from '../ui/RefreshIndicator'
 import { useChartFilters } from '../../lib/cards'
 
 export function NetworkOverview() {
-  const { deduplicatedClusters: clusters, isLoading, isRefreshing: clustersRefreshing, refetch: refetchClusters, isFailed, consecutiveFailures, lastRefresh } = useClusters()
-  const { services, isLoading: servicesLoading, isRefreshing: servicesRefreshing, refetch: refetchServices } = useCachedServices()
+  const { deduplicatedClusters: clusters, isLoading } = useClusters()
+  const { services, isLoading: servicesLoading } = useCachedServices()
 
-  const isRefreshing = clustersRefreshing || servicesRefreshing
-  const refetch = () => {
-    refetchClusters()
-    refetchServices()
-  }
   const { selectedClusters, isAllClustersSelected } = useGlobalFilters()
   const { drillToService } = useDrillDownActions()
 
@@ -148,14 +142,6 @@ export function NetworkOverview() {
             </div>
           )}
 
-          <RefreshButton
-            isRefreshing={isRefreshing}
-            isFailed={isFailed}
-            consecutiveFailures={consecutiveFailures}
-            lastRefresh={lastRefresh}
-            onRefresh={refetch}
-            size="sm"
-          />
         </div>
       </div>
 

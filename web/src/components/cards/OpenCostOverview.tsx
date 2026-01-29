@@ -1,7 +1,6 @@
 import { useState, useMemo } from 'react'
 import { Server, Box, HardDrive, ExternalLink, AlertCircle, ChevronRight, Search, Filter, ChevronDown } from 'lucide-react'
 import { CardControls, SortDirection } from '../ui/CardControls'
-import { RefreshButton } from '../ui/RefreshIndicator'
 import { useChartFilters } from '../../lib/cards'
 import { useDrillDownActions } from '../../hooks/useDrillDown'
 
@@ -28,7 +27,6 @@ const DEMO_NAMESPACE_COSTS = [
 ]
 
 export function OpenCostOverview({ config: _config }: OpenCostOverviewProps) {
-  const [isRefreshing, setIsRefreshing] = useState(false)
   const [localSearch, setLocalSearch] = useState('')
   const [limit, setLimit] = useState<number | 'unlimited'>(5)
   const [sortBy, setSortBy] = useState<SortField>('name')
@@ -73,12 +71,6 @@ export function OpenCostOverview({ config: _config }: OpenCostOverviewProps) {
 
   const totalCost = DEMO_NAMESPACE_COSTS.reduce((sum, ns) => sum + ns.totalCost, 0)
   const maxCost = Math.max(...DEMO_NAMESPACE_COSTS.map(ns => ns.totalCost))
-
-  const handleRefresh = async () => {
-    setIsRefreshing(true)
-    await new Promise(r => setTimeout(r, 1000))
-    setIsRefreshing(false)
-  }
 
   return (
     <div className="h-full flex flex-col min-h-card content-loaded">
@@ -159,11 +151,6 @@ export function OpenCostOverview({ config: _config }: OpenCostOverviewProps) {
             onSortChange={setSortBy}
             sortDirection={sortDirection}
             onSortDirectionChange={setSortDirection}
-          />
-          <RefreshButton
-            isRefreshing={isRefreshing}
-            onRefresh={handleRefresh}
-            size="sm"
           />
         </div>
       </div>

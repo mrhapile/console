@@ -18,7 +18,6 @@ import { useAuth } from '../../lib/auth'
 import { cn } from '../../lib/cn'
 import { useChartFilters } from '../../lib/cards'
 import type { ConsoleUser, UserRole, OpenShiftUser } from '../../types/users'
-import { RefreshButton } from '../ui/RefreshIndicator'
 import { Skeleton } from '../ui/Skeleton'
 import { CardControls, SortDirection } from '../ui/CardControls'
 import { Pagination, usePagination } from '../ui/Pagination'
@@ -72,23 +71,17 @@ export function UserManagement({ config: _config }: UserManagementProps) {
 
   const { drillToRBAC } = useDrillDownActions()
   const { user: currentUser } = useAuth()
-  const { users: allUsers, isLoading: usersLoading, isRefreshing: usersRefreshing, error: usersError, refetch: refetchUsers, updateUserRole, deleteUser } = useConsoleUsers()
+  const { users: allUsers, isLoading: usersLoading, error: usersError, updateUserRole, deleteUser } = useConsoleUsers()
   const { deduplicatedClusters: allClusters } = useClusters()
   // Fetch ALL SAs from ALL clusters upfront, filter locally
-  const { serviceAccounts: allServiceAccounts, isLoading: sasInitialLoading, isRefreshing: sasRefreshing, failedClusters: _saFailedClusters, refetch: refetchSAs } = useAllK8sServiceAccounts(allClusters)
+  const { serviceAccounts: allServiceAccounts, isLoading: sasInitialLoading, failedClusters: _saFailedClusters } = useAllK8sServiceAccounts(allClusters)
   // Fetch ALL OpenShift users from ALL clusters upfront, filter locally
-  const { users: allOpenshiftUsers, isLoading: openshiftInitialLoading, isRefreshing: openshiftRefreshing, failedClusters: _userFailedClusters, refetch: refetchOpenShiftUsers } = useAllOpenShiftUsers(allClusters)
+  const { users: allOpenshiftUsers, isLoading: openshiftInitialLoading, failedClusters: _userFailedClusters } = useAllOpenShiftUsers(allClusters)
 
   // Only show loading state on initial load when there's no data
   const sasLoading = sasInitialLoading && allServiceAccounts.length === 0
   const openshiftUsersLoading = openshiftInitialLoading && allOpenshiftUsers.length === 0
 
-  const isRefreshing = usersRefreshing || sasRefreshing || openshiftRefreshing
-  const refetch = () => {
-    refetchUsers()
-    refetchSAs()
-    refetchOpenShiftUsers()
-  }
   const { selectedClusters, isAllClustersSelected, customFilter } = useGlobalFilters()
 
   // Local cluster filter (gold standard pattern)
@@ -455,11 +448,6 @@ export function UserManagement({ config: _config }: UserManagementProps) {
               onSortDirectionChange={setConsoleUserSortDirection}
             />
           )}
-          <RefreshButton
-            isRefreshing={isRefreshing}
-            onRefresh={refetch}
-            size="sm"
-          />
         </div>
       </div>
 

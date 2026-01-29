@@ -4,7 +4,6 @@ import { ClusterBadge } from '../ui/ClusterBadge'
 import { CardControls } from '../ui/CardControls'
 import { Pagination } from '../ui/Pagination'
 import { useDrillDownActions } from '../../hooks/useDrillDown'
-import { RefreshButton } from '../ui/RefreshIndicator'
 import { useCardData, commonComparators } from '../../lib/cards'
 
 type SortByOption = 'restarts' | 'name' | 'cpu' | 'memory' | 'gpu'
@@ -65,7 +64,7 @@ export function TopPods({ config }: TopPodsProps) {
   const { drillToPod } = useDrillDownActions()
 
   // Fetch more pods to allow client-side filtering and pagination (using unified cache)
-  const { pods: rawPods, isLoading, isRefreshing, error, refetch, isFailed, consecutiveFailures, lastRefresh } = useCachedPods(clusterConfig, namespaceConfig, { limit: 100, category: 'pods' })
+  const { pods: rawPods, isLoading, error } = useCachedPods(clusterConfig, namespaceConfig, { limit: 100, category: 'pods' })
 
   // Use shared card data hook for filtering, sorting, and pagination
   const {
@@ -200,14 +199,6 @@ export function TopPods({ config }: TopPodsProps) {
             onSortChange={setSortBy}
             sortDirection={sortDirection}
             onSortDirectionChange={setSortDirection}
-          />
-          <RefreshButton
-            isRefreshing={isRefreshing}
-            isFailed={isFailed}
-            consecutiveFailures={consecutiveFailures}
-            lastRefresh={lastRefresh}
-            onRefresh={refetch}
-            size="sm"
           />
         </div>
       </div>

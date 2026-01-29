@@ -3,7 +3,6 @@ import { CheckCircle, RefreshCw, AlertTriangle, ExternalLink, AlertCircle, Filte
 import { useClusters } from '../../hooks/useMCP'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { Skeleton } from '../ui/Skeleton'
-import { RefreshButton } from '../ui/RefreshIndicator'
 import { useChartFilters } from '../../lib/cards'
 
 interface ArgoCDSyncStatusProps {
@@ -20,7 +19,7 @@ function getMockSyncStatusData(clusterCount: number) {
 }
 
 export function ArgoCDSyncStatus({ config: _config }: ArgoCDSyncStatusProps) {
-  const { deduplicatedClusters: clusters, isLoading, isRefreshing, refetch, isFailed, consecutiveFailures, lastRefresh } = useClusters()
+  const { deduplicatedClusters: clusters, isLoading } = useClusters()
   const { selectedClusters, isAllClustersSelected } = useGlobalFilters()
 
   // Local cluster filter
@@ -136,14 +135,6 @@ export function ArgoCDSyncStatus({ config: _config }: ArgoCDSyncStatusProps) {
           >
             <ExternalLink className="w-4 h-4" />
           </a>
-          <RefreshButton
-            isRefreshing={isRefreshing}
-            isFailed={isFailed}
-            consecutiveFailures={consecutiveFailures}
-            lastRefresh={lastRefresh}
-            onRefresh={refetch}
-            size="sm"
-          />
         </div>
       </div>
 

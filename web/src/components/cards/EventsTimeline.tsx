@@ -12,7 +12,6 @@ import {
 import { useClusters } from '../../hooks/useMCP'
 import { useCachedEvents } from '../../hooks/useCachedData'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
-import { RefreshButton } from '../ui/RefreshIndicator'
 import { Skeleton, SkeletonStats } from '../ui/Skeleton'
 
 interface TimePoint {
@@ -80,11 +79,6 @@ export function EventsTimeline() {
   const {
     events,
     isLoading: hookLoading,
-    isRefreshing,
-    refetch,
-    isFailed,
-    consecutiveFailures,
-    lastRefresh
   } = useCachedEvents(undefined, undefined, { limit: 100, category: 'realtime' })
 
   // Only show skeleton when no cached data exists
@@ -249,13 +243,6 @@ export function EventsTimeline() {
             </div>
           )}
 
-          <RefreshButton
-            isRefreshing={isRefreshing}
-            isFailed={isFailed}
-            consecutiveFailures={consecutiveFailures}
-            lastRefresh={lastRefresh}
-            onRefresh={() => refetch()}
-          />
         </div>
       </div>
 

@@ -6,7 +6,6 @@ import { useCachedPodIssues, useCachedDeploymentIssues } from '../../hooks/useCa
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { useDrillDownActions } from '../../hooks/useDrillDown'
 import { cn } from '../../lib/cn'
-import { RefreshButton } from '../ui/RefreshIndicator'
 import { useNavigate } from 'react-router-dom'
 
 const ANTHROPIC_KEY_STORAGE = 'kubestellar-anthropic-key'
@@ -90,18 +89,11 @@ interface ConsoleMissionCardProps {
 // Card 1: AI Issues Overview - Shows issues AI can help fix
 export function ConsoleIssuesCard(_props: ConsoleMissionCardProps) {
   const { startMission, missions } = useMissions()
-  const { isRefreshing: clustersRefreshing, refetch: refetchClusters, isFailed, consecutiveFailures, lastRefresh } = useClusters()
-  const { issues: allPodIssues, isRefreshing: podRefreshing, refetch: refetchPods } = useCachedPodIssues()
-  const { issues: allDeploymentIssues, isRefreshing: depRefreshing, refetch: refetchDeps } = useCachedDeploymentIssues()
+  const { issues: allPodIssues } = useCachedPodIssues()
+  const { issues: allDeploymentIssues } = useCachedDeploymentIssues()
   const { selectedClusters, isAllClustersSelected, customFilter } = useGlobalFilters()
   const { showKeyPrompt, checkKeyAndRun, goToSettings, dismissPrompt } = useApiKeyCheck()
 
-  const isRefreshing = clustersRefreshing || podRefreshing || depRefreshing
-  const refetch = () => {
-    refetchClusters()
-    refetchPods()
-    refetchDeps()
-  }
   const { drillToPod, drillToDeployment } = useDrillDownActions()
 
   // Filter issues by global cluster filter
@@ -206,14 +198,6 @@ Please:
           )}
         </div>
         <div className="flex items-center gap-2">
-          <RefreshButton
-            isRefreshing={isRefreshing}
-            isFailed={isFailed}
-            consecutiveFailures={consecutiveFailures}
-            lastRefresh={lastRefresh}
-            onRefresh={refetch}
-            size="sm"
-          />
         </div>
       </div>
 
@@ -303,7 +287,7 @@ Please:
 // Card 2: Kubeconfig Audit - Detect stale/unreachable clusters
 export function ConsoleKubeconfigAuditCard(_props: ConsoleMissionCardProps) {
   const { startMission, missions } = useMissions()
-  const { deduplicatedClusters: allClusters, isLoading, isRefreshing, refetch, isFailed, consecutiveFailures, lastRefresh } = useClusters()
+  const { deduplicatedClusters: allClusters } = useClusters()
   const { selectedClusters, isAllClustersSelected, customFilter } = useGlobalFilters()
   const { drillToCluster } = useDrillDownActions()
   const { showKeyPrompt, checkKeyAndRun, goToSettings, dismissPrompt } = useApiKeyCheck()
@@ -376,14 +360,6 @@ Please:
       />
 
       <div className="flex items-center justify-end mb-4">
-        <RefreshButton
-          isRefreshing={isRefreshing || isLoading}
-          isFailed={isFailed}
-          consecutiveFailures={consecutiveFailures}
-          lastRefresh={lastRefresh}
-          onRefresh={refetch}
-          size="sm"
-        />
       </div>
 
       {/* Audit Summary */}
@@ -466,7 +442,7 @@ Please:
 // Card 3: Cluster Health Check - Overall health assessment
 export function ConsoleHealthCheckCard(_props: ConsoleMissionCardProps) {
   const { startMission, missions } = useMissions()
-  const { deduplicatedClusters: allClusters, isLoading, isRefreshing, refetch, isFailed, consecutiveFailures, lastRefresh } = useClusters()
+  const { deduplicatedClusters: allClusters } = useClusters()
   const { issues: allPodIssues } = useCachedPodIssues()
   const { issues: allDeploymentIssues } = useCachedDeploymentIssues()
   const { selectedClusters, isAllClustersSelected, customFilter } = useGlobalFilters()
@@ -582,14 +558,6 @@ Please provide:
       />
 
       <div className="flex items-center justify-end mb-4">
-        <RefreshButton
-          isRefreshing={isRefreshing || isLoading}
-          isFailed={isFailed}
-          consecutiveFailures={consecutiveFailures}
-          lastRefresh={lastRefresh}
-          onRefresh={refetch}
-          size="sm"
-        />
       </div>
 
       {/* Health Score */}
@@ -706,15 +674,14 @@ Please provide:
 // Card 4: Offline Detection - Detect offline nodes and unavailable GPUs
 export function ConsoleOfflineDetectionCard(_props: ConsoleMissionCardProps) {
   const { startMission, missions } = useMissions()
-  const { isLoading, isRefreshing, refetch, isFailed, consecutiveFailures, lastRefresh } = useClusters()
-  const { nodes: gpuNodes, isLoading: gpuLoading } = useGPUNodes()
+  const { nodes: gpuNodes } = useGPUNodes()
   const { selectedClusters, isAllClustersSelected, customFilter } = useGlobalFilters()
   const { drillToCluster, drillToNode } = useDrillDownActions()
   const { showKeyPrompt, checkKeyAndRun, goToSettings, dismissPrompt } = useApiKeyCheck()
 
   // Get all nodes from direct API fetch
   const [allNodes, setAllNodes] = useState<Array<{ name: string; cluster?: string; status: string; roles: string[]; unschedulable?: boolean }>>([])
-  const [nodesLoading, setNodesLoading] = useState(true)
+  const [, setNodesLoading] = useState(true)
 
   // Fetch nodes from local agent (no auth required)
   useEffect(() => {
@@ -868,14 +835,6 @@ Please:
       />
 
       <div className="flex items-center justify-end mb-4">
-        <RefreshButton
-          isRefreshing={isRefreshing || isLoading || nodesLoading || gpuLoading}
-          isFailed={isFailed}
-          consecutiveFailures={consecutiveFailures}
-          lastRefresh={lastRefresh}
-          onRefresh={refetch}
-          size="sm"
-        />
       </div>
 
       {/* Status Summary */}

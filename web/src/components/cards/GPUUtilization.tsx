@@ -1,6 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from 'react'
 import { TrendingUp, Clock, Filter, ChevronDown, Server } from 'lucide-react'
-import { RefreshButton } from '../ui/RefreshIndicator'
 import { Skeleton, SkeletonStats } from '../ui/Skeleton'
 import {
   AreaChart,
@@ -38,11 +37,6 @@ export function GPUUtilization() {
   const {
     nodes: gpuNodes,
     isLoading: hookLoading,
-    isRefreshing,
-    refetch,
-    isFailed,
-    consecutiveFailures,
-    lastRefresh
   } = useGPUNodes()
   const { deduplicatedClusters: clusters } = useClusters()
 
@@ -278,13 +272,6 @@ export function GPUUtilization() {
               </div>
             )}
 
-            <RefreshButton
-              isRefreshing={isRefreshing}
-              isFailed={isFailed}
-              consecutiveFailures={consecutiveFailures}
-              lastRefresh={lastRefresh}
-              onRefresh={() => refetch()}
-            />
           </div>
         </div>
 
@@ -368,13 +355,6 @@ export function GPUUtilization() {
             </div>
           )}
 
-          <RefreshButton
-            isRefreshing={isRefreshing}
-            isFailed={isFailed}
-            consecutiveFailures={consecutiveFailures}
-            lastRefresh={lastRefresh}
-            onRefresh={() => refetch()}
-          />
         </div>
       </div>
 

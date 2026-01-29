@@ -4,7 +4,6 @@ import { useGitOpsDrifts, GitOpsDrift as GitOpsDriftType, useClusters } from '..
 import { useGlobalFilters, type SeverityLevel } from '../../hooks/useGlobalFilters'
 import { useDrillDownActions } from '../../hooks/useDrillDown'
 import { ClusterBadge } from '../ui/ClusterBadge'
-import { RefreshButton } from '../ui/RefreshIndicator'
 import { CardControls, SortDirection } from '../ui/CardControls'
 import { Pagination, usePagination } from '../ui/Pagination'
 
@@ -55,7 +54,7 @@ export function GitOpsDrift({ config }: GitOpsDriftProps) {
   const cluster = config?.cluster
   const namespace = config?.namespace
 
-  const { drifts, isLoading: isLoadingHook, isRefreshing, error, refetch, isFailed, consecutiveFailures, lastRefresh } = useGitOpsDrifts(cluster, namespace)
+  const { drifts, isLoading: isLoadingHook, error } = useGitOpsDrifts(cluster, namespace)
   const { deduplicatedClusters: allClusters } = useClusters()
   const { selectedClusters, isAllClustersSelected, selectedSeverities, isAllSeveritiesSelected, customFilter } = useGlobalFilters()
   const [localSearch, setLocalSearch] = useState('')
@@ -294,14 +293,6 @@ export function GitOpsDrift({ config }: GitOpsDriftProps) {
             onSortChange={setSortBy}
             sortDirection={sortDirection}
             onSortDirectionChange={setSortDirection}
-          />
-          <RefreshButton
-            isRefreshing={isRefreshing}
-            isFailed={isFailed}
-            consecutiveFailures={consecutiveFailures}
-            lastRefresh={lastRefresh}
-            onRefresh={refetch}
-            size="sm"
           />
         </div>
       </div>

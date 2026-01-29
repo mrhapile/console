@@ -4,7 +4,6 @@ import { useGPUNodes, useClusters } from '../../hooks/useMCP'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { useDrillDownActions } from '../../hooks/useDrillDown'
 import { CardControls, SortDirection } from '../ui/CardControls'
-import { RefreshButton } from '../ui/RefreshIndicator'
 import { Skeleton } from '../ui/Skeleton'
 import { useChartFilters } from '../../lib/cards'
 
@@ -23,11 +22,6 @@ export function GPUOverview({ config: _config }: GPUOverviewProps) {
   const {
     nodes: rawNodes,
     isLoading: hookLoading,
-    isRefreshing,
-    refetch,
-    isFailed,
-    consecutiveFailures,
-    lastRefresh
   } = useGPUNodes()
   const { deduplicatedClusters: clusters } = useClusters()
 
@@ -200,13 +194,6 @@ export function GPUOverview({ config: _config }: GPUOverviewProps) {
             sortDirection={sortDirection}
             onSortDirectionChange={setSortDirection}
             showLimit={false}
-          />
-          <RefreshButton
-            isRefreshing={isRefreshing}
-            isFailed={isFailed}
-            consecutiveFailures={consecutiveFailures}
-            lastRefresh={lastRefresh}
-            onRefresh={() => refetch()}
           />
         </div>
       </div>

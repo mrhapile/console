@@ -4,7 +4,6 @@ import { useDrillDownActions } from '../../hooks/useDrillDown'
 import { ClusterBadge } from '../ui/ClusterBadge'
 import { CardControls } from '../ui/CardControls'
 import { Pagination } from '../ui/Pagination'
-import { RefreshButton } from '../ui/RefreshIndicator'
 import { LimitedAccessWarning } from '../ui/LimitedAccessWarning'
 import { useCardData } from '../../lib/cards'
 import { SEVERITY_COLORS, SeverityLevel } from '../../lib/accessibility'
@@ -38,7 +37,7 @@ const getSeverityColor = (severity: string) => {
 export function SecurityIssues({ config }: SecurityIssuesProps) {
   const clusterConfig = config?.cluster as string | undefined
   const namespaceConfig = config?.namespace as string | undefined
-  const { issues: rawIssues, isLoading, isRefreshing, error, refetch, isFailed, consecutiveFailures, lastRefresh } = useSecurityIssues(clusterConfig, namespaceConfig)
+  const { issues: rawIssues, isLoading, error } = useSecurityIssues(clusterConfig, namespaceConfig)
   const { drillToPod } = useDrillDownActions()
 
   const severityOrder: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3, info: 4 }
@@ -137,12 +136,6 @@ export function SecurityIssues({ config }: SecurityIssuesProps) {
     return (
       <div className="h-full flex flex-col">
         <div className="flex items-center justify-end mb-3">
-          <RefreshButton
-            isRefreshing={isRefreshing}
-            lastRefresh={lastRefresh}
-            onRefresh={refetch}
-            size="sm"
-          />
         </div>
         <div className="flex-1 flex flex-col items-center justify-center text-center">
           <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center mb-3" title="Security scan passed">
@@ -229,14 +222,6 @@ export function SecurityIssues({ config }: SecurityIssuesProps) {
             onSortChange={setSortBy}
             sortDirection={sortDirection}
             onSortDirectionChange={setSortDirection}
-          />
-          <RefreshButton
-            isRefreshing={isRefreshing}
-            isFailed={isFailed}
-            consecutiveFailures={consecutiveFailures}
-            lastRefresh={lastRefresh}
-            onRefresh={refetch}
-            size="sm"
           />
         </div>
       </div>

@@ -2,7 +2,6 @@ import { useState, useMemo } from 'react'
 import { CheckCircle2, XCircle, Search, AlertCircle, ExternalLink, Globe, Server, Filter, ChevronDown } from 'lucide-react'
 import { ClusterBadge } from '../ui/ClusterBadge'
 import { CardControls, SortDirection } from '../ui/CardControls'
-import { RefreshButton } from '../ui/RefreshIndicator'
 import { useChartFilters } from '../../lib/cards'
 import type { ServiceImport, ServiceImportType } from '../../types/mcs'
 
@@ -104,7 +103,6 @@ interface ServiceImportsProps {
 }
 
 export function ServiceImports({ config: _config }: ServiceImportsProps) {
-  const [isRefreshing, setIsRefreshing] = useState(false)
   const [localSearch, setLocalSearch] = useState('')
   const [limit, setLimit] = useState<number | 'unlimited'>(5)
   const [sortBy, setSortBy] = useState<SortByOption>('name')
@@ -160,12 +158,6 @@ export function ServiceImports({ config: _config }: ServiceImportsProps) {
     }
     return sorted
   }, [localSearch, localClusterFilter, sortBy, sortDirection, limit])
-
-  const handleRefresh = async () => {
-    setIsRefreshing(true)
-    await new Promise(r => setTimeout(r, 1000))
-    setIsRefreshing(false)
-  }
 
   return (
     <div className="h-full flex flex-col min-h-card">
@@ -244,11 +236,6 @@ export function ServiceImports({ config: _config }: ServiceImportsProps) {
             onSortChange={setSortBy}
             sortDirection={sortDirection}
             onSortDirectionChange={setSortDirection}
-          />
-          <RefreshButton
-            isRefreshing={isRefreshing}
-            onRefresh={handleRefresh}
-            size="sm"
           />
         </div>
       </div>

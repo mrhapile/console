@@ -4,7 +4,6 @@ import { useClusters, type ClusterInfo } from '../../hooks/useMCP'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { useDrillDownActions } from '../../hooks/useDrillDown'
 import { Skeleton } from '../ui/Skeleton'
-import { RefreshButton } from '../ui/RefreshIndicator'
 import { detectCloudProvider, CloudProviderIcon, type CloudProvider } from '../ui/CloudProviderIcon'
 import WorldMapSvg from '../../assets/world-map.svg?raw'
 
@@ -212,7 +211,7 @@ function extractRegion(cluster: ClusterInfo): string | null {
 type StatusFilter = 'all' | 'healthy' | 'unhealthy'
 
 export function ClusterLocations({ config: _config }: ClusterLocationsProps) {
-  const { deduplicatedClusters: allClusters, isLoading, isRefreshing, refetch, isFailed, consecutiveFailures, lastRefresh } = useClusters()
+  const { deduplicatedClusters: allClusters, isLoading } = useClusters()
   const { drillToCluster } = useDrillDownActions()
   const {
     selectedClusters: globalSelectedClusters,
@@ -369,14 +368,6 @@ export function ClusterLocations({ config: _config }: ClusterLocationsProps) {
           >
             <Filter className="w-3.5 h-3.5" />
           </button>
-          <RefreshButton
-            isRefreshing={isRefreshing}
-            isFailed={isFailed}
-            consecutiveFailures={consecutiveFailures}
-            lastRefresh={lastRefresh}
-            onRefresh={refetch}
-            size="sm"
-          />
         </div>
       </div>
 

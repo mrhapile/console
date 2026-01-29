@@ -3,7 +3,6 @@ import { CheckCircle, XCircle, Clock, AlertTriangle, ExternalLink, AlertCircle }
 import { useClusters } from '../../hooks/useMCP'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { Skeleton } from '../ui/Skeleton'
-import { RefreshButton } from '../ui/RefreshIndicator'
 
 interface ArgoCDHealthProps {
   config?: Record<string, unknown>
@@ -29,7 +28,7 @@ const healthConfig = {
 }
 
 export function ArgoCDHealth({ config: _config }: ArgoCDHealthProps) {
-  const { deduplicatedClusters: clusters, isLoading, isRefreshing, refetch, isFailed, consecutiveFailures, lastRefresh } = useClusters()
+  const { deduplicatedClusters: clusters, isLoading } = useClusters()
   const { selectedClusters, isAllClustersSelected } = useGlobalFilters()
 
   const filteredClusterCount = useMemo(() => {
@@ -75,14 +74,6 @@ export function ArgoCDHealth({ config: _config }: ArgoCDHealthProps) {
           >
             <ExternalLink className="w-4 h-4" />
           </a>
-          <RefreshButton
-            isRefreshing={isRefreshing}
-            isFailed={isFailed}
-            consecutiveFailures={consecutiveFailures}
-            lastRefresh={lastRefresh}
-            onRefresh={refetch}
-            size="sm"
-          />
         </div>
       </div>
 

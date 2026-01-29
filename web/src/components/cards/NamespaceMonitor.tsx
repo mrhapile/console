@@ -10,7 +10,6 @@ import {
 } from '../../hooks/useMCP'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { useDrillDownActions } from '../../hooks/useDrillDown'
-import { RefreshButton } from '../ui/RefreshIndicator'
 import { CardComponentProps } from './cardRegistry'
 
 // Resource types to monitor
@@ -91,7 +90,7 @@ const ChangeAnimations: Record<Exclude<ChangeType, null>, string> = {
 }
 
 export function NamespaceMonitor({ config: _config }: CardComponentProps) {
-  const { deduplicatedClusters: clusters, isRefreshing, refetch: refetchClusters, isFailed, consecutiveFailures, lastRefresh } = useClusters()
+  const { deduplicatedClusters: clusters } = useClusters()
   const { selectedClusters, isAllClustersSelected } = useGlobalFilters()
   const { drillToNamespace, drillToPod, drillToDeployment, drillToService, drillToPVC } = useDrillDownActions()
 
@@ -588,14 +587,6 @@ export function NamespaceMonitor({ config: _config }: CardComponentProps) {
             <Activity className="w-3.5 h-3.5" />
             <span>{changeCountsByType.added + changeCountsByType.modified + changeCountsByType.deleted + changeCountsByType.error}</span>
           </button>
-          <RefreshButton
-            isRefreshing={isRefreshing}
-            isFailed={isFailed}
-            consecutiveFailures={consecutiveFailures}
-            lastRefresh={lastRefresh}
-            onRefresh={refetchClusters}
-            size="sm"
-          />
         </div>
       </div>
 

@@ -7,7 +7,6 @@ import { Skeleton } from '../ui/Skeleton'
 import { ClusterBadge } from '../ui/ClusterBadge'
 import { CardControls, SortDirection } from '../ui/CardControls'
 import { Pagination, usePagination } from '../ui/Pagination'
-import { RefreshButton } from '../ui/RefreshIndicator'
 import { useChartFilters } from '../../lib/cards'
 
 interface NamespaceRBACProps {
@@ -33,7 +32,7 @@ const SORT_OPTIONS = [
 ]
 
 export function NamespaceRBAC({ config }: NamespaceRBACProps) {
-  const { deduplicatedClusters: clusters, isLoading: clustersLoading, isRefreshing: clustersRefreshing, refetch: refetchClusters, isFailed, consecutiveFailures, lastRefresh } = useClusters()
+  const { deduplicatedClusters: clusters, isLoading: clustersLoading } = useClusters()
   const { selectedClusters, isAllClustersSelected } = useGlobalFilters()
   const { drillToRBAC } = useDrillDownActions()
   const [selectedCluster, setSelectedCluster] = useState<string>(config?.cluster || '')
@@ -60,15 +59,15 @@ export function NamespaceRBAC({ config }: NamespaceRBACProps) {
   }, [clusters, selectedClusters, isAllClustersSelected])
 
   // Fetch RBAC data using real hooks (requires a cluster to be selected)
-  const { roles: k8sRoles, isLoading: rolesLoading, refetch: refetchRoles } = useK8sRoles(
+  const { roles: k8sRoles, isLoading: rolesLoading } = useK8sRoles(
     selectedCluster || undefined,
     selectedNamespace || undefined
   )
-  const { bindings: k8sBindings, isLoading: bindingsLoading, refetch: refetchBindings } = useK8sRoleBindings(
+  const { bindings: k8sBindings, isLoading: bindingsLoading } = useK8sRoleBindings(
     selectedCluster || undefined,
     selectedNamespace || undefined
   )
-  const { serviceAccounts: k8sServiceAccounts, isLoading: sasLoading, refetch: refetchSAs } = useK8sServiceAccounts(
+  const { serviceAccounts: k8sServiceAccounts, isLoading: sasLoading } = useK8sServiceAccounts(
     selectedCluster || undefined,
     selectedNamespace || undefined
   )
@@ -78,15 +77,6 @@ export function NamespaceRBAC({ config }: NamespaceRBACProps) {
   const isFetchingRBAC = selectedCluster && selectedNamespace && (rolesLoading || bindingsLoading || sasLoading)
   const isLoading = isInitialLoading
   const showSkeleton = isLoading && clusters.length === 0
-
-  const refetch = () => {
-    refetchClusters()
-    if (selectedCluster) {
-      refetchRoles()
-      refetchBindings()
-      refetchSAs()
-    }
-  }
 
   // Transform RBAC data to the display format
   const rbacData = useMemo(() => {
@@ -257,14 +247,6 @@ export function NamespaceRBAC({ config }: NamespaceRBACProps) {
             onSortChange={setSortBy}
             sortDirection={sortDirection}
             onSortDirectionChange={setSortDirection}
-          />
-          <RefreshButton
-            isRefreshing={clustersRefreshing || !!isFetchingRBAC}
-            isFailed={isFailed}
-            consecutiveFailures={consecutiveFailures}
-            lastRefresh={lastRefresh}
-            onRefresh={refetch}
-            size="sm"
           />
         </div>
       </div>

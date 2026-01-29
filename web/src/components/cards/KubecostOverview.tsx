@@ -1,6 +1,4 @@
-import { useState } from 'react'
 import { TrendingDown, AlertTriangle, ExternalLink, AlertCircle, PieChart, ChevronRight } from 'lucide-react'
-import { RefreshButton } from '../ui/RefreshIndicator'
 import { useDrillDownActions } from '../../hooks/useDrillDown'
 
 interface KubecostOverviewProps {
@@ -36,14 +34,7 @@ const DEMO_RECOMMENDATIONS = [
 ]
 
 export function KubecostOverview({ config: _config }: KubecostOverviewProps) {
-  const [isRefreshing, setIsRefreshing] = useState(false)
   const { drillToCost } = useDrillDownActions()
-
-  const handleRefresh = async () => {
-    setIsRefreshing(true)
-    await new Promise(r => setTimeout(r, 1000))
-    setIsRefreshing(false)
-  }
 
   return (
     <div className="h-full flex flex-col min-h-card content-loaded">
@@ -58,11 +49,6 @@ export function KubecostOverview({ config: _config }: KubecostOverviewProps) {
         >
           <ExternalLink className="w-4 h-4" />
         </a>
-        <RefreshButton
-          isRefreshing={isRefreshing}
-          onRefresh={handleRefresh}
-          size="sm"
-        />
       </div>
 
       {/* Integration notice */}

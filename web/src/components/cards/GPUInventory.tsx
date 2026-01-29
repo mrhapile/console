@@ -6,7 +6,6 @@ import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { ClusterBadge } from '../ui/ClusterBadge'
 import { CardControls, SortDirection } from '../ui/CardControls'
 import { Pagination, usePagination } from '../ui/Pagination'
-import { RefreshButton } from '../ui/RefreshIndicator'
 import { Skeleton } from '../ui/Skeleton'
 import { useChartFilters } from '../../lib/cards'
 
@@ -28,12 +27,7 @@ export function GPUInventory({ config }: GPUInventoryProps) {
   const {
     nodes: rawNodes,
     isLoading: hookLoading,
-    isRefreshing,
     error,
-    refetch,
-    isFailed,
-    consecutiveFailures,
-    lastRefresh
   } = useGPUNodes(cluster)
   const { selectedClusters, isAllClustersSelected } = useGlobalFilters()
   const { drillToGPUNode } = useDrillDownActions()
@@ -148,13 +142,6 @@ export function GPUInventory({ config }: GPUInventoryProps) {
     return (
       <div className="h-full flex flex-col content-loaded">
         <div className="flex items-center justify-end mb-3">
-          <RefreshButton
-            isRefreshing={isRefreshing}
-            isFailed={isFailed}
-            consecutiveFailures={consecutiveFailures}
-            lastRefresh={lastRefresh}
-            onRefresh={() => refetch()}
-          />
         </div>
         <div className="flex-1 flex flex-col items-center justify-center text-center">
           <div className="w-12 h-12 rounded-full bg-secondary flex items-center justify-center mb-3">
@@ -237,13 +224,6 @@ export function GPUInventory({ config }: GPUInventoryProps) {
             onSortChange={setSortBy}
             sortDirection={sortDirection}
             onSortDirectionChange={setSortDirection}
-          />
-          <RefreshButton
-            isRefreshing={isRefreshing}
-            isFailed={isFailed}
-            consecutiveFailures={consecutiveFailures}
-            lastRefresh={lastRefresh}
-            onRefresh={() => refetch()}
           />
         </div>
       </div>

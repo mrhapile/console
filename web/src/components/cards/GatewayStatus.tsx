@@ -2,7 +2,6 @@ import { useState, useMemo } from 'react'
 import { CheckCircle2, Clock, XCircle, Search, Filter, ChevronDown, Server, AlertCircle, ExternalLink, Globe, ArrowRight } from 'lucide-react'
 import { ClusterBadge } from '../ui/ClusterBadge'
 import { CardControls, SortDirection } from '../ui/CardControls'
-import { RefreshButton } from '../ui/RefreshIndicator'
 import { useChartFilters } from '../../lib/cards'
 
 // Gateway status types
@@ -148,7 +147,6 @@ interface GatewayStatusProps {
 }
 
 export function GatewayStatus({ config: _config }: GatewayStatusProps) {
-  const [isRefreshing, setIsRefreshing] = useState(false)
   const [localSearch, setLocalSearch] = useState('')
   const [limit, setLimit] = useState<number | 'unlimited'>(5)
   const [sortBy, setSortBy] = useState<SortField>('name')
@@ -199,12 +197,6 @@ export function GatewayStatus({ config: _config }: GatewayStatusProps) {
 
     return sorted
   }, [localSearch, localClusterFilter, sortBy, sortDirection])
-
-  const handleRefresh = async () => {
-    setIsRefreshing(true)
-    await new Promise(r => setTimeout(r, 1000))
-    setIsRefreshing(false)
-  }
 
   return (
     <div className="h-full flex flex-col min-h-card">
@@ -285,11 +277,6 @@ export function GatewayStatus({ config: _config }: GatewayStatusProps) {
             onSortChange={setSortBy}
             sortDirection={sortDirection}
             onSortDirectionChange={setSortDirection}
-          />
-          <RefreshButton
-            isRefreshing={isRefreshing}
-            onRefresh={handleRefresh}
-            size="sm"
           />
         </div>
       </div>

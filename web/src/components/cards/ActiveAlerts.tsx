@@ -20,7 +20,6 @@ import { useMissions } from '../../hooks/useMissions'
 import { getSeverityIcon } from '../../types/alerts'
 import type { Alert, AlertSeverity } from '../../types/alerts'
 import { CardControls } from '../ui/CardControls'
-import { RefreshButton } from '../ui/RefreshIndicator'
 import { Pagination } from '../ui/Pagination'
 import { useCardData } from '../../lib/cards'
 
@@ -288,10 +287,6 @@ export function ActiveAlerts() {
             ]}
           />
           {/* 4. RefreshButton */}
-          <RefreshButton
-            isRefreshing={false}
-            onRefresh={() => window.location.reload()}
-          />
         </div>
       </div>
 

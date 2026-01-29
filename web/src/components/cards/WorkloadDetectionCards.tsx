@@ -9,7 +9,6 @@ import { CardControls, SortDirection } from '../ui/CardControls'
 import { usePagination, Pagination } from '../ui/Pagination'
 import { useClusters } from '../../hooks/useMCP'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
-import { RefreshButton } from '../ui/RefreshIndicator'
 import { useCachedProwJobs } from '../../hooks/useCachedData'
 import type { ProwJob } from '../../hooks/useProw'
 
@@ -42,10 +41,7 @@ export function ProwJobs({ config: _config }: ProwJobsProps) {
     jobs,
     isLoading,
     isRefreshing,
-    refetch,
     isFailed,
-    consecutiveFailures,
-    lastRefresh,
     formatTimeAgo,
     error,
   } = useCachedProwJobs('prow', 'prow')
@@ -191,14 +187,6 @@ export function ProwJobs({ config: _config }: ProwJobsProps) {
             sortDirection={sortDirection}
             onSortDirectionChange={setSortDirection}
           />
-          <RefreshButton
-            isRefreshing={isRefreshing}
-            isFailed={isFailed}
-            consecutiveFailures={consecutiveFailures}
-            lastRefresh={lastRefresh}
-            onRefresh={refetch}
-            size="sm"
-          />
         </div>
       </div>
 
@@ -263,7 +251,7 @@ interface ProwStatusProps {
 }
 
 export function ProwStatus({ config: _config }: ProwStatusProps) {
-  const { status, isLoading, isRefreshing, refetch, isFailed, consecutiveFailures, lastRefresh } = useCachedProwJobs('prow', 'prow')
+  const { status, isLoading } = useCachedProwJobs('prow', 'prow')
 
   if (isLoading) {
     return (
@@ -281,14 +269,6 @@ export function ProwStatus({ config: _config }: ProwStatusProps) {
         <span className={`text-xs px-1.5 py-0.5 rounded ${status.healthy ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
           {status.healthy ? 'Healthy' : 'Unhealthy'}
         </span>
-        <RefreshButton
-          isRefreshing={isRefreshing}
-          isFailed={isFailed}
-          consecutiveFailures={consecutiveFailures}
-          lastRefresh={lastRefresh}
-          onRefresh={refetch}
-          size="sm"
-        />
       </div>
 
       {/* Stats grid */}
@@ -338,7 +318,7 @@ interface ProwHistoryProps {
 }
 
 export function ProwHistory({ config: _config }: ProwHistoryProps) {
-  const { jobs, isLoading, isRefreshing, refetch, isFailed, consecutiveFailures, lastRefresh, formatTimeAgo } = useCachedProwJobs('prow', 'prow')
+  const { jobs, isLoading, formatTimeAgo } = useCachedProwJobs('prow', 'prow')
   const [limit, setLimit] = useState<number | 'unlimited'>(5)
   const [searchQuery, setSearchQuery] = useState('')
 
@@ -384,14 +364,6 @@ export function ProwHistory({ config: _config }: ProwHistoryProps) {
           <CardControls
             limit={limit}
             onLimitChange={setLimit}
-          />
-          <RefreshButton
-            isRefreshing={isRefreshing}
-            isFailed={isFailed}
-            consecutiveFailures={consecutiveFailures}
-            lastRefresh={lastRefresh}
-            onRefresh={refetch}
-            size="sm"
           />
         </div>
       </div>
@@ -495,7 +467,7 @@ const COMPONENT_FILTERS: { value: LLMdComponentType | 'all' | 'autoscale', label
 ]
 
 export function LLMInference({ config: _config }: LLMInferenceProps) {
-  const { servers, isLoading, isRefreshing, refetch, isFailed, consecutiveFailures, lastRefresh, error } = useCachedLLMdServers(LLMD_CLUSTERS)
+  const { servers, isLoading, isRefreshing, refetch, isFailed, consecutiveFailures, error } = useCachedLLMdServers(LLMD_CLUSTERS)
 
   // Debug logging
   console.log('[LLMInference] render:', { serversCount: servers.length, isLoading, isRefreshing, isFailed, error })
@@ -754,7 +726,6 @@ export function LLMInference({ config: _config }: LLMInferenceProps) {
             sortDirection={sortDirection}
             onSortDirectionChange={setSortDirection}
           />
-          <RefreshButton isRefreshing={isRefreshing} isFailed={isFailed} consecutiveFailures={consecutiveFailures} lastRefresh={lastRefresh} onRefresh={refetch} size="sm" />
         </div>
       </div>
 
@@ -895,7 +866,7 @@ interface LLMModelsProps {
 }
 
 export function LLMModels({ config: _config }: LLMModelsProps) {
-  const { models, isLoading, isRefreshing, refetch, isFailed, consecutiveFailures, lastRefresh } = useCachedLLMdModels(LLMD_CLUSTERS)
+  const { models, isLoading } = useCachedLLMdModels(LLMD_CLUSTERS)
   const [limit, setLimit] = useState<number | 'unlimited'>(5)
 
   const effectivePerPage = limit === 'unlimited' ? 100 : limit
@@ -935,7 +906,6 @@ export function LLMModels({ config: _config }: LLMModelsProps) {
         </span>
         <div className="flex items-center gap-2">
           <CardControls limit={limit} onLimitChange={setLimit} />
-          <RefreshButton isRefreshing={isRefreshing} isFailed={isFailed} consecutiveFailures={consecutiveFailures} lastRefresh={lastRefresh} onRefresh={refetch} size="sm" />
         </div>
       </div>
 
@@ -1024,7 +994,7 @@ interface MLJobsProps {
 
 export function MLJobs({ config: _config }: MLJobsProps) {
   const { data: jobs, isLoading } = useDemoData(DEMO_ML_JOBS)
-  const { deduplicatedClusters: allClusters, isRefreshing, refetch, isFailed, consecutiveFailures, lastRefresh } = useClusters()
+  const { deduplicatedClusters: allClusters } = useClusters()
   const { selectedClusters: globalSelectedClusters, isAllClustersSelected } = useGlobalFilters()
   const [limit, setLimit] = useState<number | 'unlimited'>(5)
   const [localClusterFilter, setLocalClusterFilter] = useState<string[]>(() => {
@@ -1150,7 +1120,6 @@ export function MLJobs({ config: _config }: MLJobsProps) {
             </div>
           )}
           <CardControls limit={limit} onLimitChange={setLimit} />
-          <RefreshButton isRefreshing={isRefreshing} isFailed={isFailed} consecutiveFailures={consecutiveFailures} lastRefresh={lastRefresh} onRefresh={refetch} size="sm" />
         </div>
       </div>
 

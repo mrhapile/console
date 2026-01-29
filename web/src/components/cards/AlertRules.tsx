@@ -15,7 +15,6 @@ import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { formatCondition } from '../../types/alerts'
 import type { AlertRule, AlertSeverity } from '../../types/alerts'
 import { CardControls, SortDirection } from '../ui/CardControls'
-import { RefreshButton } from '../ui/RefreshIndicator'
 import { Pagination, usePagination } from '../ui/Pagination'
 import { AlertRuleEditor } from '../alerts/AlertRuleEditor'
 import { useChartFilters } from '../../lib/cards'
@@ -239,10 +238,6 @@ export function AlertRulesCard() {
             ]}
           />
           {/* 4. RefreshButton */}
-          <RefreshButton
-            isRefreshing={false}
-            onRefresh={() => window.location.reload()}
-          />
         </div>
       </div>
 

@@ -6,7 +6,6 @@ import { useDrillDownActions } from '../../hooks/useDrillDown'
 import { ClusterBadge } from '../ui/ClusterBadge'
 import { CardControls, SortDirection } from '../ui/CardControls'
 import { Pagination, usePagination } from '../ui/Pagination'
-import { RefreshButton } from '../ui/RefreshIndicator'
 import { Skeleton } from '../ui/Skeleton'
 import { useChartFilters } from '../../lib/cards'
 
@@ -42,13 +41,8 @@ export function GPUWorkloads({ config: _config }: GPUWorkloadsProps) {
   const {
     nodes: gpuNodes,
     isLoading: gpuLoading,
-    isRefreshing: gpuRefreshing,
-    refetch: refetchGPU,
-    isFailed: gpuFailed,
-    consecutiveFailures: gpuFailures,
-    lastRefresh: gpuLastRefresh
   } = useGPUNodes()
-  const { pods: allPods, isLoading: podsLoading, refetch: refetchPods } = useAllPods()
+  const { pods: allPods, isLoading: podsLoading } = useAllPods()
   useClusters() // Keep hook for cache warming
   const { selectedClusters, isAllClustersSelected } = useGlobalFilters()
   const { drillToPod } = useDrillDownActions()
@@ -73,8 +67,6 @@ export function GPUWorkloads({ config: _config }: GPUWorkloadsProps) {
 
   // Only show loading when no cached data exists
   const isLoading = (gpuLoading && gpuNodes.length === 0) || (podsLoading && allPods.length === 0)
-  const isRefreshing = gpuRefreshing
-
   // Filter pods that are actual GPU workloads
   // Show pods that: 1) request GPU resources, 2) are assigned to GPU nodes, or 3) have GPU workload labels
   const gpuWorkloads = useMemo(() => {
@@ -197,11 +189,6 @@ export function GPUWorkloads({ config: _config }: GPUWorkloadsProps) {
     needsPagination,
   } = usePagination(sortedWorkloads, effectivePerPage)
 
-  const handleRefresh = () => {
-    refetchGPU()
-    refetchPods()
-  }
-
   const handlePodClick = (pod: typeof allPods[0]) => {
     drillToPod(pod.cluster || '', pod.namespace || '', pod.name)
   }
@@ -254,13 +241,6 @@ export function GPUWorkloads({ config: _config }: GPUWorkloadsProps) {
     return (
       <div className="h-full flex flex-col content-loaded">
         <div className="flex items-center justify-end mb-3">
-          <RefreshButton
-            isRefreshing={isRefreshing}
-            isFailed={gpuFailed}
-            consecutiveFailures={gpuFailures}
-            lastRefresh={gpuLastRefresh}
-            onRefresh={handleRefresh}
-          />
         </div>
         <div className="flex-1 flex flex-col items-center justify-center text-center">
           <div className="w-12 h-12 rounded-full bg-secondary flex items-center justify-center mb-3">
@@ -343,13 +323,6 @@ export function GPUWorkloads({ config: _config }: GPUWorkloadsProps) {
             onSortChange={setSortBy}
             sortDirection={sortDirection}
             onSortDirectionChange={setSortDirection}
-          />
-          <RefreshButton
-            isRefreshing={isRefreshing}
-            isFailed={gpuFailed}
-            consecutiveFailures={gpuFailures}
-            lastRefresh={gpuLastRefresh}
-            onRefresh={handleRefresh}
           />
         </div>
       </div>

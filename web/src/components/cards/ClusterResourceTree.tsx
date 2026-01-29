@@ -6,7 +6,6 @@ import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { useDrillDownActions } from '../../hooks/useDrillDown'
 import { StatusIndicator } from '../charts/StatusIndicator'
 import { CardControls, SortDirection } from '../ui/CardControls'
-import { RefreshButton } from '../ui/RefreshIndicator'
 import { useChartFilters } from '../../lib/cards'
 
 // Resource tree lens/view options
@@ -72,7 +71,7 @@ interface ClusterDataCache {
 }
 
 export function ClusterResourceTree({ config: _config }: ClusterResourceTreeProps) {
-  const { deduplicatedClusters: clusters, isRefreshing, refetch: refetchClusters, isFailed, consecutiveFailures, lastRefresh } = useClusters()
+  const { deduplicatedClusters: clusters } = useClusters()
   const { selectedClusters, isAllClustersSelected } = useGlobalFilters()
   const { drillToNamespace, drillToPod, drillToCluster, drillToDeployment, drillToService, drillToPVC } = useDrillDownActions()
 
@@ -247,10 +246,6 @@ export function ClusterResourceTree({ config: _config }: ClusterResourceTreeProp
   }, [])
 
   // Handle refresh - just call refetchClusters, the hook manages isRefreshing
-  const handleRefresh = useCallback(() => {
-    refetchClusters()
-  }, [refetchClusters])
-
   // Build namespace resources from cached data for a specific cluster
   const buildNamespaceResources = useCallback((clusterData: ClusterDataCache): Map<string, NamespaceResources> => {
     const map = new Map<string, NamespaceResources>()
@@ -606,14 +601,6 @@ export function ClusterResourceTree({ config: _config }: ClusterResourceTreeProp
             onSortChange={setSortBy}
             sortDirection={sortDirection}
             onSortDirectionChange={setSortDirection}
-          />
-          <RefreshButton
-            isRefreshing={isRefreshing}
-            isFailed={isFailed}
-            consecutiveFailures={consecutiveFailures}
-            lastRefresh={lastRefresh}
-            onRefresh={handleRefresh}
-            size="sm"
           />
         </div>
       </div>

@@ -1,6 +1,5 @@
 import { useState, useMemo } from 'react'
 import { AlertTriangle, CheckCircle, ExternalLink, AlertCircle, FileCheck, Search } from 'lucide-react'
-import { RefreshButton } from '../ui/RefreshIndicator'
 
 interface KyvernoPoliciesProps {
   config?: Record<string, unknown>
@@ -60,7 +59,6 @@ const DEMO_STATS = {
 }
 
 export function KyvernoPolicies({ config: _config }: KyvernoPoliciesProps) {
-  const [isRefreshing, setIsRefreshing] = useState(false)
   const [localSearch, setLocalSearch] = useState('')
 
   // Filter policies by local search
@@ -75,12 +73,6 @@ export function KyvernoPolicies({ config: _config }: KyvernoPoliciesProps) {
       policy.kind.toLowerCase().includes(query)
     )
   }, [localSearch])
-
-  const handleRefresh = async () => {
-    setIsRefreshing(true)
-    await new Promise(r => setTimeout(r, 1000))
-    setIsRefreshing(false)
-  }
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -114,11 +106,6 @@ export function KyvernoPolicies({ config: _config }: KyvernoPoliciesProps) {
         >
           <ExternalLink className="w-4 h-4" />
         </a>
-        <RefreshButton
-          isRefreshing={isRefreshing}
-          onRefresh={handleRefresh}
-          size="sm"
-        />
       </div>
 
       {/* Integration notice */}

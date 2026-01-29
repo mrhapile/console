@@ -4,7 +4,6 @@ import {
   MapPin, Calendar, Search as SearchIcon, Star, X,
   ExternalLink, ChevronRight, ChevronDown, Loader2, CloudFog
 } from 'lucide-react'
-import { RefreshButton } from '../ui/RefreshIndicator'
 
 // Geocoding API types
 interface GeocodingResult {
@@ -669,8 +668,8 @@ function WeatherAnimation({ weatherCode, isDaytime, windSpeed = 0 }: { weatherCo
 export function Weather({ config }: { config?: WeatherConfig }) {
   const [units, setUnits] = useState<'F' | 'C'>(config?.units || 'F')
   const [forecastLength, setForecastLength] = useState<2 | 7 | 14>(config?.forecastLength || 7)
-  const [isRefreshing, setIsRefreshing] = useState(false)
-  const [lastRefresh, setLastRefresh] = useState(new Date())
+  const [, setIsRefreshing] = useState(false)
+  const [, setLastRefresh] = useState(new Date())
   const [showSettings, setShowSettings] = useState(false)
   const [expandedDay, setExpandedDay] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -944,11 +943,6 @@ export function Weather({ config }: { config?: WeatherConfig }) {
           <SearchIcon className="w-4 h-4" />
           <span className="text-xs font-medium">Change Location</span>
         </button>
-        <RefreshButton
-          isRefreshing={isRefreshing}
-          lastRefresh={lastRefresh}
-          onRefresh={refreshWeather}
-        />
       </div>
 
       {/* Settings Panel */}

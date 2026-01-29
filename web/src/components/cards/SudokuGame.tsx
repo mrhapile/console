@@ -3,7 +3,6 @@ import {
   Play, Pause, Lightbulb, Pencil, Undo2, Redo2,
   Save, Trophy, Settings, Sparkles, X
 } from 'lucide-react'
-import { RefreshButton } from '../ui/RefreshIndicator'
 import { useCardExpanded } from './CardWrapper'
 
 // Types
@@ -446,11 +445,6 @@ export function SudokuGame({ config: _config }: SudokuGameProps) {
           >
             <Settings className={isMaximized ? 'w-5 h-5' : 'w-3.5 h-3.5'} />
           </button>
-          <RefreshButton
-            isRefreshing={false}
-            onRefresh={() => startNewGame(gameState.difficulty)}
-            size={isMaximized ? undefined : 'sm'}
-          />
         </div>
       </div>
 

@@ -12,7 +12,6 @@ import {
 } from 'recharts'
 import { useGPUNodes, useClusters } from '../../hooks/useMCP'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
-import { RefreshButton } from '../ui/RefreshIndicator'
 import { Skeleton, SkeletonStats } from '../ui/Skeleton'
 
 interface GPUDataPoint {
@@ -42,11 +41,6 @@ export function GPUUsageTrend() {
   const {
     nodes: gpuNodes,
     isLoading: hookLoading,
-    isRefreshing,
-    refetch,
-    isFailed,
-    consecutiveFailures,
-    lastRefresh
   } = useGPUNodes()
   const { deduplicatedClusters: clusters } = useClusters()
 
@@ -256,13 +250,6 @@ export function GPUUsageTrend() {
     return (
       <div className="h-full flex flex-col content-loaded">
         <div className="flex items-center justify-end mb-3">
-          <RefreshButton
-            isRefreshing={isRefreshing}
-            isFailed={isFailed}
-            consecutiveFailures={consecutiveFailures}
-            lastRefresh={lastRefresh}
-            onRefresh={() => refetch()}
-          />
         </div>
         <div className="flex-1 flex flex-col items-center justify-center text-center">
           <div className="w-12 h-12 rounded-full bg-secondary flex items-center justify-center mb-3">
@@ -287,13 +274,6 @@ export function GPUUsageTrend() {
             </span>
           )}
         </div>
-        <RefreshButton
-          isRefreshing={isRefreshing}
-          isFailed={isFailed}
-          consecutiveFailures={consecutiveFailures}
-          lastRefresh={lastRefresh}
-          onRefresh={() => refetch()}
-        />
       </div>
 
       {/* Filter controls */}

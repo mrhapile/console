@@ -6,7 +6,6 @@ import { CardControls, SortDirection } from '../ui/CardControls'
 import { Pagination, usePagination } from '../ui/Pagination'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { useCachedDeployments } from '../../hooks/useCachedData'
-import { RefreshButton } from '../ui/RefreshIndicator'
 import { useChartFilters } from '../../lib/cards'
 
 type SortByOption = 'status' | 'name' | 'clusters'
@@ -30,7 +29,7 @@ interface AppData {
 
 export function AppStatus(_props: AppStatusProps) {
   const { drillToDeployment } = useDrillDownActions()
-  const { deployments, isLoading, isRefreshing, refetch, isFailed, consecutiveFailures, lastRefresh } = useCachedDeployments()
+  const { deployments, isLoading } = useCachedDeployments()
   const {
     selectedClusters: globalSelectedClusters,
     isAllClustersSelected,
@@ -231,14 +230,6 @@ export function AppStatus(_props: AppStatusProps) {
             onSortChange={setSortBy}
             sortDirection={sortDirection}
             onSortDirectionChange={setSortDirection}
-          />
-          <RefreshButton
-            isRefreshing={isRefreshing}
-            isFailed={isFailed}
-            consecutiveFailures={consecutiveFailures}
-            lastRefresh={lastRefresh}
-            onRefresh={refetch}
-            size="sm"
           />
         </div>
       </div>

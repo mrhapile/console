@@ -2,7 +2,6 @@ import { useState, useMemo, useEffect, useCallback } from 'react'
 import { GitPullRequest, GitBranch, Star, Users, Package, TrendingUp, AlertCircle, Clock, CheckCircle, XCircle, GitMerge, Settings, X, ChevronDown, Plus, Trash2, Search } from 'lucide-react'
 import { CardControls, SortDirection } from '../ui/CardControls'
 import { Pagination, usePagination } from '../ui/Pagination'
-import { RefreshButton } from '../ui/RefreshIndicator'
 import { Skeleton } from '../ui/Skeleton'
 import { cn } from '../../lib/cn'
 
@@ -438,9 +437,7 @@ export function GitHubActivity({ config }: { config?: GitHubActivityConfig }) {
     contributors,
     repoInfo,
     isLoading,
-    isRefreshing,
     error,
-    lastRefresh,
     openPRCount,
     openIssueCount,
     refetch,
@@ -642,11 +639,6 @@ export function GitHubActivity({ config }: { config?: GitHubActivityConfig }) {
             >
               <Plus className="w-4 h-4" />
             </button>
-            <RefreshButton
-              isRefreshing={isRefreshing}
-              lastRefresh={lastRefresh}
-              onRefresh={refetch}
-            />
           </div>
         </div>
 
@@ -850,11 +842,6 @@ export function GitHubActivity({ config }: { config?: GitHubActivityConfig }) {
             onSortChange={setSortBy}
             sortDirection={sortDirection}
             onSortDirectionChange={setSortDirection}
-          />
-          <RefreshButton
-            isRefreshing={isRefreshing}
-            lastRefresh={lastRefresh}
-            onRefresh={refetch}
           />
           <button
             onClick={() => setShowSettings(!showSettings)}

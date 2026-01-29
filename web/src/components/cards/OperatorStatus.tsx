@@ -8,7 +8,6 @@ import { Skeleton } from '../ui/Skeleton'
 import { ClusterBadge } from '../ui/ClusterBadge'
 import { CardControls, SortDirection } from '../ui/CardControls'
 import { Pagination, usePagination } from '../ui/Pagination'
-import { RefreshButton } from '../ui/RefreshIndicator'
 
 interface OperatorStatusProps {
   config?: {
@@ -26,7 +25,7 @@ const SORT_OPTIONS = [
 ]
 
 export function OperatorStatus({ config: _config }: OperatorStatusProps) {
-  const { isLoading: clustersLoading, isRefreshing: clustersRefreshing, refetch: refetchClusters, isFailed, consecutiveFailures, lastRefresh } = useClusters()
+  const { isLoading: clustersLoading } = useClusters()
   const { drillToOperator } = useDrillDownActions()
 
   // Use chart filters hook for cluster filtering
@@ -51,13 +50,7 @@ export function OperatorStatus({ config: _config }: OperatorStatusProps) {
   } = useGlobalFilters()
 
   // Fetch operators - pass undefined to get all clusters
-  const { operators: rawOperators, isLoading: operatorsLoading, isRefreshing: operatorsRefreshing, refetch: refetchOperators } = useOperators(undefined)
-
-  const isRefreshing = clustersRefreshing || operatorsRefreshing
-  const refetch = () => {
-    refetchClusters()
-    refetchOperators()
-  }
+  const { operators: rawOperators, isLoading: operatorsLoading } = useOperators(undefined)
 
   // Apply filters and sorting to operators
   const filteredAndSorted = useMemo(() => {
@@ -245,14 +238,6 @@ export function OperatorStatus({ config: _config }: OperatorStatusProps) {
             onSortChange={setSortBy}
             sortDirection={sortDirection}
             onSortDirectionChange={setSortDirection}
-          />
-          <RefreshButton
-            isRefreshing={isRefreshing}
-            isFailed={isFailed}
-            consecutiveFailures={consecutiveFailures}
-            lastRefresh={lastRefresh}
-            onRefresh={refetch}
-            size="sm"
           />
         </div>
       </div>

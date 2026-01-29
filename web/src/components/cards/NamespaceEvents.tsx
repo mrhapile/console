@@ -6,7 +6,6 @@ import { Skeleton } from '../ui/Skeleton'
 import { ClusterBadge } from '../ui/ClusterBadge'
 import { CardControls, SortDirection } from '../ui/CardControls'
 import { Pagination, usePagination } from '../ui/Pagination'
-import { RefreshButton } from '../ui/RefreshIndicator'
 import { useCascadingSelection, useChartFilters } from '../../lib/cards'
 
 interface NamespaceEventsProps {
@@ -26,9 +25,8 @@ const SORT_OPTIONS = [
 ]
 
 export function NamespaceEvents({ config }: NamespaceEventsProps) {
-  const { isLoading: clustersLoading, isRefreshing: clustersRefreshing, refetch: refetchClusters, isFailed, consecutiveFailures, lastRefresh } = useClusters()
-  const { events: allEvents, isLoading: eventsLoading, isRefreshing: eventsRefreshing, refetch: refetchEvents } = useWarningEvents()
-  const isRefreshing = clustersRefreshing || eventsRefreshing
+  const { isLoading: clustersLoading } = useClusters()
+  const { events: allEvents, isLoading: eventsLoading } = useWarningEvents()
   const { drillToEvents } = useDrillDownActions()
 
   // Use cascading selection hook for cluster -> namespace
@@ -241,14 +239,6 @@ export function NamespaceEvents({ config }: NamespaceEventsProps) {
             onSortChange={setSortBy}
             sortDirection={sortDirection}
             onSortDirectionChange={setSortDirection}
-          />
-          <RefreshButton
-            isRefreshing={isRefreshing}
-            isFailed={isFailed}
-            consecutiveFailures={consecutiveFailures}
-            lastRefresh={lastRefresh}
-            onRefresh={() => { refetchClusters(); refetchEvents(); }}
-            size="sm"
           />
         </div>
       </div>

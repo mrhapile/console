@@ -1,7 +1,6 @@
 import { useState, useMemo, useCallback } from 'react'
 import { ZoomIn, ZoomOut, Maximize2, ArrowRight } from 'lucide-react'
 import { ClusterBadge } from '../ui/ClusterBadge'
-import { RefreshButton } from '../ui/RefreshIndicator'
 import type { TopologyNode, TopologyEdge, TopologyHealthStatus } from '../../types/topology'
 
 // Demo topology data
@@ -80,7 +79,6 @@ interface ServiceTopologyProps {
 }
 
 export function ServiceTopology({ config: _config }: ServiceTopologyProps) {
-  const [isRefreshing, setIsRefreshing] = useState(false)
   const [zoom, setZoom] = useState(1)
   const [selectedNode, setSelectedNode] = useState<string | null>(null)
   const [hoveredNode, setHoveredNode] = useState<string | null>(null)
@@ -116,12 +114,6 @@ export function ServiceTopology({ config: _config }: ServiceTopologyProps) {
     return positions
   }, [nodesByCluster])
 
-  const handleRefresh = async () => {
-    setIsRefreshing(true)
-    await new Promise(r => setTimeout(r, 1000))
-    setIsRefreshing(false)
-  }
-
   const handleZoomIn = useCallback(() => setZoom(z => Math.min(z + 0.2, 2)), [])
   const handleZoomOut = useCallback(() => setZoom(z => Math.max(z - 0.2, 0.5)), [])
   const handleResetZoom = useCallback(() => setZoom(1), [])
@@ -154,11 +146,6 @@ export function ServiceTopology({ config: _config }: ServiceTopologyProps) {
           >
             <ZoomIn className="w-3.5 h-3.5" />
           </button>
-          <RefreshButton
-            isRefreshing={isRefreshing}
-            onRefresh={handleRefresh}
-            size="sm"
-          />
         </div>
       </div>
 

@@ -6,7 +6,6 @@ import { Skeleton } from '../ui/Skeleton'
 import { ClusterBadge } from '../ui/ClusterBadge'
 import { CardControls, SortDirection } from '../ui/CardControls'
 import { Pagination, usePagination } from '../ui/Pagination'
-import { RefreshButton } from '../ui/RefreshIndicator'
 
 interface CRDHealthProps {
   config?: {
@@ -34,7 +33,7 @@ const SORT_OPTIONS = [
 ]
 
 export function CRDHealth({ config: _config }: CRDHealthProps) {
-  const { isLoading, isRefreshing, refetch, isFailed, consecutiveFailures, lastRefresh } = useClusters()
+  const { isLoading } = useClusters()
 
   // Use chart filters hook for cluster filtering
   const {
@@ -245,14 +244,6 @@ export function CRDHealth({ config: _config }: CRDHealthProps) {
             onSortChange={setSortBy}
             sortDirection={sortDirection}
             onSortDirectionChange={setSortDirection}
-          />
-          <RefreshButton
-            isRefreshing={isRefreshing}
-            isFailed={isFailed}
-            consecutiveFailures={consecutiveFailures}
-            lastRefresh={lastRefresh}
-            onRefresh={refetch}
-            size="sm"
           />
         </div>
       </div>

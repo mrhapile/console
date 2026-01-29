@@ -6,7 +6,6 @@ import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { useCachedDeployments } from '../../hooks/useCachedData'
 import { usePagination, Pagination } from '../ui/Pagination'
 import { CardControls, SortDirection } from '../ui/CardControls'
-import { RefreshButton } from '../ui/RefreshIndicator'
 import { Skeleton } from '../ui/Skeleton'
 import { useStatusFilter, useChartFilters } from '../../lib/cards'
 
@@ -62,11 +61,6 @@ export function DeploymentStatus() {
   const {
     deployments: allDeployments,
     isLoading: hookLoading,
-    refetch,
-    isRefreshing,
-    isFailed,
-    consecutiveFailures,
-    lastRefresh
   } = useCachedDeployments()
 
   // Only show skeleton when no cached data exists
@@ -301,13 +295,6 @@ export function DeploymentStatus() {
             onSortChange={setSortBy}
             sortDirection={sortDirection}
             onSortDirectionChange={setSortDirection}
-          />
-          <RefreshButton
-            isRefreshing={isRefreshing}
-            isFailed={isFailed}
-            consecutiveFailures={consecutiveFailures}
-            lastRefresh={lastRefresh}
-            onRefresh={() => refetch()}
           />
         </div>
       </div>

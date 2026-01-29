@@ -20,7 +20,6 @@ import {
 } from 'lucide-react'
 import { ClusterBadge } from '../ui/ClusterBadge'
 import { CardControls, SortDirection } from '../ui/CardControls'
-import { RefreshButton } from '../ui/RefreshIndicator'
 import { useChartFilters } from '../../lib/cards'
 import { cn } from '../../lib/cn'
 import { useWorkloads, Workload as ApiWorkload } from '../../hooks/useWorkloads'
@@ -354,11 +353,9 @@ const workloadStatusOrder: Record<string, number> = { Failed: 0, Degraded: 1, Pe
 
 interface WorkloadDeploymentProps {
   config?: Record<string, unknown>
-  onRefresh?: () => void
-  isRefreshing?: boolean
 }
 
-export function WorkloadDeployment({ onRefresh, isRefreshing = false }: WorkloadDeploymentProps) {
+export function WorkloadDeployment(_props: WorkloadDeploymentProps) {
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState<WorkloadType | 'All'>('All')
   const [statusFilter, setStatusFilter] = useState<WorkloadStatus | 'All'>('All')
@@ -381,7 +378,7 @@ export function WorkloadDeployment({ onRefresh, isRefreshing = false }: Workload
   })
 
   // Fetch real workloads from API
-  const { data: realWorkloads, isLoading, refetch } = useWorkloads()
+  const { data: realWorkloads } = useWorkloads()
 
   // Use real data if available, otherwise demo data
   const isDemo = !realWorkloads || realWorkloads.length === 0
@@ -421,12 +418,6 @@ export function WorkloadDeployment({ onRefresh, isRefreshing = false }: Workload
       totalClusters: new Set(workloads.flatMap(w => w.targetClusters)).size,
     }
   }, [workloads, isDemo])
-
-  // Handle refresh
-  const handleRefresh = () => {
-    refetch()
-    onRefresh?.()
-  }
 
   const filteredWorkloads = useMemo(() => {
     let result = workloads.filter((w) => {
@@ -531,7 +522,6 @@ export function WorkloadDeployment({ onRefresh, isRefreshing = false }: Workload
             sortDirection={sortDirection}
             onSortDirectionChange={setSortDirection}
           />
-          <RefreshButton onRefresh={handleRefresh} isRefreshing={isRefreshing || isLoading} />
         </div>
       </div>
 

@@ -6,7 +6,6 @@ import {
 } from 'lucide-react'
 import { CardControls, SortDirection } from '../ui/CardControls'
 import { Pagination, usePagination } from '../ui/Pagination'
-import { RefreshButton } from '../ui/RefreshIndicator'
 
 // Stock search result interface
 interface StockSearchResult {
@@ -482,8 +481,8 @@ export function StockMarketTicker({ config }: StockMarketTickerProps) {
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
   const [limit, setLimit] = useState<number | 'unlimited'>(10)
   const [expandedStocks, setExpandedStocks] = useState<Set<string>>(new Set())
-  const [lastRefresh, setLastRefresh] = useState<Date>(new Date())
-  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [, setLastRefresh] = useState<Date>(new Date())
+  const [, setIsRefreshing] = useState(false)
   // Default to demo mode - live data uses CORS proxy which may have rate limits
   const [useLiveData, setUseLiveData] = useState(false)
   
@@ -759,11 +758,6 @@ export function StockMarketTicker({ config }: StockMarketTickerProps) {
             onSortDirectionChange={setSortDirection}
             onLimitChange={setLimit}
             sortOptions={SORT_OPTIONS}
-          />
-          <RefreshButton 
-            onRefresh={handleRefresh} 
-            isRefreshing={isRefreshing}
-            lastRefresh={lastRefresh}
           />
         </div>
       </div>

@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useCardExpanded } from './CardWrapper'
-import { RefreshButton } from '../ui/RefreshIndicator'
 import {
   ExternalLink, Settings, X, AlertTriangle, Loader2,
   RotateCcw, Globe, Save, Trash2
@@ -52,7 +51,7 @@ export function IframeEmbed({ config }: { config?: IframeEmbedConfig }) {
   const [showSettings, setShowSettings] = useState(!config?.url)
   const [isLoading, setIsLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [lastRefresh, setLastRefresh] = useState(new Date())
+  const [, setLastRefresh] = useState(new Date())
   const [urlInput, setUrlInput] = useState(config?.url || '')
   const [titleInput, setTitleInput] = useState(config?.title || '')
 
@@ -198,12 +197,6 @@ export function IframeEmbed({ config }: { config?: IframeEmbedConfig }) {
                 >
                   <ExternalLink className="w-4 h-4" />
                 </button>
-                <RefreshButton
-                  isRefreshing={isLoading}
-                  lastRefresh={lastRefresh}
-                  onRefresh={handleRefresh}
-                  size="sm"
-                />
               </>
             )}
             <button

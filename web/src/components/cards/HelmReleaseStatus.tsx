@@ -8,7 +8,6 @@ import { Skeleton } from '../ui/Skeleton'
 import { ClusterBadge } from '../ui/ClusterBadge'
 import { CardControls, SortDirection } from '../ui/CardControls'
 import { Pagination, usePagination } from '../ui/Pagination'
-import { RefreshButton } from '../ui/RefreshIndicator'
 
 interface HelmReleaseStatusProps {
   config?: {
@@ -69,11 +68,6 @@ export function HelmReleaseStatus({ config }: HelmReleaseStatusProps) {
   const {
     releases: allHelmReleases,
     isLoading: releasesLoading,
-    isRefreshing,
-    refetch,
-    isFailed,
-    consecutiveFailures,
-    lastRefresh
   } = useHelmReleases()
 
   // Only show loading skeleton when no data exists (not during refresh)
@@ -296,14 +290,6 @@ export function HelmReleaseStatus({ config }: HelmReleaseStatusProps) {
             onSortChange={setSortBy}
             sortDirection={sortDirection}
             onSortDirectionChange={setSortDirection}
-          />
-          <RefreshButton
-            isRefreshing={isRefreshing}
-            isFailed={isFailed}
-            consecutiveFailures={consecutiveFailures}
-            lastRefresh={lastRefresh}
-            onRefresh={refetch}
-            size="sm"
           />
         </div>
       </div>

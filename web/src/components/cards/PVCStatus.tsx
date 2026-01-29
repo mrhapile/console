@@ -5,7 +5,6 @@ import { useDrillDownActions } from '../../hooks/useDrillDown'
 import { useChartFilters } from '../../lib/cards'
 import { CardControls, SortDirection } from '../ui/CardControls'
 import { Pagination, usePagination } from '../ui/Pagination'
-import { RefreshButton } from '../ui/RefreshIndicator'
 import { ClusterBadge } from '../ui/ClusterBadge'
 
 type SortByOption = 'status' | 'name' | 'capacity' | 'age'
@@ -58,7 +57,7 @@ function getStatusColor(status: string) {
 }
 
 export function PVCStatus() {
-  const { pvcs, isLoading, isRefreshing, error, refetch, isFailed, consecutiveFailures, lastRefresh } = usePVCs()
+  const { pvcs, isLoading, error } = usePVCs()
   const { drillToPVC } = useDrillDownActions()
 
   // Local cluster filter
@@ -223,14 +222,6 @@ export function PVCStatus() {
             onSortChange={setSortBy}
             sortDirection={sortDirection}
             onSortDirectionChange={setSortDirection}
-          />
-          <RefreshButton
-            isRefreshing={isRefreshing}
-            isFailed={isFailed}
-            consecutiveFailures={consecutiveFailures}
-            lastRefresh={lastRefresh}
-            onRefresh={refetch}
-            size="sm"
           />
         </div>
       </div>

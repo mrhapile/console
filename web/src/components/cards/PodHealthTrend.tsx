@@ -13,7 +13,6 @@ import {
 import { useClusters } from '../../hooks/useMCP'
 import { useCachedPodIssues } from '../../hooks/useCachedData'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
-import { RefreshButton } from '../ui/RefreshIndicator'
 
 interface HealthPoint {
   time: string
@@ -32,14 +31,9 @@ const TIME_RANGE_OPTIONS: { value: TimeRange; label: string; points: number }[] 
 ]
 
 export function PodHealthTrend() {
-  const { deduplicatedClusters: clusters, isLoading: clustersLoading, isRefreshing: clustersRefreshing, refetch: refetchClusters, isFailed, consecutiveFailures, lastRefresh } = useClusters()
-  const { issues, isLoading: issuesLoading, isRefreshing: issuesRefreshing, refetch: refetchIssues } = useCachedPodIssues()
+  const { deduplicatedClusters: clusters, isLoading: clustersLoading } = useClusters()
+  const { issues, isLoading: issuesLoading } = useCachedPodIssues()
 
-  const isRefreshing = clustersRefreshing || issuesRefreshing
-  const refetch = () => {
-    refetchClusters()
-    refetchIssues()
-  }
   const { selectedClusters, isAllClustersSelected } = useGlobalFilters()
   const [timeRange, setTimeRange] = useState<TimeRange>('1h')
   const [localClusterFilter, setLocalClusterFilter] = useState<string[]>([])
@@ -283,14 +277,6 @@ export function PodHealthTrend() {
             </div>
           )}
 
-          <RefreshButton
-            isRefreshing={isRefreshing}
-            isFailed={isFailed}
-            consecutiveFailures={consecutiveFailures}
-            lastRefresh={lastRefresh}
-            onRefresh={refetch}
-            size="sm"
-          />
         </div>
       </div>
 
