@@ -54,6 +54,15 @@ export default defineConfig(({ mode }) => ({
       }),
   ].filter(Boolean),
   build: {
+    // Enable minification optimizations
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        drop_console: true, // Remove console.log in production
+        drop_debugger: true,
+        pure_funcs: ['console.log', 'console.info', 'console.debug', 'console.trace'],
+      },
+    },
     rollupOptions: {
       output: {
         manualChunks: (id) => {

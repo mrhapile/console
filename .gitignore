@@ -60,3 +60,4 @@ vendor/
 # Claude Code local files
 .bob/
 bin/
+*.bak

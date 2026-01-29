@@ -1,10 +1,8 @@
-import { lazy, Suspense, useEffect } from 'react'
+import { useEffect } from 'react'
 import { Github } from 'lucide-react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../../lib/auth'
-
-// Lazy load the heavy Three.js globe animation
-const GlobeAnimation = lazy(() => import('../animations/globe').then(m => ({ default: m.GlobeAnimation })))
+import { SimpleGlobe } from '../animations/SimpleGlobe'
 
 export function Login() {
   const { login, isAuthenticated, isLoading } = useAuth()
@@ -109,19 +107,7 @@ export function Login() {
       <div className="hidden lg:flex flex-1 items-center justify-center relative">
         {/* Subtle gradient background for the globe side */}
         <div className="absolute inset-0 bg-gradient-to-l from-[#0a0f1c] to-transparent" />
-        <Suspense fallback={
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500" />
-          </div>
-        }>
-          <GlobeAnimation
-            width="100%"
-            height="100%"
-            showLoader={true}
-            enableControls={true}
-            className="absolute inset-0"
-          />
-        </Suspense>
+        <SimpleGlobe className="absolute inset-0" />
       </div>
 
       {/* Version info - bottom right */}
