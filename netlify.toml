@@ -1,4 +1,4 @@
-# Netlify configuration for KubeStellar Klaude Console
+# Netlify configuration for KubeStellar Console
 # Enables PR preview deployments with mock data (no backend required)
 
 [build]
