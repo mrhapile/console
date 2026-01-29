@@ -11,6 +11,9 @@ export {
 // Base Modal (compound component)
 export { BaseModal } from './BaseModal'
 
+// Confirm Dialog
+export { ConfirmDialog, type ConfirmDialogProps } from './ConfirmDialog'
+
 // Modal Hooks
 export {
   useModalNavigation,

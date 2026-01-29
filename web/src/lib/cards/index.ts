@@ -62,6 +62,8 @@ export {
   CardHeader,
   CardStatusBadge,
   CardFilterChips,
+  CardControlsRow,
+  CardPaginationFooter,
   type CardSkeletonProps,
   type CardEmptyStateProps,
   type CardErrorStateProps,
@@ -73,7 +75,19 @@ export {
   type CardStatusBadgeProps,
   type FilterChip,
   type CardFilterChipsProps,
+  type CardControlsRowProps,
+  type CardPaginationFooterProps,
 } from './CardComponents'
+
+// Status Color System
+export {
+  STATUS_COLORS,
+  getStatusSeverity,
+  getStatusColors,
+  getSeverityColors,
+  type StatusSeverity,
+  type StatusColorSet,
+} from './statusColors'
 
 // Card Types
 export * from './types'

@@ -1,6 +1,9 @@
-import { ReactNode } from 'react'
+import { ReactNode, useRef, useState, useEffect, useCallback } from 'react'
 import { LucideIcon, CheckCircle, AlertTriangle, Info, Search, Filter, ChevronDown, ChevronRight, Server } from 'lucide-react'
 import { Skeleton } from '../../components/ui/Skeleton'
+import { Pagination } from '../../components/ui/Pagination'
+import { CardControls as CardControlsUI, type SortDirection } from '../../components/ui/CardControls'
+import { RefreshButton } from '../../components/ui/RefreshIndicator'
 
 // ============================================================================
 // CardSkeleton - Loading state for cards
@@ -10,11 +13,13 @@ export interface CardSkeletonProps {
   /** Number of skeleton rows to show */
   rows?: number
   /** Type of skeleton layout */
-  type?: 'table' | 'list' | 'chart' | 'status'
+  type?: 'table' | 'list' | 'chart' | 'status' | 'metric'
   /** Show header skeleton */
   showHeader?: boolean
   /** Show search skeleton */
   showSearch?: boolean
+  /** Custom row height in pixels (overrides type-based default) */
+  rowHeight?: number
 }
 
 export function CardSkeleton({
@@ -22,7 +27,11 @@ export function CardSkeleton({
   type = 'list',
   showHeader = true,
   showSearch = false,
+  rowHeight,
 }: CardSkeletonProps) {
+  const defaultHeight = type === 'table' ? 48 : type === 'metric' ? 80 : 80
+  const height = rowHeight ?? defaultHeight
+
   return (
     <div className="h-full flex flex-col min-h-card">
       {showHeader && (
@@ -34,19 +43,34 @@ export function CardSkeleton({
       {showSearch && (
         <Skeleton variant="rounded" height={32} className="mb-3" />
       )}
-      <div className="space-y-2">
-        {type === 'chart' ? (
-          <Skeleton variant="rounded" height={200} />
-        ) : (
-          Array.from({ length: rows }).map((_, i) => (
-            <Skeleton
-              key={i}
-              variant="rounded"
-              height={type === 'table' ? 48 : 80}
-            />
-          ))
-        )}
-      </div>
+      {type === 'metric' ? (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {Array.from({ length: rows }).map((_, i) => (
+            <div key={i} className="glass p-4 rounded-lg">
+              <div className="flex items-center gap-2 mb-2">
+                <Skeleton variant="circular" width={20} height={20} />
+                <Skeleton variant="text" width={80} height={16} />
+              </div>
+              <Skeleton variant="text" width={60} height={36} className="mb-1" />
+              <Skeleton variant="text" width={100} height={12} />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {type === 'chart' ? (
+            <Skeleton variant="rounded" height={200} />
+          ) : (
+            Array.from({ length: rows }).map((_, i) => (
+              <Skeleton
+                key={i}
+                variant="rounded"
+                height={height}
+              />
+            ))
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -173,6 +197,8 @@ export interface CardSearchInputProps {
   onChange: (value: string) => void
   placeholder?: string
   className?: string
+  /** Debounce delay in ms. When set, onChange fires after the user stops typing. */
+  debounceMs?: number
 }
 
 export function CardSearchInput({
@@ -180,14 +206,36 @@ export function CardSearchInput({
   onChange,
   placeholder = 'Search...',
   className = '',
+  debounceMs,
 }: CardSearchInputProps) {
+  const [localValue, setLocalValue] = useState(value)
+  const timerRef = useRef<ReturnType<typeof setTimeout>>()
+
+  // Sync external value changes
+  useEffect(() => {
+    setLocalValue(value)
+  }, [value])
+
+  const handleChange = useCallback((newValue: string) => {
+    setLocalValue(newValue)
+    if (debounceMs && debounceMs > 0) {
+      clearTimeout(timerRef.current)
+      timerRef.current = setTimeout(() => onChange(newValue), debounceMs)
+    } else {
+      onChange(newValue)
+    }
+  }, [onChange, debounceMs])
+
+  // Cleanup timer on unmount
+  useEffect(() => () => clearTimeout(timerRef.current), [])
+
   return (
     <div className={`relative ${className}`}>
       <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
       <input
         type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
+        value={debounceMs ? localValue : value}
+        onChange={(e) => handleChange(e.target.value)}
         placeholder={placeholder}
         className="w-full pl-8 pr-3 py-1.5 text-xs bg-secondary rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-purple-500/50"
       />
@@ -214,6 +262,8 @@ export interface CardClusterFilterProps {
   setIsOpen: (open: boolean) => void
   /** Ref for click outside handling */
   containerRef: React.RefObject<HTMLDivElement>
+  /** Minimum number of clusters required to show filter (default: 2) */
+  minClusters?: number
 }
 
 export function CardClusterFilter({
@@ -224,8 +274,9 @@ export function CardClusterFilter({
   isOpen,
   setIsOpen,
   containerRef,
+  minClusters = 2,
 }: CardClusterFilterProps) {
-  if (availableClusters.length <= 1) return null
+  if (availableClusters.length < minClusters) return null
 
   return (
     <div ref={containerRef} className="relative">
@@ -493,6 +544,156 @@ export function CardFilterChips({ chips, activeChip, onChipClick }: CardFilterCh
           </button>
         )
       })}
+    </div>
+  )
+}
+
+// ============================================================================
+// CardControlsRow - Composition component for standard card controls
+// ============================================================================
+
+export interface CardControlsRowProps {
+  /** Cluster filter config (from useCardData or useCardFilters) */
+  clusterFilter?: {
+    availableClusters: { name: string }[]
+    selectedClusters: string[]
+    onToggle: (cluster: string) => void
+    onClear: () => void
+    isOpen: boolean
+    setIsOpen: (open: boolean) => void
+    containerRef: React.RefObject<HTMLDivElement>
+    minClusters?: number
+  }
+  /** Cluster indicator showing selected/total count */
+  clusterIndicator?: {
+    selectedCount: number
+    totalCount: number
+  }
+  /** Sort & limit controls */
+  cardControls?: {
+    limit: number | 'unlimited'
+    onLimitChange: (limit: number | 'unlimited') => void
+    sortBy: string
+    sortOptions: { value: string; label: string }[]
+    onSortChange: (sortBy: string) => void
+    sortDirection: SortDirection
+    onSortDirectionChange: (dir: SortDirection) => void
+  }
+  /** Refresh button config */
+  refresh?: {
+    isRefreshing: boolean
+    isFailed?: boolean
+    consecutiveFailures?: number
+    lastRefresh?: Date | number | null
+    onRefresh: () => void
+  }
+  /** Extra content to render at the end */
+  extra?: ReactNode
+  className?: string
+}
+
+/**
+ * Composition component assembling the standard controls row:
+ * [ClusterIndicator] [ClusterFilter] [CardControls] [RefreshButton] [Extra]
+ *
+ * All sections are optional — only renders what's provided.
+ */
+export function CardControlsRow({
+  clusterFilter,
+  clusterIndicator,
+  cardControls,
+  refresh,
+  extra,
+  className = '',
+}: CardControlsRowProps) {
+  return (
+    <div className={`flex items-center gap-2 mb-3 ${className}`}>
+      {clusterIndicator && (
+        <CardClusterIndicator
+          selectedCount={clusterIndicator.selectedCount}
+          totalCount={clusterIndicator.totalCount}
+        />
+      )}
+      {clusterFilter && (
+        <CardClusterFilter
+          availableClusters={clusterFilter.availableClusters}
+          selectedClusters={clusterFilter.selectedClusters}
+          onToggle={clusterFilter.onToggle}
+          onClear={clusterFilter.onClear}
+          isOpen={clusterFilter.isOpen}
+          setIsOpen={clusterFilter.setIsOpen}
+          containerRef={clusterFilter.containerRef}
+          minClusters={clusterFilter.minClusters}
+        />
+      )}
+      {cardControls && (
+        <CardControlsUI
+          limit={cardControls.limit}
+          onLimitChange={cardControls.onLimitChange}
+          sortBy={cardControls.sortBy}
+          sortOptions={cardControls.sortOptions}
+          onSortChange={cardControls.onSortChange}
+          sortDirection={cardControls.sortDirection}
+          onSortDirectionChange={cardControls.onSortDirectionChange}
+        />
+      )}
+      {refresh && (
+        <RefreshButton
+          isRefreshing={refresh.isRefreshing}
+          isFailed={refresh.isFailed}
+          consecutiveFailures={refresh.consecutiveFailures}
+          lastRefresh={refresh.lastRefresh}
+          onRefresh={refresh.onRefresh}
+          size="sm"
+        />
+      )}
+      {extra}
+    </div>
+  )
+}
+
+// ============================================================================
+// CardPaginationFooter - Standardized pagination footer
+// ============================================================================
+
+export interface CardPaginationFooterProps {
+  /** Current page (1-indexed) */
+  currentPage: number
+  /** Total number of pages */
+  totalPages: number
+  /** Total number of items across all pages */
+  totalItems: number
+  /** Items per page */
+  itemsPerPage: number
+  /** Page change callback */
+  onPageChange: (page: number) => void
+  /** Whether pagination is needed (hide when all items fit on one page) */
+  needsPagination: boolean
+}
+
+/**
+ * Standardized pagination footer with consistent separator styling.
+ * Only renders when needsPagination is true.
+ */
+export function CardPaginationFooter({
+  currentPage,
+  totalPages,
+  totalItems,
+  itemsPerPage,
+  onPageChange,
+  needsPagination,
+}: CardPaginationFooterProps) {
+  if (!needsPagination) return null
+
+  return (
+    <div className="pt-2 mt-2 border-t border-border/50">
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalItems={totalItems}
+        itemsPerPage={itemsPerPage}
+        onPageChange={onPageChange}
+      />
     </div>
   )
 }
