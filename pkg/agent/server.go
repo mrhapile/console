@@ -84,7 +84,7 @@ func NewServer(cfg Config) (*Server, error) {
 	allowedOrigins := append([]string{}, defaultAllowedOrigins...)
 
 	// Add custom origins from environment variable (comma-separated)
-	if extraOrigins := os.Getenv("KSC_ALLOWED_ORIGINS"); extraOrigins != "" {
+	if extraOrigins := os.Getenv("KC_ALLOWED_ORIGINS"); extraOrigins != "" {
 		for _, origin := range strings.Split(extraOrigins, ",") {
 			origin = strings.TrimSpace(origin)
 			if origin != "" {
@@ -94,7 +94,7 @@ func NewServer(cfg Config) (*Server, error) {
 	}
 
 	// Optional shared secret for authentication
-	agentToken := os.Getenv("KSC_AGENT_TOKEN")
+	agentToken := os.Getenv("KC_AGENT_TOKEN")
 	if agentToken != "" {
 		log.Println("Agent token authentication enabled")
 	}

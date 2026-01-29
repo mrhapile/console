@@ -121,7 +121,7 @@ export function Settings() {
   const [profileSaved, setProfileSaved] = useState(false)
   const [showAPIKeySettings, setShowAPIKeySettings] = useState(false)
 
-  const installCommand = 'brew install kubestellar/tap/ksc-agent && ksc-agent'
+  const installCommand = 'brew install kubestellar/tap/kc-agent && kc-agent'
 
   const copyInstallCommand = async () => {
     await navigator.clipboard.writeText(installCommand)

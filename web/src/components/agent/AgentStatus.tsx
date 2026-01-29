@@ -47,7 +47,7 @@ export function AgentInstallBanner() {
     navigator.clipboard.writeText(text)
   }
 
-  const installCommand = 'brew install kubestellar/tap/ksc-agent && ksc-agent'
+  const installCommand = 'brew install kubestellar/tap/kc-agent && kc-agent'
 
   return (
     <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-6">

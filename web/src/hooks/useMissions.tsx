@@ -87,7 +87,7 @@ interface StartMissionParams {
 
 const MissionContext = createContext<MissionContextValue | null>(null)
 
-const KSC_AGENT_WS_URL = 'ws://127.0.0.1:8585/ws'
+const KC_AGENT_WS_URL = 'ws://127.0.0.1:8585/ws'
 const MISSIONS_STORAGE_KEY = 'ksc_missions'
 const UNREAD_MISSIONS_KEY = 'ksc_unread_missions'
 
@@ -215,7 +215,7 @@ export function MissionProvider({ children }: { children: ReactNode }) {
       }, 5000)
 
       try {
-        wsRef.current = new WebSocket(KSC_AGENT_WS_URL)
+        wsRef.current = new WebSocket(KC_AGENT_WS_URL)
 
         wsRef.current.onopen = () => {
           clearTimeout(timeout)
@@ -310,8 +310,8 @@ export function MissionProvider({ children }: { children: ReactNode }) {
 The AI missions feature requires the local agent to be running.
 
 **To get started:**
-1. Install the agent: \`brew install kubestellar/tap/ksc-agent\`
-2. Start the agent: \`ksc-agent\`
+1. Install the agent: \`brew install kubestellar/tap/kc-agent\`
+2. Start the agent: \`kc-agent\`
 3. [Configure API Keys →](/settings) for Claude, OpenAI, or Gemini`
 
             const pendingMissionIds = new Set(pendingRequests.current.values())
@@ -585,8 +585,8 @@ The AI missions feature requires the local agent to be running.
 The AI missions feature requires the local agent to be running.
 
 **To get started:**
-1. Install the agent: \`brew install kubestellar/tap/ksc-agent\`
-2. Start the agent: \`ksc-agent\`
+1. Install the agent: \`brew install kubestellar/tap/kc-agent\`
+2. Start the agent: \`kc-agent\`
 3. [Configure API Keys →](/settings) for Claude, OpenAI, or Gemini`
 
       setMissions(prev => prev.map(m =>

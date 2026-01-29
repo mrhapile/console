@@ -837,7 +837,7 @@ export function Navbar() {
                 <div className="bg-black/50 rounded p-2 font-mono text-[11px] text-green-400 mb-2 space-y-1">
                   <div className="text-muted-foreground"># Install via Homebrew</div>
                   <code className="block">brew tap kubestellar/tap</code>
-                  <code className="block">brew install ksc-agent</code>
+                  <code className="block">brew install kc-agent</code>
                 </div>
                 <p className="text-[10px] text-muted-foreground">
                   Visit{' '}
