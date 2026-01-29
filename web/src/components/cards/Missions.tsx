@@ -418,7 +418,9 @@ function ClusterStatusRow({ status }: ClusterStatusRowProps) {
 
   return (
     <div className="flex items-center gap-2">
-      <ClusterBadge cluster={status.cluster} size="sm" />
+      <div className="w-24 shrink-0 truncate">
+        <ClusterBadge cluster={status.cluster} size="sm" />
+      </div>
 
       {/* Replica progress bar */}
       <div className="flex-1 h-1.5 rounded-full bg-gray-800 overflow-hidden">
