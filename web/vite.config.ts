@@ -69,13 +69,21 @@ export default defineConfig(({ mode }) => ({
           if (id.includes('react-markdown') || id.includes('remark-') || id.includes('unified') || id.includes('micromark')) {
             return 'markdown'
           }
-          // Split syntax highlighter into its own chunk
-          if (id.includes('react-syntax-highlighter') || id.includes('refractor') || id.includes('prismjs')) {
-            return 'syntax-highlighter'
-          }
           // Split i18n into its own chunk
           if (id.includes('i18next')) {
             return 'i18n'
+          }
+          // Split lucide-react into its own chunk (37MB source, but tree-shakeable)
+          if (id.includes('lucide-react')) {
+            return 'icons'
+          }
+          // Split react-router into its own chunk
+          if (id.includes('react-router')) {
+            return 'router'
+          }
+          // Split dnd-kit into its own chunk
+          if (id.includes('@dnd-kit')) {
+            return 'dnd'
           }
           // Split node_modules into vendor chunks
           if (id.includes('node_modules')) {
