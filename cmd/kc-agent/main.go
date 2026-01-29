@@ -18,7 +18,7 @@ func main() {
 	flag.Parse()
 
 	if *version {
-		fmt.Printf("ksc-agent version %s\n", agent.Version)
+		fmt.Printf("kc-agent version %s\n", agent.Version)
 		os.Exit(0)
 	}
 

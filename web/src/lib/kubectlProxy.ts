@@ -5,7 +5,7 @@
  * which has access to the user's kubeconfig.
  */
 
-const KSC_AGENT_WS_URL = 'ws://127.0.0.1:8585/ws'
+const KC_AGENT_WS_URL = 'ws://127.0.0.1:8585/ws'
 
 type MessageType = 'kubectl' | 'health' | 'clusters' | 'result' | 'error'
 
@@ -74,7 +74,7 @@ class KubectlProxy {
     this.isConnecting = true
     this.connectPromise = new Promise((resolve, reject) => {
       try {
-        this.ws = new WebSocket(KSC_AGENT_WS_URL)
+        this.ws = new WebSocket(KC_AGENT_WS_URL)
 
         this.ws.onopen = () => {
           console.log('[KubectlProxy] Connected to local agent')

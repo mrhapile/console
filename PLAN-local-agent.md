@@ -8,7 +8,7 @@ Build a local agent that runs on the user's laptop to bridge the cluster-hosted 
 
 ```
 ┌─────────────────────────┐      ┌─────────────────────┐      ┌─────────────────────┐
-│  Cluster Console        │ ←──  │  Browser            │ ←──  │  ksc-agent          │
+│  Cluster Console        │ ←──  │  Browser            │ ←──  │  kc-agent          │
 │  (UI + GitHub Auth)     │      │  (WebSocket bridge) │      │  (localhost:8585)   │
 │  - Dashboard UI         │      │                     │      │  - kubeconfig proxy │
 │  - User session/JWT     │      │                     │      │  - claude-code proxy│
@@ -18,7 +18,7 @@ Build a local agent that runs on the user's laptop to bridge the cluster-hosted 
 
 ## Components
 
-### 1. Local Agent (`cmd/ksc-agent/`)
+### 1. Local Agent (`cmd/kc-agent/`)
 - **Language**: Go
 - **Distribution**: brew, binary releases
 - **Port**: 8585 (configurable)
@@ -46,7 +46,7 @@ Build a local agent that runs on the user's laptop to bridge the cluster-hosted 
 ## Implementation Phases
 
 ### Phase 1: Basic Agent Infrastructure
-- [ ] Create `cmd/ksc-agent/main.go`
+- [ ] Create `cmd/kc-agent/main.go`
 - [ ] WebSocket server setup
 - [ ] Health endpoint
 - [ ] Browser detection logic in frontend
@@ -74,7 +74,7 @@ Build a local agent that runs on the user's laptop to bridge the cluster-hosted 
 console/
 ├── cmd/
 │   ├── console/          # Existing server
-│   └── ksc-agent/        # NEW: Local agent
+│   └── kc-agent/        # NEW: Local agent
 │       └── main.go
 ├── pkg/
 │   ├── agent/            # NEW: Agent package
@@ -88,7 +88,7 @@ console/
 │       └── lib/
 │           └── local-agent.ts  # NEW: Browser client
 └── Formula/
-    └── ksc-agent.rb      # NEW: Homebrew formula
+    └── kc-agent.rb      # NEW: Homebrew formula
 ```
 
 ## Security Considerations

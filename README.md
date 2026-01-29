@@ -98,23 +98,23 @@ Console uses the `kubestellar-ops` and `kubestellar-deploy` MCP servers to fetch
 
 ## KSC Agent (Local Agent)
 
-The **ksc-agent** is a local agent that runs on your machine and bridges the browser-based console to your local kubeconfig and Claude Code CLI. This allows the hosted console to access your clusters without exposing your kubeconfig over the internet.
+The **kc-agent** is a local agent that runs on your machine and bridges the browser-based console to your local kubeconfig and Claude Code CLI. This allows the hosted console to access your clusters without exposing your kubeconfig over the internet.
 
 ### Installation
 
 ```bash
 brew tap kubestellar/tap
-brew install --head ksc-agent
+brew install --head kc-agent
 ```
 
 ### Running the Agent
 
 ```bash
 # Start the agent (runs on localhost:8585)
-ksc-agent
+kc-agent
 
 # Or run as a background service
-brew services start kubestellar/tap/ksc-agent
+brew services start kubestellar/tap/kc-agent
 ```
 
 ### Configuration
@@ -123,8 +123,8 @@ The agent supports the following environment variables:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `KSC_ALLOWED_ORIGINS` | Comma-separated list of allowed origins for CORS | localhost only |
-| `KSC_AGENT_TOKEN` | Optional shared secret for authentication | (none) |
+| `KC_ALLOWED_ORIGINS` | Comma-separated list of allowed origins for CORS | localhost only |
+| `KC_AGENT_TOKEN` | Optional shared secret for authentication | (none) |
 
 #### Adding Custom Origins
 
@@ -132,10 +132,10 @@ If you're running the console on a custom domain, add it to the allowed origins:
 
 ```bash
 # Single origin
-KSC_ALLOWED_ORIGINS="https://my-console.example.com" ksc-agent
+KC_ALLOWED_ORIGINS="https://my-console.example.com" kc-agent
 
 # Multiple origins
-KSC_ALLOWED_ORIGINS="https://console1.example.com,https://console2.example.com" ksc-agent
+KC_ALLOWED_ORIGINS="https://console1.example.com,https://console2.example.com" kc-agent
 ```
 
 #### Running as a Service with Custom Origins
@@ -143,13 +143,13 @@ KSC_ALLOWED_ORIGINS="https://console1.example.com,https://console2.example.com" 
 To persist the configuration when running as a brew service, add to your shell profile (`~/.zshrc` or `~/.bashrc`):
 
 ```bash
-export KSC_ALLOWED_ORIGINS="https://my-console.example.com"
+export KC_ALLOWED_ORIGINS="https://my-console.example.com"
 ```
 
 Then restart the service:
 
 ```bash
-brew services restart kubestellar/tap/ksc-agent
+brew services restart kubestellar/tap/kc-agent
 ```
 
 ### Security
@@ -158,7 +158,7 @@ The agent implements several security measures:
 
 - **Origin Validation**: Only allows connections from configured origins (localhost by default)
 - **Localhost Only**: Binds to `127.0.0.1` - not accessible from other machines
-- **Optional Token Auth**: Can require a shared secret via `KSC_AGENT_TOKEN`
+- **Optional Token Auth**: Can require a shared secret via `KC_AGENT_TOKEN`
 - **Command Allowlist**: Only permits safe kubectl commands (get, describe, logs, etc.)
 
 ## Available Card Types

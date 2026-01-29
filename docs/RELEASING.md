@@ -87,7 +87,7 @@ The Homebrew formula is automatically updated in the [kubestellar/homebrew-tap](
 Installation:
 ```bash
 brew tap kubestellar/tap
-brew install ksc-agent
+brew install kc-agent
 ```
 
 ### Helm Charts

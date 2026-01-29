@@ -4,9 +4,9 @@ import { cn } from '../../lib/cn'
 import { AgentIcon } from './AgentIcon'
 import { BaseModal } from '../../lib/modals'
 
-const INSTALL_COMMAND = 'brew install kubestellar/tap/ksc-agent && ksc-agent'
+const INSTALL_COMMAND = 'brew install kubestellar/tap/kc-agent && kc-agent'
 
-const KSC_AGENT_URL = 'http://127.0.0.1:8585'
+const KC_AGENT_URL = 'http://127.0.0.1:8585'
 
 interface KeyStatus {
   provider: string
@@ -63,7 +63,7 @@ export function APIKeySettings({ isOpen, onClose }: APIKeySettingsProps) {
     try {
       setLoading(true)
       setError(null)
-      const response = await fetch(`${KSC_AGENT_URL}/settings/keys`)
+      const response = await fetch(`${KC_AGENT_URL}/settings/keys`)
       if (!response.ok) {
         throw new Error('Failed to fetch key status')
       }
@@ -88,7 +88,7 @@ export function APIKeySettings({ isOpen, onClose }: APIKeySettingsProps) {
 
     try {
       setSaving(true)
-      const response = await fetch(`${KSC_AGENT_URL}/settings/keys`, {
+      const response = await fetch(`${KC_AGENT_URL}/settings/keys`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ provider, apiKey: newKeyValue }),
@@ -114,7 +114,7 @@ export function APIKeySettings({ isOpen, onClose }: APIKeySettingsProps) {
   const handleDeleteKey = async (provider: string) => {
     try {
       setSaving(true)
-      const response = await fetch(`${KSC_AGENT_URL}/settings/keys/${provider}`, {
+      const response = await fetch(`${KC_AGENT_URL}/settings/keys/${provider}`, {
         method: 'DELETE',
       })
 
