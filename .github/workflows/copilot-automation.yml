@@ -123,24 +123,16 @@ jobs:
               core.warning(`Failed to add label: ${e.message}`);
             }
 
-            // 3. Fix title if WIP
+            // 3. Fix title — strip WIP and ensure emoji prefix (required by Prow)
             let title = pr.title;
-            if (title.includes('[WIP]')) {
-              core.info('Fixing WIP title...');
-              const newTitle = title.replace('[WIP] ', '').replace('[WIP]', '').trim();
-              const finalTitle = newTitle.match(/^[^\w]/) ? newTitle : '\uD83D\uDC1B ' + newTitle;
+            let needsUpdate = false;
+            let newTitle = title;
 
-              try {
-                await github.rest.pulls.update({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  pull_number: prNumber,
-                  title: finalTitle
-                });
-                core.info(`Title updated to: ${finalTitle}`);
-              } catch (e) {
-                core.warning(`Failed to update title: ${e.message}`);
-              }
+            // Strip [WIP] prefix
+            if (newTitle.includes('[WIP]')) {
+              core.info('Stripping WIP from title...');
+              newTitle = newTitle.replace('[WIP] ', '').replace('[WIP]', '').trim();
+              needsUpdate = true;
 
               // Remove WIP label
               try {
@@ -151,6 +143,40 @@ jobs:
                   name: 'do-not-merge/work-in-progress'
                 });
               } catch (e) { /* ignore */ }
+            }
+
+            // Ensure emoji prefix (Prow requires it)
+            // Check if title already starts with an emoji (non-ASCII, non-word char)
+            const hasEmoji = /^[^\w\s\[]/.test(newTitle) || /^[\u{1F000}-\u{1FFFF}]/u.test(newTitle);
+            if (!hasEmoji) {
+              core.info('Adding emoji prefix to title...');
+              // Pick emoji based on linked issue labels or title keywords
+              const labels = pr.labels ? pr.labels.map(l => l.name) : [];
+              const lowerTitle = newTitle.toLowerCase();
+              let emoji = '\uD83D\uDC1B'; // 🐛 default (bug fix)
+              if (labels.includes('enhancement') || lowerTitle.includes('add') || lowerTitle.includes('feature') || lowerTitle.includes('implement')) {
+                emoji = '\u2728'; // ✨ feature
+              } else if (lowerTitle.includes('refactor') || lowerTitle.includes('split') || lowerTitle.includes('replace') || lowerTitle.includes('reduce')) {
+                emoji = '\uD83C\uDF31'; // 🌱 improvement
+              } else if (lowerTitle.includes('doc') || lowerTitle.includes('readme')) {
+                emoji = '\uD83D\uDCD6'; // 📖 docs
+              }
+              newTitle = `${emoji} ${newTitle}`;
+              needsUpdate = true;
+            }
+
+            if (needsUpdate) {
+              try {
+                await github.rest.pulls.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: prNumber,
+                  title: newTitle
+                });
+                core.info(`Title updated to: ${newTitle}`);
+              } catch (e) {
+                core.warning(`Failed to update title: ${e.message}`);
+              }
             }
 
             // 4. Mark ready for review if draft AND checks have passed
