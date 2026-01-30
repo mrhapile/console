@@ -182,6 +182,19 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/events", s.handleEventsHTTP)
 	mux.HandleFunc("/namespaces", s.handleNamespacesHTTP)
 	mux.HandleFunc("/deployments", s.handleDeploymentsHTTP)
+	mux.HandleFunc("/replicasets", s.handleReplicaSetsHTTP)
+	mux.HandleFunc("/statefulsets", s.handleStatefulSetsHTTP)
+	mux.HandleFunc("/daemonsets", s.handleDaemonSetsHTTP)
+	mux.HandleFunc("/cronjobs", s.handleCronJobsHTTP)
+	mux.HandleFunc("/ingresses", s.handleIngressesHTTP)
+	mux.HandleFunc("/networkpolicies", s.handleNetworkPoliciesHTTP)
+	mux.HandleFunc("/services", s.handleServicesHTTP)
+	mux.HandleFunc("/configmaps", s.handleConfigMapsHTTP)
+	mux.HandleFunc("/secrets", s.handleSecretsHTTP)
+	mux.HandleFunc("/serviceaccounts", s.handleServiceAccountsHTTP)
+	mux.HandleFunc("/jobs", s.handleJobsHTTP)
+	mux.HandleFunc("/hpas", s.handleHPAsHTTP)
+	mux.HandleFunc("/pvcs", s.handlePVCsHTTP)
 	mux.HandleFunc("/cluster-health", s.handleClusterHealthHTTP)
 
 	// Rename context endpoint
@@ -549,6 +562,370 @@ func (s *Server) handleDeploymentsHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	json.NewEncoder(w).Encode(map[string]interface{}{"deployments": deployments, "source": "agent"})
+}
+
+// handleReplicaSetsHTTP returns replicasets for a cluster/namespace
+func (s *Server) handleReplicaSetsHTTP(w http.ResponseWriter, r *http.Request) {
+	s.setCORSHeaders(w, r)
+	w.Header().Set("Content-Type", "application/json")
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if s.k8sClient == nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{"replicasets": []interface{}{}, "error": "k8s client not initialized"})
+		return
+	}
+	cluster := r.URL.Query().Get("cluster")
+	namespace := r.URL.Query().Get("namespace")
+	if cluster == "" {
+		json.NewEncoder(w).Encode(map[string]interface{}{"replicasets": []interface{}{}, "error": "cluster parameter required"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	replicasets, err := s.k8sClient.GetReplicaSets(ctx, cluster, namespace)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{"replicasets": []interface{}{}, "error": err.Error()})
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]interface{}{"replicasets": replicasets, "source": "agent"})
+}
+
+// handleStatefulSetsHTTP returns statefulsets for a cluster/namespace
+func (s *Server) handleStatefulSetsHTTP(w http.ResponseWriter, r *http.Request) {
+	s.setCORSHeaders(w, r)
+	w.Header().Set("Content-Type", "application/json")
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if s.k8sClient == nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{"statefulsets": []interface{}{}, "error": "k8s client not initialized"})
+		return
+	}
+	cluster := r.URL.Query().Get("cluster")
+	namespace := r.URL.Query().Get("namespace")
+	if cluster == "" {
+		json.NewEncoder(w).Encode(map[string]interface{}{"statefulsets": []interface{}{}, "error": "cluster parameter required"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	statefulsets, err := s.k8sClient.GetStatefulSets(ctx, cluster, namespace)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{"statefulsets": []interface{}{}, "error": err.Error()})
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]interface{}{"statefulsets": statefulsets, "source": "agent"})
+}
+
+// handleDaemonSetsHTTP returns daemonsets for a cluster/namespace
+func (s *Server) handleDaemonSetsHTTP(w http.ResponseWriter, r *http.Request) {
+	s.setCORSHeaders(w, r)
+	w.Header().Set("Content-Type", "application/json")
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if s.k8sClient == nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{"daemonsets": []interface{}{}, "error": "k8s client not initialized"})
+		return
+	}
+	cluster := r.URL.Query().Get("cluster")
+	namespace := r.URL.Query().Get("namespace")
+	if cluster == "" {
+		json.NewEncoder(w).Encode(map[string]interface{}{"daemonsets": []interface{}{}, "error": "cluster parameter required"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	daemonsets, err := s.k8sClient.GetDaemonSets(ctx, cluster, namespace)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{"daemonsets": []interface{}{}, "error": err.Error()})
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]interface{}{"daemonsets": daemonsets, "source": "agent"})
+}
+
+// handleCronJobsHTTP returns cronjobs for a cluster/namespace
+func (s *Server) handleCronJobsHTTP(w http.ResponseWriter, r *http.Request) {
+	s.setCORSHeaders(w, r)
+	w.Header().Set("Content-Type", "application/json")
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if s.k8sClient == nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{"cronjobs": []interface{}{}, "error": "k8s client not initialized"})
+		return
+	}
+	cluster := r.URL.Query().Get("cluster")
+	namespace := r.URL.Query().Get("namespace")
+	if cluster == "" {
+		json.NewEncoder(w).Encode(map[string]interface{}{"cronjobs": []interface{}{}, "error": "cluster parameter required"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	cronjobs, err := s.k8sClient.GetCronJobs(ctx, cluster, namespace)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{"cronjobs": []interface{}{}, "error": err.Error()})
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]interface{}{"cronjobs": cronjobs, "source": "agent"})
+}
+
+// handleIngressesHTTP returns ingresses for a cluster/namespace
+func (s *Server) handleIngressesHTTP(w http.ResponseWriter, r *http.Request) {
+	s.setCORSHeaders(w, r)
+	w.Header().Set("Content-Type", "application/json")
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if s.k8sClient == nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{"ingresses": []interface{}{}, "error": "k8s client not initialized"})
+		return
+	}
+	cluster := r.URL.Query().Get("cluster")
+	namespace := r.URL.Query().Get("namespace")
+	if cluster == "" {
+		json.NewEncoder(w).Encode(map[string]interface{}{"ingresses": []interface{}{}, "error": "cluster parameter required"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	ingresses, err := s.k8sClient.GetIngresses(ctx, cluster, namespace)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{"ingresses": []interface{}{}, "error": err.Error()})
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]interface{}{"ingresses": ingresses, "source": "agent"})
+}
+
+// handleNetworkPoliciesHTTP returns network policies for a cluster/namespace
+func (s *Server) handleNetworkPoliciesHTTP(w http.ResponseWriter, r *http.Request) {
+	s.setCORSHeaders(w, r)
+	w.Header().Set("Content-Type", "application/json")
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if s.k8sClient == nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{"networkpolicies": []interface{}{}, "error": "k8s client not initialized"})
+		return
+	}
+	cluster := r.URL.Query().Get("cluster")
+	namespace := r.URL.Query().Get("namespace")
+	if cluster == "" {
+		json.NewEncoder(w).Encode(map[string]interface{}{"networkpolicies": []interface{}{}, "error": "cluster parameter required"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	policies, err := s.k8sClient.GetNetworkPolicies(ctx, cluster, namespace)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{"networkpolicies": []interface{}{}, "error": err.Error()})
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]interface{}{"networkpolicies": policies, "source": "agent"})
+}
+
+// handleServicesHTTP returns services for a cluster/namespace
+func (s *Server) handleServicesHTTP(w http.ResponseWriter, r *http.Request) {
+	s.setCORSHeaders(w, r)
+	w.Header().Set("Content-Type", "application/json")
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if s.k8sClient == nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{"services": []interface{}{}, "error": "k8s client not initialized"})
+		return
+	}
+	cluster := r.URL.Query().Get("cluster")
+	namespace := r.URL.Query().Get("namespace")
+	if cluster == "" {
+		json.NewEncoder(w).Encode(map[string]interface{}{"services": []interface{}{}, "error": "cluster parameter required"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	services, err := s.k8sClient.GetServices(ctx, cluster, namespace)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{"services": []interface{}{}, "error": err.Error()})
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]interface{}{"services": services, "source": "agent"})
+}
+
+// handleConfigMapsHTTP returns configmaps for a cluster/namespace
+func (s *Server) handleConfigMapsHTTP(w http.ResponseWriter, r *http.Request) {
+	s.setCORSHeaders(w, r)
+	w.Header().Set("Content-Type", "application/json")
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if s.k8sClient == nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{"configmaps": []interface{}{}, "error": "k8s client not initialized"})
+		return
+	}
+	cluster := r.URL.Query().Get("cluster")
+	namespace := r.URL.Query().Get("namespace")
+	if cluster == "" {
+		json.NewEncoder(w).Encode(map[string]interface{}{"configmaps": []interface{}{}, "error": "cluster parameter required"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	configmaps, err := s.k8sClient.GetConfigMaps(ctx, cluster, namespace)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{"configmaps": []interface{}{}, "error": err.Error()})
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]interface{}{"configmaps": configmaps, "source": "agent"})
+}
+
+// handleSecretsHTTP returns secrets for a cluster/namespace
+func (s *Server) handleSecretsHTTP(w http.ResponseWriter, r *http.Request) {
+	s.setCORSHeaders(w, r)
+	w.Header().Set("Content-Type", "application/json")
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if s.k8sClient == nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{"secrets": []interface{}{}, "error": "k8s client not initialized"})
+		return
+	}
+	cluster := r.URL.Query().Get("cluster")
+	namespace := r.URL.Query().Get("namespace")
+	if cluster == "" {
+		json.NewEncoder(w).Encode(map[string]interface{}{"secrets": []interface{}{}, "error": "cluster parameter required"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	secrets, err := s.k8sClient.GetSecrets(ctx, cluster, namespace)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{"secrets": []interface{}{}, "error": err.Error()})
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]interface{}{"secrets": secrets, "source": "agent"})
+}
+
+// handleServiceAccountsHTTP returns service accounts for a cluster/namespace
+func (s *Server) handleServiceAccountsHTTP(w http.ResponseWriter, r *http.Request) {
+	s.setCORSHeaders(w, r)
+	w.Header().Set("Content-Type", "application/json")
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if s.k8sClient == nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{"serviceaccounts": []interface{}{}, "error": "k8s client not initialized"})
+		return
+	}
+	cluster := r.URL.Query().Get("cluster")
+	namespace := r.URL.Query().Get("namespace")
+	if cluster == "" {
+		json.NewEncoder(w).Encode(map[string]interface{}{"serviceaccounts": []interface{}{}, "error": "cluster parameter required"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	serviceaccounts, err := s.k8sClient.GetServiceAccounts(ctx, cluster, namespace)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{"serviceaccounts": []interface{}{}, "error": err.Error()})
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]interface{}{"serviceaccounts": serviceaccounts, "source": "agent"})
+}
+
+// handleJobsHTTP returns jobs for a cluster/namespace
+func (s *Server) handleJobsHTTP(w http.ResponseWriter, r *http.Request) {
+	s.setCORSHeaders(w, r)
+	w.Header().Set("Content-Type", "application/json")
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if s.k8sClient == nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{"jobs": []interface{}{}, "error": "k8s client not initialized"})
+		return
+	}
+	cluster := r.URL.Query().Get("cluster")
+	namespace := r.URL.Query().Get("namespace")
+	if cluster == "" {
+		json.NewEncoder(w).Encode(map[string]interface{}{"jobs": []interface{}{}, "error": "cluster parameter required"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	jobs, err := s.k8sClient.GetJobs(ctx, cluster, namespace)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{"jobs": []interface{}{}, "error": err.Error()})
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]interface{}{"jobs": jobs, "source": "agent"})
+}
+
+// handleHPAsHTTP returns HPAs for a cluster/namespace
+func (s *Server) handleHPAsHTTP(w http.ResponseWriter, r *http.Request) {
+	s.setCORSHeaders(w, r)
+	w.Header().Set("Content-Type", "application/json")
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if s.k8sClient == nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{"hpas": []interface{}{}, "error": "k8s client not initialized"})
+		return
+	}
+	cluster := r.URL.Query().Get("cluster")
+	namespace := r.URL.Query().Get("namespace")
+	if cluster == "" {
+		json.NewEncoder(w).Encode(map[string]interface{}{"hpas": []interface{}{}, "error": "cluster parameter required"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	hpas, err := s.k8sClient.GetHPAs(ctx, cluster, namespace)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{"hpas": []interface{}{}, "error": err.Error()})
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]interface{}{"hpas": hpas, "source": "agent"})
+}
+
+// handlePVCsHTTP returns PVCs for a cluster/namespace
+func (s *Server) handlePVCsHTTP(w http.ResponseWriter, r *http.Request) {
+	s.setCORSHeaders(w, r)
+	w.Header().Set("Content-Type", "application/json")
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if s.k8sClient == nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{"pvcs": []interface{}{}, "error": "k8s client not initialized"})
+		return
+	}
+	cluster := r.URL.Query().Get("cluster")
+	namespace := r.URL.Query().Get("namespace")
+	if cluster == "" {
+		json.NewEncoder(w).Encode(map[string]interface{}{"pvcs": []interface{}{}, "error": "cluster parameter required"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	pvcs, err := s.k8sClient.GetPVCs(ctx, cluster, namespace)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{"pvcs": []interface{}{}, "error": err.Error()})
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]interface{}{"pvcs": pvcs, "source": "agent"})
 }
 
 // handlePodsHTTP returns pods for a cluster/namespace

@@ -365,6 +365,75 @@ export interface ResourceQuota {
   labels?: Record<string, string>
 }
 
+export interface ReplicaSet {
+  name: string
+  namespace: string
+  cluster?: string
+  replicas: number
+  readyReplicas: number
+  ownerName?: string
+  ownerKind?: string
+  age?: string
+  labels?: Record<string, string>
+}
+
+export interface StatefulSet {
+  name: string
+  namespace: string
+  cluster?: string
+  replicas: number
+  readyReplicas: number
+  status: string
+  image?: string
+  age?: string
+  labels?: Record<string, string>
+}
+
+export interface DaemonSet {
+  name: string
+  namespace: string
+  cluster?: string
+  desiredScheduled: number
+  currentScheduled: number
+  ready: number
+  status: string
+  age?: string
+  labels?: Record<string, string>
+}
+
+export interface CronJob {
+  name: string
+  namespace: string
+  cluster?: string
+  schedule: string
+  suspend: boolean
+  active: number
+  lastSchedule?: string
+  age?: string
+  labels?: Record<string, string>
+}
+
+export interface Ingress {
+  name: string
+  namespace: string
+  cluster?: string
+  class?: string
+  hosts: string[]
+  address?: string
+  age?: string
+  labels?: Record<string, string>
+}
+
+export interface NetworkPolicy {
+  name: string
+  namespace: string
+  cluster?: string
+  policyTypes: string[]
+  podSelector: string
+  age?: string
+  labels?: Record<string, string>
+}
+
 export interface LimitRangeItem {
   type: string  // Pod, Container, PersistentVolumeClaim
   default?: Record<string, string>
@@ -2951,7 +3020,40 @@ export function useServices(cluster?: string, namespace?: string) {
       }
     }
 
-    // Try kubectl proxy first when cluster is specified
+    // Try local agent HTTP endpoint first
+    if (cluster && !isAgentUnavailable()) {
+      try {
+        const agentParams = new URLSearchParams()
+        agentParams.append('cluster', cluster)
+        if (namespace) agentParams.append('namespace', namespace)
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 15000)
+        const response = await fetch(`${LOCAL_AGENT_URL}/services?${agentParams}`, {
+          signal: controller.signal,
+          headers: { 'Accept': 'application/json' },
+        })
+        clearTimeout(timeoutId)
+        if (response.ok) {
+          const agentData = await response.json()
+          const now = new Date()
+          const mappedServices: Service[] = (agentData.services || []).map((s: Service) => ({ ...s, cluster }))
+          servicesCache = { data: mappedServices, timestamp: now, key: cacheKey }
+          setServices(mappedServices)
+          setError(null)
+          setLastUpdated(now)
+          setConsecutiveFailures(0)
+          setLastRefresh(now)
+          setIsLoading(false)
+          setIsRefreshing(false)
+          reportAgentDataSuccess()
+          return
+        }
+      } catch {
+        // Fall through to kubectl proxy
+      }
+    }
+
+    // Try kubectl proxy when cluster is specified
     if (cluster && !isAgentUnavailable()) {
       try {
         const clusterInfo = clusterCache.clusters.find(c => c.name === cluster)
@@ -3112,6 +3214,30 @@ export function useJobs(cluster?: string, namespace?: string) {
 
   const refetch = useCallback(async () => {
     setIsLoading(true)
+    if (cluster && !isAgentUnavailable()) {
+      try {
+        const params = new URLSearchParams()
+        params.append('cluster', cluster)
+        if (namespace) params.append('namespace', namespace)
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 15000)
+        const response = await fetch(`${LOCAL_AGENT_URL}/jobs?${params}`, {
+          signal: controller.signal,
+          headers: { 'Accept': 'application/json' },
+        })
+        clearTimeout(timeoutId)
+        if (response.ok) {
+          const data = await response.json()
+          setJobs(data.jobs || [])
+          setError(null)
+          setIsLoading(false)
+          reportAgentDataSuccess()
+          return
+        }
+      } catch {
+        // Fall through to API
+      }
+    }
     try {
       const params = new URLSearchParams()
       if (cluster) params.append('cluster', cluster)
@@ -3119,7 +3245,7 @@ export function useJobs(cluster?: string, namespace?: string) {
       const { data } = await api.get<{ jobs: Job[] }>(`/api/mcp/jobs?${params}`)
       setJobs(data.jobs || [])
       setError(null)
-    } catch (err) {
+    } catch {
       setError('Failed to fetch jobs')
       setJobs([])
     } finally {
@@ -3142,6 +3268,30 @@ export function useHPAs(cluster?: string, namespace?: string) {
 
   const refetch = useCallback(async () => {
     setIsLoading(true)
+    if (cluster && !isAgentUnavailable()) {
+      try {
+        const params = new URLSearchParams()
+        params.append('cluster', cluster)
+        if (namespace) params.append('namespace', namespace)
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 15000)
+        const response = await fetch(`${LOCAL_AGENT_URL}/hpas?${params}`, {
+          signal: controller.signal,
+          headers: { 'Accept': 'application/json' },
+        })
+        clearTimeout(timeoutId)
+        if (response.ok) {
+          const data = await response.json()
+          setHPAs(data.hpas || [])
+          setError(null)
+          setIsLoading(false)
+          reportAgentDataSuccess()
+          return
+        }
+      } catch {
+        // Fall through to API
+      }
+    }
     try {
       const params = new URLSearchParams()
       if (cluster) params.append('cluster', cluster)
@@ -3149,7 +3299,7 @@ export function useHPAs(cluster?: string, namespace?: string) {
       const { data } = await api.get<{ hpas: HPA[] }>(`/api/mcp/hpas?${params}`)
       setHPAs(data.hpas || [])
       setError(null)
-    } catch (err) {
+    } catch {
       setError('Failed to fetch HPAs')
       setHPAs([])
     } finally {
@@ -3162,6 +3312,313 @@ export function useHPAs(cluster?: string, namespace?: string) {
   }, [refetch])
 
   return { hpas, isLoading, error, refetch }
+}
+
+// Hook to get ReplicaSets
+export function useReplicaSets(cluster?: string, namespace?: string) {
+  const [replicasets, setReplicaSets] = useState<ReplicaSet[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const refetch = useCallback(async () => {
+    setIsLoading(true)
+    // Try local agent first
+    if (cluster && !isAgentUnavailable()) {
+      try {
+        const params = new URLSearchParams()
+        params.append('cluster', cluster)
+        if (namespace) params.append('namespace', namespace)
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 15000)
+        const response = await fetch(`${LOCAL_AGENT_URL}/replicasets?${params}`, {
+          signal: controller.signal,
+          headers: { 'Accept': 'application/json' },
+        })
+        clearTimeout(timeoutId)
+        if (response.ok) {
+          const data = await response.json()
+          setReplicaSets(data.replicasets || [])
+          setError(null)
+          setIsLoading(false)
+          reportAgentDataSuccess()
+          return
+        }
+      } catch {
+        // Fall through to API
+      }
+    }
+    try {
+      const params = new URLSearchParams()
+      if (cluster) params.append('cluster', cluster)
+      if (namespace) params.append('namespace', namespace)
+      const { data } = await api.get<{ replicasets: ReplicaSet[] }>(`/api/mcp/replicasets?${params}`)
+      setReplicaSets(data.replicasets || [])
+      setError(null)
+    } catch {
+      setError('Failed to fetch ReplicaSets')
+      setReplicaSets([])
+    } finally {
+      setIsLoading(false)
+    }
+  }, [cluster, namespace])
+
+  useEffect(() => { refetch() }, [refetch])
+  return { replicasets, isLoading, error, refetch }
+}
+
+// Hook to get StatefulSets
+export function useStatefulSets(cluster?: string, namespace?: string) {
+  const [statefulsets, setStatefulSets] = useState<StatefulSet[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const refetch = useCallback(async () => {
+    setIsLoading(true)
+    if (cluster && !isAgentUnavailable()) {
+      try {
+        const params = new URLSearchParams()
+        params.append('cluster', cluster)
+        if (namespace) params.append('namespace', namespace)
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 15000)
+        const response = await fetch(`${LOCAL_AGENT_URL}/statefulsets?${params}`, {
+          signal: controller.signal,
+          headers: { 'Accept': 'application/json' },
+        })
+        clearTimeout(timeoutId)
+        if (response.ok) {
+          const data = await response.json()
+          setStatefulSets(data.statefulsets || [])
+          setError(null)
+          setIsLoading(false)
+          reportAgentDataSuccess()
+          return
+        }
+      } catch {
+        // Fall through to API
+      }
+    }
+    try {
+      const params = new URLSearchParams()
+      if (cluster) params.append('cluster', cluster)
+      if (namespace) params.append('namespace', namespace)
+      const { data } = await api.get<{ statefulsets: StatefulSet[] }>(`/api/mcp/statefulsets?${params}`)
+      setStatefulSets(data.statefulsets || [])
+      setError(null)
+    } catch {
+      setError('Failed to fetch StatefulSets')
+      setStatefulSets([])
+    } finally {
+      setIsLoading(false)
+    }
+  }, [cluster, namespace])
+
+  useEffect(() => { refetch() }, [refetch])
+  return { statefulsets, isLoading, error, refetch }
+}
+
+// Hook to get DaemonSets
+export function useDaemonSets(cluster?: string, namespace?: string) {
+  const [daemonsets, setDaemonSets] = useState<DaemonSet[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const refetch = useCallback(async () => {
+    setIsLoading(true)
+    if (cluster && !isAgentUnavailable()) {
+      try {
+        const params = new URLSearchParams()
+        params.append('cluster', cluster)
+        if (namespace) params.append('namespace', namespace)
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 15000)
+        const response = await fetch(`${LOCAL_AGENT_URL}/daemonsets?${params}`, {
+          signal: controller.signal,
+          headers: { 'Accept': 'application/json' },
+        })
+        clearTimeout(timeoutId)
+        if (response.ok) {
+          const data = await response.json()
+          setDaemonSets(data.daemonsets || [])
+          setError(null)
+          setIsLoading(false)
+          reportAgentDataSuccess()
+          return
+        }
+      } catch {
+        // Fall through to API
+      }
+    }
+    try {
+      const params = new URLSearchParams()
+      if (cluster) params.append('cluster', cluster)
+      if (namespace) params.append('namespace', namespace)
+      const { data } = await api.get<{ daemonsets: DaemonSet[] }>(`/api/mcp/daemonsets?${params}`)
+      setDaemonSets(data.daemonsets || [])
+      setError(null)
+    } catch {
+      setError('Failed to fetch DaemonSets')
+      setDaemonSets([])
+    } finally {
+      setIsLoading(false)
+    }
+  }, [cluster, namespace])
+
+  useEffect(() => { refetch() }, [refetch])
+  return { daemonsets, isLoading, error, refetch }
+}
+
+// Hook to get CronJobs
+export function useCronJobs(cluster?: string, namespace?: string) {
+  const [cronjobs, setCronJobs] = useState<CronJob[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const refetch = useCallback(async () => {
+    setIsLoading(true)
+    if (cluster && !isAgentUnavailable()) {
+      try {
+        const params = new URLSearchParams()
+        params.append('cluster', cluster)
+        if (namespace) params.append('namespace', namespace)
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 15000)
+        const response = await fetch(`${LOCAL_AGENT_URL}/cronjobs?${params}`, {
+          signal: controller.signal,
+          headers: { 'Accept': 'application/json' },
+        })
+        clearTimeout(timeoutId)
+        if (response.ok) {
+          const data = await response.json()
+          setCronJobs(data.cronjobs || [])
+          setError(null)
+          setIsLoading(false)
+          reportAgentDataSuccess()
+          return
+        }
+      } catch {
+        // Fall through to API
+      }
+    }
+    try {
+      const params = new URLSearchParams()
+      if (cluster) params.append('cluster', cluster)
+      if (namespace) params.append('namespace', namespace)
+      const { data } = await api.get<{ cronjobs: CronJob[] }>(`/api/mcp/cronjobs?${params}`)
+      setCronJobs(data.cronjobs || [])
+      setError(null)
+    } catch {
+      setError('Failed to fetch CronJobs')
+      setCronJobs([])
+    } finally {
+      setIsLoading(false)
+    }
+  }, [cluster, namespace])
+
+  useEffect(() => { refetch() }, [refetch])
+  return { cronjobs, isLoading, error, refetch }
+}
+
+// Hook to get Ingresses
+export function useIngresses(cluster?: string, namespace?: string) {
+  const [ingresses, setIngresses] = useState<Ingress[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const refetch = useCallback(async () => {
+    setIsLoading(true)
+    if (cluster && !isAgentUnavailable()) {
+      try {
+        const params = new URLSearchParams()
+        params.append('cluster', cluster)
+        if (namespace) params.append('namespace', namespace)
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 15000)
+        const response = await fetch(`${LOCAL_AGENT_URL}/ingresses?${params}`, {
+          signal: controller.signal,
+          headers: { 'Accept': 'application/json' },
+        })
+        clearTimeout(timeoutId)
+        if (response.ok) {
+          const data = await response.json()
+          setIngresses(data.ingresses || [])
+          setError(null)
+          setIsLoading(false)
+          reportAgentDataSuccess()
+          return
+        }
+      } catch {
+        // Fall through to API
+      }
+    }
+    try {
+      const params = new URLSearchParams()
+      if (cluster) params.append('cluster', cluster)
+      if (namespace) params.append('namespace', namespace)
+      const { data } = await api.get<{ ingresses: Ingress[] }>(`/api/mcp/ingresses?${params}`)
+      setIngresses(data.ingresses || [])
+      setError(null)
+    } catch {
+      setError('Failed to fetch Ingresses')
+      setIngresses([])
+    } finally {
+      setIsLoading(false)
+    }
+  }, [cluster, namespace])
+
+  useEffect(() => { refetch() }, [refetch])
+  return { ingresses, isLoading, error, refetch }
+}
+
+// Hook to get NetworkPolicies
+export function useNetworkPolicies(cluster?: string, namespace?: string) {
+  const [networkpolicies, setNetworkPolicies] = useState<NetworkPolicy[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const refetch = useCallback(async () => {
+    setIsLoading(true)
+    if (cluster && !isAgentUnavailable()) {
+      try {
+        const params = new URLSearchParams()
+        params.append('cluster', cluster)
+        if (namespace) params.append('namespace', namespace)
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 15000)
+        const response = await fetch(`${LOCAL_AGENT_URL}/networkpolicies?${params}`, {
+          signal: controller.signal,
+          headers: { 'Accept': 'application/json' },
+        })
+        clearTimeout(timeoutId)
+        if (response.ok) {
+          const data = await response.json()
+          setNetworkPolicies(data.networkpolicies || [])
+          setError(null)
+          setIsLoading(false)
+          reportAgentDataSuccess()
+          return
+        }
+      } catch {
+        // Fall through to API
+      }
+    }
+    try {
+      const params = new URLSearchParams()
+      if (cluster) params.append('cluster', cluster)
+      if (namespace) params.append('namespace', namespace)
+      const { data } = await api.get<{ networkpolicies: NetworkPolicy[] }>(`/api/mcp/networkpolicies?${params}`)
+      setNetworkPolicies(data.networkpolicies || [])
+      setError(null)
+    } catch {
+      setError('Failed to fetch NetworkPolicies')
+      setNetworkPolicies([])
+    } finally {
+      setIsLoading(false)
+    }
+  }, [cluster, namespace])
+
+  useEffect(() => { refetch() }, [refetch])
+  return { networkpolicies, isLoading, error, refetch }
 }
 
 // Hook to get ConfigMaps
@@ -3182,6 +3639,30 @@ export function useConfigMaps(cluster?: string, namespace?: string) {
       return
     }
     setIsLoading(true)
+    if (cluster && !isAgentUnavailable()) {
+      try {
+        const params = new URLSearchParams()
+        params.append('cluster', cluster)
+        if (namespace) params.append('namespace', namespace)
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 15000)
+        const response = await fetch(`${LOCAL_AGENT_URL}/configmaps?${params}`, {
+          signal: controller.signal,
+          headers: { 'Accept': 'application/json' },
+        })
+        clearTimeout(timeoutId)
+        if (response.ok) {
+          const data = await response.json()
+          setConfigMaps(data.configmaps || [])
+          setError(null)
+          setIsLoading(false)
+          reportAgentDataSuccess()
+          return
+        }
+      } catch {
+        // Fall through to API
+      }
+    }
     try {
       const params = new URLSearchParams()
       if (cluster) params.append('cluster', cluster)
@@ -3189,9 +3670,8 @@ export function useConfigMaps(cluster?: string, namespace?: string) {
       const { data } = await api.get<{ configmaps: ConfigMap[] }>(`/api/mcp/configmaps?${params}`)
       setConfigMaps(data.configmaps || [])
       setError(null)
-    } catch (err) {
+    } catch {
       setError('Failed to fetch ConfigMaps')
-      // Fallback to demo data on error
       setConfigMaps(getDemoConfigMaps().filter(cm =>
         (!cluster || cm.cluster === cluster) && (!namespace || cm.namespace === namespace)
       ))
@@ -3214,7 +3694,6 @@ export function useSecrets(cluster?: string, namespace?: string) {
   const [error, setError] = useState<string | null>(null)
 
   const refetch = useCallback(async () => {
-    // If demo mode is enabled, use demo data
     if (getDemoMode()) {
       const demoSecrets = getDemoSecrets().filter(s =>
         (!cluster || s.cluster === cluster) && (!namespace || s.namespace === namespace)
@@ -3225,6 +3704,30 @@ export function useSecrets(cluster?: string, namespace?: string) {
       return
     }
     setIsLoading(true)
+    if (cluster && !isAgentUnavailable()) {
+      try {
+        const params = new URLSearchParams()
+        params.append('cluster', cluster)
+        if (namespace) params.append('namespace', namespace)
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 15000)
+        const response = await fetch(`${LOCAL_AGENT_URL}/secrets?${params}`, {
+          signal: controller.signal,
+          headers: { 'Accept': 'application/json' },
+        })
+        clearTimeout(timeoutId)
+        if (response.ok) {
+          const data = await response.json()
+          setSecrets(data.secrets || [])
+          setError(null)
+          setIsLoading(false)
+          reportAgentDataSuccess()
+          return
+        }
+      } catch {
+        // Fall through to API
+      }
+    }
     try {
       const params = new URLSearchParams()
       if (cluster) params.append('cluster', cluster)
@@ -3232,9 +3735,8 @@ export function useSecrets(cluster?: string, namespace?: string) {
       const { data } = await api.get<{ secrets: Secret[] }>(`/api/mcp/secrets?${params}`)
       setSecrets(data.secrets || [])
       setError(null)
-    } catch (err) {
+    } catch {
       setError('Failed to fetch Secrets')
-      // Fallback to demo data on error
       setSecrets(getDemoSecrets().filter(s =>
         (!cluster || s.cluster === cluster) && (!namespace || s.namespace === namespace)
       ))
@@ -3257,7 +3759,6 @@ export function useServiceAccounts(cluster?: string, namespace?: string) {
   const [error, setError] = useState<string | null>(null)
 
   const refetch = useCallback(async () => {
-    // If demo mode is enabled, use demo data
     if (getDemoMode()) {
       const demoSAs = getDemoServiceAccounts().filter(sa =>
         (!cluster || sa.cluster === cluster) && (!namespace || sa.namespace === namespace)
@@ -3268,6 +3769,30 @@ export function useServiceAccounts(cluster?: string, namespace?: string) {
       return
     }
     setIsLoading(true)
+    if (cluster && !isAgentUnavailable()) {
+      try {
+        const params = new URLSearchParams()
+        params.append('cluster', cluster)
+        if (namespace) params.append('namespace', namespace)
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 15000)
+        const response = await fetch(`${LOCAL_AGENT_URL}/serviceaccounts?${params}`, {
+          signal: controller.signal,
+          headers: { 'Accept': 'application/json' },
+        })
+        clearTimeout(timeoutId)
+        if (response.ok) {
+          const data = await response.json()
+          setServiceAccounts(data.serviceaccounts || [])
+          setError(null)
+          setIsLoading(false)
+          reportAgentDataSuccess()
+          return
+        }
+      } catch {
+        // Fall through to API
+      }
+    }
     try {
       const params = new URLSearchParams()
       if (cluster) params.append('cluster', cluster)
@@ -3275,9 +3800,8 @@ export function useServiceAccounts(cluster?: string, namespace?: string) {
       const { data } = await api.get<{ serviceAccounts: ServiceAccount[] }>(`/api/mcp/serviceaccounts?${params}`)
       setServiceAccounts(data.serviceAccounts || [])
       setError(null)
-    } catch (err) {
+    } catch {
       setError('Failed to fetch ServiceAccounts')
-      // Fallback to demo data on error
       setServiceAccounts(getDemoServiceAccounts().filter(sa =>
         (!cluster || sa.cluster === cluster) && (!namespace || sa.namespace === namespace)
       ))
@@ -3381,7 +3905,40 @@ export function usePVCs(cluster?: string, namespace?: string) {
       return
     }
 
-    // Try kubectl proxy first when cluster is specified
+    // Try local agent HTTP endpoint first
+    if (cluster && !isAgentUnavailable()) {
+      try {
+        const params = new URLSearchParams()
+        params.append('cluster', cluster)
+        if (namespace) params.append('namespace', namespace)
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 15000)
+        const response = await fetch(`${LOCAL_AGENT_URL}/pvcs?${params}`, {
+          signal: controller.signal,
+          headers: { 'Accept': 'application/json' },
+        })
+        clearTimeout(timeoutId)
+        if (response.ok) {
+          const agentData = await response.json()
+          const mappedPVCs: PVC[] = (agentData.pvcs || []).map((p: PVC) => ({ ...p, cluster }))
+          const now = new Date()
+          pvcsCache = { data: mappedPVCs, timestamp: now, key: cacheKey }
+          setPVCs(mappedPVCs)
+          setError(null)
+          setLastUpdated(now)
+          setConsecutiveFailures(0)
+          setLastRefresh(now)
+          setIsLoading(false)
+          setIsRefreshing(false)
+          reportAgentDataSuccess()
+          return
+        }
+      } catch {
+        // Fall through to kubectl proxy
+      }
+    }
+
+    // Try kubectl proxy when cluster is specified
     if (cluster && !isAgentUnavailable()) {
       try {
         const clusterInfo = clusterCache.clusters.find(c => c.name === cluster)
