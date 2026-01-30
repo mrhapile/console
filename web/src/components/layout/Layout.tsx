@@ -8,11 +8,11 @@ import { useSidebarConfig } from '../../hooks/useSidebarConfig'
 import { useNavigationHistory } from '../../hooks/useNavigationHistory'
 import { useLastRoute } from '../../hooks/useLastRoute'
 import { useMissions } from '../../hooks/useMissions'
-import { useDemoMode } from '../../hooks/useDemoMode'
+import { useDemoMode, isDemoModeForced } from '../../hooks/useDemoMode'
 import { useLocalAgent } from '../../hooks/useLocalAgent'
 import { cn } from '../../lib/cn'
 import { TourOverlay, TourPrompt } from '../onboarding/Tour'
-import { DemoInstallBanner } from '../onboarding/DemoInstallGuide'
+import { DemoInstallBanner, InstallModal } from '../onboarding/DemoInstallGuide'
 import { TourProvider } from '../../hooks/useTour'
 
 interface LayoutProps {
@@ -25,6 +25,7 @@ export function Layout({ children }: LayoutProps) {
   const { isDemoMode, toggleDemoMode } = useDemoMode()
   const { status: agentStatus } = useLocalAgent()
   const [offlineBannerDismissed, setOfflineBannerDismissed] = useState(false)
+  const [showInstallModal, setShowInstallModal] = useState(false)
 
   // Show offline banner when agent is disconnected (not demo mode, not connecting)
   const showOfflineBanner = !isDemoMode && agentStatus === 'disconnected' && !offlineBannerDismissed
@@ -76,9 +77,9 @@ export function Layout({ children }: LayoutProps) {
               Showing sample data from all cloud providers
             </span>
             <button
-              onClick={toggleDemoMode}
+              onClick={() => isDemoModeForced ? setShowInstallModal(true) : toggleDemoMode()}
               className="ml-2 p-1 hover:bg-yellow-500/20 rounded transition-colors"
-              title="Exit demo mode"
+              title={isDemoModeForced ? "Install your own console" : "Exit demo mode"}
             >
               <X className="w-3.5 h-3.5 text-yellow-400" />
             </button>
@@ -148,6 +149,9 @@ export function Layout({ children }: LayoutProps) {
       {/* AI Mission sidebar */}
       <MissionSidebar />
       <MissionSidebarToggle />
+
+      {/* Install modal — shown when user tries to exit forced demo mode */}
+      {showInstallModal && <InstallModal onClose={() => setShowInstallModal(false)} />}
     </div>
     </TourProvider>
   )
