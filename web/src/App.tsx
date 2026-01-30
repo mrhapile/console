@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useState, useEffect } from 'react'
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import { CardHistoryEntry } from './hooks/useCardHistory'
 import { Layout } from './components/layout/Layout'
@@ -48,8 +48,23 @@ const NamespaceManager = lazy(() => import('./components/namespaces/NamespaceMan
 const Arcade = lazy(() => import('./components/arcade/Arcade').then(m => ({ default: m.Arcade })))
 const Deploy = lazy(() => import('./components/deploy/Deploy').then(m => ({ default: m.Deploy })))
 
-// Loading fallback component
+// Loading fallback component with delay to prevent flash on fast navigation
 function LoadingFallback() {
+  const [showLoading, setShowLoading] = useState(false)
+
+  useEffect(() => {
+    // Only show loading spinner if it takes more than 200ms
+    const timer = setTimeout(() => {
+      setShowLoading(true)
+    }, 200)
+
+    return () => clearTimeout(timer)
+  }, [])
+
+  if (!showLoading) {
+    return null
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center">
       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
