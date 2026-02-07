@@ -47,6 +47,16 @@ export const podIssuesConfig: UnifiedCardConfig = {
     type: 'list',
     pageSize: 5,
     itemClick: 'drill',
+    // Sorting configuration
+    sortable: true,
+    defaultSort: 'status',
+    defaultDirection: 'asc',
+    sortOptions: [
+      { field: 'status', label: 'Status' },
+      { field: 'name', label: 'Name' },
+      { field: 'restarts', label: 'Restarts' },
+      { field: 'cluster', label: 'Cluster' },
+    ],
     columns: [
       {
         field: 'cluster',
@@ -80,6 +90,19 @@ export const podIssuesConfig: UnifiedCardConfig = {
         width: 80,
       },
     ],
+    // AI Actions for Diagnose/Repair buttons
+    aiActions: {
+      resourceMapping: {
+        kind: 'Pod',
+        nameField: 'name',
+        namespaceField: 'namespace',
+        clusterField: 'cluster',
+        statusField: 'status',
+      },
+      issuesField: 'issues',
+      contextFields: ['restarts'],
+      showRepair: true,
+    },
   },
 
   // Drill-down
