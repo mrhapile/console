@@ -1,6 +1,6 @@
 import { api, isBackendUnavailable } from '../../lib/api'
 import { reportAgentDataError, reportAgentDataSuccess, isAgentUnavailable } from '../useLocalAgent'
-import { isDemoMode, setDemoMode, isNetlifyDeployment, isDemoToken } from '../../lib/demoMode'
+import { isDemoMode, isNetlifyDeployment, isDemoToken, subscribeDemoMode } from '../../lib/demoMode'
 import { kubectlProxy } from '../../lib/kubectlProxy'
 import { getPresentationMode } from '../usePresentationMode'
 import type { ClusterInfo, ClusterHealth } from './types'
@@ -220,6 +220,53 @@ export const clusterSubscribers = new Set<ClusterSubscriber>()
 // Notify all subscribers of state change
 export function notifyClusterSubscribers() {
   clusterSubscribers.forEach(subscriber => subscriber(clusterCache))
+}
+
+// ============================================================================
+// Demo Mode Integration - Clear cluster cache when demo mode toggles ON
+// ============================================================================
+
+let lastClusterDemoMode: boolean | null = null
+
+/**
+ * Clear cluster cache and reset to demo data when demo mode toggles ON.
+ * This ensures the clusters page shows demo data instead of cached live data.
+ */
+function handleClusterDemoModeChange() {
+  const currentDemoMode = isDemoMode()
+  if (lastClusterDemoMode !== null && lastClusterDemoMode !== currentDemoMode) {
+    if (currentDemoMode) {
+      // Switching TO demo mode - clear localStorage and reset to demo data
+      try {
+        localStorage.removeItem(CLUSTER_CACHE_KEY)
+        localStorage.removeItem(CLUSTER_DIST_CACHE_KEY)
+      } catch {
+        // Ignore storage errors
+      }
+
+      // Reset cluster cache to demo data
+      clusterCache = {
+        clusters: getDemoClusters(),
+        lastUpdated: new Date(),
+        isLoading: false,
+        isRefreshing: false,
+        error: null,
+        consecutiveFailures: 0,
+        isFailed: false,
+        lastRefresh: new Date(),
+      }
+      notifyClusterSubscribers()
+      console.log('[Clusters] Reset to demo data for demo mode')
+    }
+    // When switching FROM demo mode, fullFetchClusters will be called by useClusters hook
+  }
+  lastClusterDemoMode = currentDemoMode
+}
+
+// Initialize and subscribe to demo mode changes
+if (typeof window !== 'undefined') {
+  handleClusterDemoModeChange()
+  subscribeDemoMode(handleClusterDemoModeChange)
 }
 
 // Debounced notification for batching rapid updates (prevents flashing during health checks)
@@ -1139,6 +1186,23 @@ export async function fullFetchClusters() {
     return
   }
 
+  // DEMO MODE: When user has explicitly enabled demo mode, use demo data immediately.
+  // Don't try to fetch from agent - user wants to see demo data, not live data.
+  // This respects the user's explicit choice to enable demo mode.
+  if (isDemoMode()) {
+    updateClusterCache({
+      clusters: getDemoClusters(),
+      isLoading: false,
+      isRefreshing: false,
+      error: null,
+      lastUpdated: new Date(),
+      consecutiveFailures: 0,
+      isFailed: false,
+      lastRefresh: new Date(),
+    })
+    return
+  }
+
   // On forced demo mode deployments (Netlify), skip fetching entirely to avoid flicker.
   // Demo data is already in the initial cache state, so no loading indicators needed.
   if (isNetlifyDeployment) {
@@ -1181,15 +1245,12 @@ export async function fullFetchClusters() {
     updateClusterCache(updates)
   }
 
-  // Try local agent first — even in demo mode, the agent may have real data.
-  // If the agent succeeds, auto-disable demo mode so cards show live indicators.
+  // Try local agent first for live cluster data.
+  // NOTE: We no longer auto-disable demo mode here. If user explicitly enabled demo mode,
+  // we respect that choice (handled by the early return above).
   try {
     const agentClusters = await fetchClusterListFromAgent()
     if (agentClusters) {
-      // Agent has real data — disable demo mode
-      if (isDemoMode()) {
-        setDemoMode(false)
-      }
       // Merge new cluster list with existing cached health data (preserve stats during refresh)
       const existingClusters = clusterCache.clusters
       const mergedClusters = agentClusters.map(newCluster => {
