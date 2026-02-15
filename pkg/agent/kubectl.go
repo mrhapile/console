@@ -12,6 +12,9 @@ import (
 	"k8s.io/client-go/tools/clientcmd/api"
 )
 
+// execCommand allows mocking exec.Command for testing
+var execCommand = exec.Command
+
 type KubectlProxy struct {
 	kubeconfig string
 	config     *api.Config
@@ -69,7 +72,7 @@ func (k *KubectlProxy) Execute(context, namespace string, args []string) protoco
 		return protocol.KubectlResponse{ExitCode: 1, Error: "Disallowed kubectl command"}
 	}
 
-	cmd := exec.Command("kubectl", cmdArgs...)
+	cmd := execCommand("kubectl", cmdArgs...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -261,7 +264,7 @@ func (k *KubectlProxy) RenameContext(oldName, newName string) error {
 		cmdArgs = append([]string{"--kubeconfig", k.kubeconfig}, cmdArgs...)
 	}
 
-	cmd := exec.Command("kubectl", cmdArgs...)
+	cmd := execCommand("kubectl", cmdArgs...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 

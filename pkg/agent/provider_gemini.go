@@ -11,16 +11,16 @@ import (
 	"strings"
 )
 
-const (
+var (
 	geminiAPIBaseURL   = "https://generativelanguage.googleapis.com/v1beta/models"
 	defaultGeminiModel = "gemini-2.0-flash"
 )
 
 // GeminiProvider implements AIProvider for Google Gemini
 type GeminiProvider struct {
-	apiKey  string
-	model   string
-	client  *http.Client
+	apiKey string
+	model  string
+	client *http.Client
 }
 
 // NewGeminiProvider creates a new Gemini provider
@@ -54,7 +54,7 @@ func (g *GeminiProvider) Chat(ctx context.Context, req *ChatRequest) (*ChatRespo
 
 	contents := g.buildContents(req)
 	body := map[string]interface{}{
-		"contents":         contents,
+		"contents": contents,
 		"generationConfig": map[string]interface{}{
 			"maxOutputTokens": 4096,
 		},
@@ -130,7 +130,7 @@ func (g *GeminiProvider) StreamChat(ctx context.Context, req *ChatRequest, onChu
 
 	contents := g.buildContents(req)
 	body := map[string]interface{}{
-		"contents":         contents,
+		"contents": contents,
 		"generationConfig": map[string]interface{}{
 			"maxOutputTokens": 4096,
 		},

@@ -77,6 +77,8 @@ type Server struct {
 	// Backend process management (for restart-from-UI)
 	backendCmd *exec.Cmd
 	backendMux sync.Mutex
+
+	SkipKeyValidation bool // For testing purposes
 }
 
 // NewServer creates a new agent server
@@ -140,7 +142,7 @@ func NewServer(cfg Config) (*Server, error) {
 
 	// Initialize prediction system
 	server.predictionWorker = NewPredictionWorker(k8sClient, server.registry, server.BroadcastToClients, server.addTokenUsage)
-	server.metricsHistory = NewMetricsHistory(k8sClient)
+	server.metricsHistory = NewMetricsHistory(k8sClient, "")
 
 	// Initialize local cluster manager
 	server.localClusters = NewLocalClusterManager()
@@ -395,8 +397,8 @@ func (s *Server) isAllowedOrigin(origin string) bool {
 func matchOrigin(origin, allowed string) bool {
 	// Wildcard matching: "https://*.ibm.com" matches any subdomain
 	if idx := strings.Index(allowed, "*."); idx != -1 {
-		scheme := allowed[:idx]       // e.g. "https://"
-		suffix := allowed[idx+1:]     // e.g. ".ibm.com"
+		scheme := allowed[:idx]   // e.g. "https://"
+		suffix := allowed[idx+1:] // e.g. ".ibm.com"
 		return strings.HasPrefix(origin, scheme) && strings.HasSuffix(origin, suffix)
 	}
 	// Prefix matching (original behavior)
@@ -2372,6 +2374,9 @@ func (s *Server) validateAPIKey(provider string) (bool, error) {
 
 // validateAPIKeyValue tests if a specific API key value works
 func (s *Server) validateAPIKeyValue(provider, apiKey string) (bool, error) {
+	if s.SkipKeyValidation {
+		return true, nil
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 

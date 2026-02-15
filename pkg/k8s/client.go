@@ -27,7 +27,7 @@ import (
 type MultiClusterClient struct {
 	mu              sync.RWMutex
 	kubeconfig      string
-	clients         map[string]*kubernetes.Clientset
+	clients         map[string]kubernetes.Interface
 	dynamicClients  map[string]dynamic.Interface
 	configs         map[string]*rest.Config
 	rawConfig       *api.Config
@@ -36,7 +36,7 @@ type MultiClusterClient struct {
 	cacheTime       map[string]time.Time
 	watcher         *fsnotify.Watcher
 	stopWatch       chan struct{}
-	onReload        func() // Callback when config is reloaded
+	onReload        func()       // Callback when config is reloaded
 	inClusterConfig *rest.Config // In-cluster config when running inside k8s
 }
 
@@ -46,12 +46,60 @@ func (m *MultiClusterClient) IsInCluster() bool {
 	return m.inClusterConfig != nil
 }
 
+// SetDynamicClient injects a dynamic client for a cluster (for testing)
+func (m *MultiClusterClient) SetDynamicClient(cluster string, client dynamic.Interface) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.dynamicClients[cluster] = client
+}
+
+// SetClient injects a typed client for a cluster (for testing)
+func (m *MultiClusterClient) SetClient(cluster string, client kubernetes.Interface) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.clients[cluster] = client
+}
+
+// SetRawConfig sets the raw kubeconfig (for testing)
+func (m *MultiClusterClient) SetRawConfig(config *api.Config) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.rawConfig = config
+}
+
+// InjectClient injects a typed client for a cluster (for testing)
+func (m *MultiClusterClient) InjectClient(contextName string, client kubernetes.Interface) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.clients[contextName] = client
+}
+
+// InjectDynamicClient injects a dynamic client for a cluster (for testing)
+func (m *MultiClusterClient) InjectDynamicClient(contextName string, client dynamic.Interface) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.dynamicClients[contextName] = client
+}
+
+// Reload reloads the kubeconfig from disk
+func (m *MultiClusterClient) Reload() error {
+	config, err := clientcmd.LoadFromFile(m.kubeconfig)
+	if err != nil {
+		return err
+	}
+	m.mu.Lock()
+	m.rawConfig = config
+	m.mu.Unlock()
+	return nil
+}
+
 // ClusterInfo represents basic cluster information
 type ClusterInfo struct {
 	Name      string `json:"name"`
 	Context   string `json:"context"`
 	Server    string `json:"server,omitempty"`
 	User      string `json:"user,omitempty"`
+	Namespace string `json:"namespace,omitempty"`
 	Healthy   bool   `json:"healthy"`
 	Source    string `json:"source,omitempty"`
 	NodeCount int    `json:"nodeCount,omitempty"`
@@ -61,16 +109,16 @@ type ClusterInfo struct {
 
 // ClusterHealth represents cluster health status
 type ClusterHealth struct {
-	Cluster       string   `json:"cluster"`
-	Healthy       bool     `json:"healthy"`
-	Reachable     bool     `json:"reachable"`
-	LastSeen      string   `json:"lastSeen,omitempty"`
-	ErrorType     string   `json:"errorType,omitempty"` // timeout, auth, network, certificate, unknown
-	ErrorMessage  string   `json:"errorMessage,omitempty"`
-	APIServer     string   `json:"apiServer,omitempty"`
-	NodeCount     int      `json:"nodeCount"`
-	ReadyNodes    int      `json:"readyNodes"`
-	PodCount      int      `json:"podCount"`
+	Cluster      string `json:"cluster"`
+	Healthy      bool   `json:"healthy"`
+	Reachable    bool   `json:"reachable"`
+	LastSeen     string `json:"lastSeen,omitempty"`
+	ErrorType    string `json:"errorType,omitempty"` // timeout, auth, network, certificate, unknown
+	ErrorMessage string `json:"errorMessage,omitempty"`
+	APIServer    string `json:"apiServer,omitempty"`
+	NodeCount    int    `json:"nodeCount"`
+	ReadyNodes   int    `json:"readyNodes"`
+	PodCount     int    `json:"podCount"`
 	// Total allocatable resources (capacity)
 	CpuCores     int     `json:"cpuCores"`
 	MemoryBytes  int64   `json:"memoryBytes"`  // Total allocatable memory in bytes
@@ -190,30 +238,30 @@ type NodeCondition struct {
 
 // NodeInfo represents detailed node information
 type NodeInfo struct {
-	Name              string            `json:"name"`
-	Cluster           string            `json:"cluster,omitempty"`
-	Status            string            `json:"status"` // Ready, NotReady, Unknown
-	Roles             []string          `json:"roles"`
-	InternalIP        string            `json:"internalIP,omitempty"`
-	ExternalIP        string            `json:"externalIP,omitempty"`
-	KubeletVersion    string            `json:"kubeletVersion"`
-	ContainerRuntime  string            `json:"containerRuntime,omitempty"`
-	OS                string            `json:"os,omitempty"`
-	Architecture      string            `json:"architecture,omitempty"`
-	CPUCapacity       string            `json:"cpuCapacity"`
-	MemoryCapacity    string            `json:"memoryCapacity"`
-	StorageCapacity   string            `json:"storageCapacity,omitempty"`
-	PodCapacity       string            `json:"podCapacity"`
-	GPUCount          int               `json:"gpuCount"`
-	GPUType           string            `json:"gpuType,omitempty"`
-	NICCount          int               `json:"nicCount,omitempty"`          // Network interface count (from NFD)
-	NVMECount         int               `json:"nvmeCount,omitempty"`         // NVME device count (from NFD)
-	InfiniBandCount   int               `json:"infinibandCount,omitempty"`   // InfiniBand HCA count
-	Conditions        []NodeCondition   `json:"conditions"`
-	Labels            map[string]string `json:"labels,omitempty"`
-	Taints            []string          `json:"taints,omitempty"`
-	Age               string            `json:"age,omitempty"`
-	Unschedulable     bool              `json:"unschedulable"`
+	Name             string            `json:"name"`
+	Cluster          string            `json:"cluster,omitempty"`
+	Status           string            `json:"status"` // Ready, NotReady, Unknown
+	Roles            []string          `json:"roles"`
+	InternalIP       string            `json:"internalIP,omitempty"`
+	ExternalIP       string            `json:"externalIP,omitempty"`
+	KubeletVersion   string            `json:"kubeletVersion"`
+	ContainerRuntime string            `json:"containerRuntime,omitempty"`
+	OS               string            `json:"os,omitempty"`
+	Architecture     string            `json:"architecture,omitempty"`
+	CPUCapacity      string            `json:"cpuCapacity"`
+	MemoryCapacity   string            `json:"memoryCapacity"`
+	StorageCapacity  string            `json:"storageCapacity,omitempty"`
+	PodCapacity      string            `json:"podCapacity"`
+	GPUCount         int               `json:"gpuCount"`
+	GPUType          string            `json:"gpuType,omitempty"`
+	NICCount         int               `json:"nicCount,omitempty"`        // Network interface count (from NFD)
+	NVMECount        int               `json:"nvmeCount,omitempty"`       // NVME device count (from NFD)
+	InfiniBandCount  int               `json:"infinibandCount,omitempty"` // InfiniBand HCA count
+	Conditions       []NodeCondition   `json:"conditions"`
+	Labels           map[string]string `json:"labels,omitempty"`
+	Taints           []string          `json:"taints,omitempty"`
+	Age              string            `json:"age,omitempty"`
+	Unschedulable    bool              `json:"unschedulable"`
 }
 
 // Deployment represents a Kubernetes deployment with rollout status
@@ -327,17 +375,17 @@ type PVC struct {
 
 // PV represents a Kubernetes PersistentVolume
 type PV struct {
-	Name            string            `json:"name"`
-	Cluster         string            `json:"cluster,omitempty"`
-	Status          string            `json:"status"`
-	Capacity        string            `json:"capacity,omitempty"`
-	StorageClass    string            `json:"storageClass,omitempty"`
-	ReclaimPolicy   string            `json:"reclaimPolicy,omitempty"`
-	AccessModes     []string          `json:"accessModes,omitempty"`
-	ClaimRef        string            `json:"claimRef,omitempty"`
-	VolumeMode      string            `json:"volumeMode,omitempty"`
-	Age             string            `json:"age,omitempty"`
-	Labels          map[string]string `json:"labels,omitempty"`
+	Name          string            `json:"name"`
+	Cluster       string            `json:"cluster,omitempty"`
+	Status        string            `json:"status"`
+	Capacity      string            `json:"capacity,omitempty"`
+	StorageClass  string            `json:"storageClass,omitempty"`
+	ReclaimPolicy string            `json:"reclaimPolicy,omitempty"`
+	AccessModes   []string          `json:"accessModes,omitempty"`
+	ClaimRef      string            `json:"claimRef,omitempty"`
+	VolumeMode    string            `json:"volumeMode,omitempty"`
+	Age           string            `json:"age,omitempty"`
+	Labels        map[string]string `json:"labels,omitempty"`
 }
 
 // ReplicaSet represents a Kubernetes ReplicaSet
@@ -430,8 +478,8 @@ type ResourceQuota struct {
 	Name        string            `json:"name"`
 	Namespace   string            `json:"namespace"`
 	Cluster     string            `json:"cluster,omitempty"`
-	Hard        map[string]string `json:"hard"`                  // Resource limits
-	Used        map[string]string `json:"used"`                  // Current usage
+	Hard        map[string]string `json:"hard"` // Resource limits
+	Used        map[string]string `json:"used"` // Current usage
 	Age         string            `json:"age,omitempty"`
 	Labels      map[string]string `json:"labels,omitempty"`
 	Annotations map[string]string `json:"annotations,omitempty"` // Reservation metadata
@@ -468,7 +516,7 @@ func NewMultiClusterClient(kubeconfig string) (*MultiClusterClient, error) {
 
 	client := &MultiClusterClient{
 		kubeconfig:     kubeconfig,
-		clients:        make(map[string]*kubernetes.Clientset),
+		clients:        make(map[string]kubernetes.Interface),
 		dynamicClients: make(map[string]dynamic.Interface),
 		configs:        make(map[string]*rest.Config),
 		healthCache:    make(map[string]*ClusterHealth),
@@ -498,7 +546,7 @@ func (m *MultiClusterClient) LoadConfig() error {
 		if _, err := os.Stat(m.kubeconfig); os.IsNotExist(err) {
 			log.Println("No kubeconfig file, using in-cluster config only")
 			m.rawConfig = nil
-			m.clients = make(map[string]*kubernetes.Clientset)
+			m.clients = make(map[string]kubernetes.Interface)
 			m.configs = make(map[string]*rest.Config)
 			m.healthCache = make(map[string]*ClusterHealth)
 			m.cacheTime = make(map[string]time.Time)
@@ -513,7 +561,7 @@ func (m *MultiClusterClient) LoadConfig() error {
 
 	m.rawConfig = config
 	// Clear cached clients when config reloads
-	m.clients = make(map[string]*kubernetes.Clientset)
+	m.clients = make(map[string]kubernetes.Interface)
 	m.dynamicClients = make(map[string]dynamic.Interface)
 	m.configs = make(map[string]*rest.Config)
 	m.healthCache = make(map[string]*ClusterHealth)
@@ -895,7 +943,7 @@ func isBetterClusterName(candidate, current string) bool {
 }
 
 // GetClient returns a kubernetes client for the specified context
-func (m *MultiClusterClient) GetClient(contextName string) (*kubernetes.Clientset, error) {
+func (m *MultiClusterClient) GetClient(contextName string) (kubernetes.Interface, error) {
 	m.mu.RLock()
 	if client, ok := m.clients[contextName]; ok {
 		m.mu.RUnlock()
@@ -1539,10 +1587,10 @@ func (m *MultiClusterClient) GetGPUNodes(ctx context.Context, contextName string
 	// This is much faster than querying pods per-node for large clusters
 	allPods, _ := client.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
 	// Track allocations by node and accelerator type
-	gpuAllocationByNode := make(map[string]int)   // GPU allocations
-	tpuAllocationByNode := make(map[string]int)   // TPU allocations
-	aiuAllocationByNode := make(map[string]int)   // AIU (Gaudi) allocations
-	xpuAllocationByNode := make(map[string]int)   // XPU allocations
+	gpuAllocationByNode := make(map[string]int) // GPU allocations
+	tpuAllocationByNode := make(map[string]int) // TPU allocations
+	aiuAllocationByNode := make(map[string]int) // AIU (Gaudi) allocations
+	xpuAllocationByNode := make(map[string]int) // XPU allocations
 	if allPods != nil {
 		for _, pod := range allPods.Items {
 			nodeName := pod.Spec.NodeName
@@ -3166,31 +3214,31 @@ func formatDuration(d time.Duration) string {
 
 // NVIDIAOperatorStatus represents the status of NVIDIA GPU and Network operators
 type NVIDIAOperatorStatus struct {
-	Cluster          string                  `json:"cluster"`
-	GPUOperator      *GPUOperatorInfo        `json:"gpuOperator,omitempty"`
-	NetworkOperator  *NetworkOperatorInfo    `json:"networkOperator,omitempty"`
+	Cluster         string               `json:"cluster"`
+	GPUOperator     *GPUOperatorInfo     `json:"gpuOperator,omitempty"`
+	NetworkOperator *NetworkOperatorInfo `json:"networkOperator,omitempty"`
 }
 
 // GPUOperatorInfo represents NVIDIA GPU Operator ClusterPolicy status
 type GPUOperatorInfo struct {
-	Installed      bool                `json:"installed"`
-	Version        string              `json:"version,omitempty"`
-	State          string              `json:"state,omitempty"`       // ready, notReady, disabled
-	Ready          bool                `json:"ready"`
-	Components     []OperatorComponent `json:"components,omitempty"`
-	DriverVersion  string              `json:"driverVersion,omitempty"`
-	CUDAVersion    string              `json:"cudaVersion,omitempty"`
-	Namespace      string              `json:"namespace,omitempty"`
+	Installed     bool                `json:"installed"`
+	Version       string              `json:"version,omitempty"`
+	State         string              `json:"state,omitempty"` // ready, notReady, disabled
+	Ready         bool                `json:"ready"`
+	Components    []OperatorComponent `json:"components,omitempty"`
+	DriverVersion string              `json:"driverVersion,omitempty"`
+	CUDAVersion   string              `json:"cudaVersion,omitempty"`
+	Namespace     string              `json:"namespace,omitempty"`
 }
 
 // NetworkOperatorInfo represents NVIDIA Network Operator NicClusterPolicy status
 type NetworkOperatorInfo struct {
-	Installed      bool                `json:"installed"`
-	Version        string              `json:"version,omitempty"`
-	State          string              `json:"state,omitempty"`       // ready, notReady, disabled
-	Ready          bool                `json:"ready"`
-	Components     []OperatorComponent `json:"components,omitempty"`
-	Namespace      string              `json:"namespace,omitempty"`
+	Installed  bool                `json:"installed"`
+	Version    string              `json:"version,omitempty"`
+	State      string              `json:"state,omitempty"` // ready, notReady, disabled
+	Ready      bool                `json:"ready"`
+	Components []OperatorComponent `json:"components,omitempty"`
+	Namespace  string              `json:"namespace,omitempty"`
 }
 
 // OperatorComponent represents a component of the NVIDIA operators

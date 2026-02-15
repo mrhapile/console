@@ -30,11 +30,11 @@ type AgentKeyConfig struct {
 
 // ConfigManager handles reading and writing the local config file
 type ConfigManager struct {
-	mu            sync.RWMutex
-	configPath    string
-	config        *AgentConfig
-	keyValidity   map[string]bool // Cache of key validity (true=valid, false=invalid)
-	validityMu    sync.RWMutex    // Separate mutex for validity cache
+	mu          sync.RWMutex
+	configPath  string
+	config      *AgentConfig
+	keyValidity map[string]bool // Cache of key validity (true=valid, false=invalid)
+	validityMu  sync.RWMutex    // Separate mutex for validity cache
 }
 
 var (
@@ -246,6 +246,13 @@ func (cm *ConfigManager) SetDefaultAgent(agent string) error {
 // GetConfigPath returns the path to the config file
 func (cm *ConfigManager) GetConfigPath() string {
 	return cm.configPath
+}
+
+// SetConfigPath sets the path to the config file (for testing)
+func (cm *ConfigManager) SetConfigPath(path string) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+	cm.configPath = path
 }
 
 // Helper to map provider names to environment variable names

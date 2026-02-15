@@ -11,17 +11,17 @@ import (
 	"strings"
 )
 
-const (
-	claudeAPIURL     = "https://api.anthropic.com/v1/messages"
-	claudeAPIVersion = "2023-06-01"
+var (
+	claudeAPIURL       = "https://api.anthropic.com/v1/messages"
+	claudeAPIVersion   = "2023-06-01"
 	defaultClaudeModel = "claude-opus-4-20250514"
 )
 
 // ClaudeProvider implements AIProvider for Anthropic Claude
 type ClaudeProvider struct {
-	apiKey  string
-	model   string
-	client  *http.Client
+	apiKey string
+	model  string
+	client *http.Client
 }
 
 // NewClaudeProvider creates a new Claude provider
@@ -251,12 +251,12 @@ type claudeResponse struct {
 }
 
 type claudeStreamEvent struct {
-	Type    string `json:"type"`
-	Delta   *struct {
+	Type  string `json:"type"`
+	Delta *struct {
 		Type string `json:"type"`
 		Text string `json:"text"`
 	} `json:"delta,omitempty"`
-	Usage   *struct {
+	Usage *struct {
 		OutputTokens int `json:"output_tokens"`
 	} `json:"usage,omitempty"`
 	Message *struct {

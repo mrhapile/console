@@ -8,6 +8,11 @@ import (
 	"strings"
 )
 
+var (
+	// execCommand is already declared in kubectl.go
+	lookPath = exec.LookPath
+)
+
 // LocalClusterTool represents a detected local cluster tool
 type LocalClusterTool struct {
 	Name      string `json:"name"`
@@ -54,7 +59,7 @@ func (m *LocalClusterManager) DetectTools() []LocalClusterTool {
 }
 
 func (m *LocalClusterManager) detectKind() *LocalClusterTool {
-	path, err := exec.LookPath("kind")
+	path, err := lookPath("kind")
 	if err != nil {
 		return nil
 	}
@@ -66,7 +71,7 @@ func (m *LocalClusterManager) detectKind() *LocalClusterTool {
 	}
 
 	// Get version
-	cmd := exec.Command("kind", "version")
+	cmd := execCommand("kind", "version")
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	if err := cmd.Run(); err == nil {
@@ -81,7 +86,7 @@ func (m *LocalClusterManager) detectKind() *LocalClusterTool {
 }
 
 func (m *LocalClusterManager) detectK3d() *LocalClusterTool {
-	path, err := exec.LookPath("k3d")
+	path, err := lookPath("k3d")
 	if err != nil {
 		return nil
 	}
@@ -93,7 +98,7 @@ func (m *LocalClusterManager) detectK3d() *LocalClusterTool {
 	}
 
 	// Get version
-	cmd := exec.Command("k3d", "version")
+	cmd := execCommand("k3d", "version")
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	if err := cmd.Run(); err == nil {
@@ -111,7 +116,7 @@ func (m *LocalClusterManager) detectK3d() *LocalClusterTool {
 }
 
 func (m *LocalClusterManager) detectMinikube() *LocalClusterTool {
-	path, err := exec.LookPath("minikube")
+	path, err := lookPath("minikube")
 	if err != nil {
 		return nil
 	}
@@ -123,7 +128,7 @@ func (m *LocalClusterManager) detectMinikube() *LocalClusterTool {
 	}
 
 	// Get version
-	cmd := exec.Command("minikube", "version", "--short")
+	cmd := execCommand("minikube", "version", "--short")
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	if err := cmd.Run(); err == nil {
@@ -154,7 +159,7 @@ func (m *LocalClusterManager) ListClusters() []LocalCluster {
 func (m *LocalClusterManager) listKindClusters() []LocalCluster {
 	clusters := []LocalCluster{}
 
-	cmd := exec.Command("kind", "get", "clusters")
+	cmd := execCommand("kind", "get", "clusters")
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	if err := cmd.Run(); err != nil {
@@ -177,7 +182,7 @@ func (m *LocalClusterManager) listKindClusters() []LocalCluster {
 func (m *LocalClusterManager) listK3dClusters() []LocalCluster {
 	clusters := []LocalCluster{}
 
-	cmd := exec.Command("k3d", "cluster", "list", "--no-headers")
+	cmd := execCommand("k3d", "cluster", "list", "--no-headers")
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	if err := cmd.Run(); err != nil {
@@ -204,7 +209,7 @@ func (m *LocalClusterManager) listK3dClusters() []LocalCluster {
 func (m *LocalClusterManager) listMinikubeClusters() []LocalCluster {
 	clusters := []LocalCluster{}
 
-	cmd := exec.Command("minikube", "profile", "list", "-o", "json")
+	cmd := execCommand("minikube", "profile", "list", "-o", "json")
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	if err := cmd.Run(); err != nil {
@@ -246,7 +251,7 @@ func (m *LocalClusterManager) CreateCluster(tool, name string) error {
 }
 
 func (m *LocalClusterManager) createKindCluster(name string) error {
-	cmd := exec.Command("kind", "create", "cluster", "--name", name)
+	cmd := execCommand("kind", "create", "cluster", "--name", name)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
@@ -256,7 +261,7 @@ func (m *LocalClusterManager) createKindCluster(name string) error {
 }
 
 func (m *LocalClusterManager) createK3dCluster(name string) error {
-	cmd := exec.Command("k3d", "cluster", "create", name)
+	cmd := execCommand("k3d", "cluster", "create", name)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
@@ -266,7 +271,7 @@ func (m *LocalClusterManager) createK3dCluster(name string) error {
 }
 
 func (m *LocalClusterManager) createMinikubeCluster(name string) error {
-	cmd := exec.Command("minikube", "start", "--profile", name)
+	cmd := execCommand("minikube", "start", "--profile", name)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
@@ -290,7 +295,7 @@ func (m *LocalClusterManager) DeleteCluster(tool, name string) error {
 }
 
 func (m *LocalClusterManager) deleteKindCluster(name string) error {
-	cmd := exec.Command("kind", "delete", "cluster", "--name", name)
+	cmd := execCommand("kind", "delete", "cluster", "--name", name)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
@@ -300,7 +305,7 @@ func (m *LocalClusterManager) deleteKindCluster(name string) error {
 }
 
 func (m *LocalClusterManager) deleteK3dCluster(name string) error {
-	cmd := exec.Command("k3d", "cluster", "delete", name)
+	cmd := execCommand("k3d", "cluster", "delete", name)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
@@ -310,7 +315,7 @@ func (m *LocalClusterManager) deleteK3dCluster(name string) error {
 }
 
 func (m *LocalClusterManager) deleteMinikubeCluster(name string) error {
-	cmd := exec.Command("minikube", "delete", "--profile", name)
+	cmd := execCommand("minikube", "delete", "--profile", name)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {

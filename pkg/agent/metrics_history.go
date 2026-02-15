@@ -20,19 +20,19 @@ const (
 
 // MetricsSnapshot holds a point-in-time metrics capture
 type MetricsSnapshot struct {
-	Timestamp string                   `json:"timestamp"`
-	Clusters  []ClusterMetricSnapshot  `json:"clusters"`
-	PodIssues []PodIssueSnapshot       `json:"podIssues"`
-	GPUNodes  []GPUNodeMetricSnapshot  `json:"gpuNodes"`
+	Timestamp string                  `json:"timestamp"`
+	Clusters  []ClusterMetricSnapshot `json:"clusters"`
+	PodIssues []PodIssueSnapshot      `json:"podIssues"`
+	GPUNodes  []GPUNodeMetricSnapshot `json:"gpuNodes"`
 }
 
 // ClusterMetricSnapshot holds cluster metrics at a point in time
 type ClusterMetricSnapshot struct {
-	Name         string  `json:"name"`
-	CPUPercent   float64 `json:"cpuPercent"`
+	Name          string  `json:"name"`
+	CPUPercent    float64 `json:"cpuPercent"`
 	MemoryPercent float64 `json:"memoryPercent"`
-	NodeCount    int     `json:"nodeCount"`
-	HealthyNodes int     `json:"healthyNodes"`
+	NodeCount     int     `json:"nodeCount"`
+	HealthyNodes  int     `json:"healthyNodes"`
 }
 
 // PodIssueSnapshot holds pod issue data at a point in time
@@ -68,10 +68,12 @@ type MetricsHistory struct {
 }
 
 // NewMetricsHistory creates a new metrics history manager
-func NewMetricsHistory(k8sClient *k8s.MultiClusterClient) *MetricsHistory {
-	// Store in ~/.kc/
-	homeDir, _ := os.UserHomeDir()
-	dataDir := filepath.Join(homeDir, ".kc")
+func NewMetricsHistory(k8sClient *k8s.MultiClusterClient, dataDir string) *MetricsHistory {
+	if dataDir == "" {
+		// Store in ~/.kc/
+		homeDir, _ := os.UserHomeDir()
+		dataDir = filepath.Join(homeDir, ".kc")
+	}
 
 	mh := &MetricsHistory{
 		k8sClient: k8sClient,
@@ -84,6 +86,13 @@ func NewMetricsHistory(k8sClient *k8s.MultiClusterClient) *MetricsHistory {
 	mh.loadFromDisk()
 
 	return mh
+}
+
+// SetDataDir sets the directory for metrics history storage (for testing)
+func (mh *MetricsHistory) SetDataDir(dir string) {
+	mh.mu.Lock()
+	defer mh.mu.Unlock()
+	mh.dataDir = dir
 }
 
 // Start begins the metrics collection loop

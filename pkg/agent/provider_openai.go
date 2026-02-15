@@ -11,16 +11,16 @@ import (
 	"strings"
 )
 
-const (
-	openAIAPIURL      = "https://api.openai.com/v1/chat/completions"
+var (
+	openAIAPIURL       = "https://api.openai.com/v1/chat/completions"
 	defaultOpenAIModel = "gpt-4-turbo"
 )
 
 // OpenAIProvider implements AIProvider for OpenAI GPT models
 type OpenAIProvider struct {
-	apiKey  string
-	model   string
-	client  *http.Client
+	apiKey string
+	model  string
+	client *http.Client
 }
 
 // NewOpenAIProvider creates a new OpenAI provider
@@ -112,10 +112,10 @@ func (o *OpenAIProvider) StreamChat(ctx context.Context, req *ChatRequest, onChu
 
 	messages := o.buildMessages(req)
 	body := map[string]interface{}{
-		"model":       o.model,
-		"messages":    messages,
-		"max_tokens":  4096,
-		"stream":      true,
+		"model":      o.model,
+		"messages":   messages,
+		"max_tokens": 4096,
+		"stream":     true,
 		"stream_options": map[string]bool{
 			"include_usage": true,
 		},

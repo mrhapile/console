@@ -342,6 +342,20 @@ func (sm *SettingsManager) ImportEncrypted(data []byte) error {
 }
 
 // GetSettingsPath returns the path to the settings file
-func (sm *SettingsManager) GetSettingsPath() string {
-	return sm.settingsPath
+func (m *SettingsManager) GetSettingsPath() string {
+	return m.settingsPath
+}
+
+// SetSettingsPath sets the path to the settings file (for testing)
+func (m *SettingsManager) SetSettingsPath(path string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.settingsPath = path
+}
+
+// SetKeyPath sets the path to the encryption key file (for testing)
+func (m *SettingsManager) SetKeyPath(path string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.keyPath = path
 }
