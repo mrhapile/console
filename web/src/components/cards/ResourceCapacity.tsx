@@ -1,10 +1,11 @@
 import { useState, useMemo } from 'react'
-import { Cpu, HardDrive, Zap, Loader2 } from 'lucide-react'
+import { Cpu, HardDrive, Zap } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useClusters, useGPUNodes, GPUNode } from '../../hooks/useMCP'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { useDrillDownActions } from '../../hooks/useDrillDown'
 import { Skeleton } from '../ui/Skeleton'
+import { RefreshIndicator } from '../ui/RefreshIndicator'
 import { CardControls, SortDirection } from '../ui/CardControls'
 import { Pagination, usePagination } from '../ui/Pagination'
 import { ClusterFilterDropdown } from '../ui/ClusterFilterDropdown'
@@ -36,7 +37,7 @@ const SORT_OPTIONS = [
 
 export function ResourceCapacity({ config: _config }: ResourceCapacityProps) {
   const { t } = useTranslation(['cards', 'common'])
-  const { deduplicatedClusters: allClusters, isLoading, isRefreshing } = useClusters()
+  const { deduplicatedClusters: allClusters, isLoading, isRefreshing, lastRefresh } = useClusters()
   const { nodes: gpuNodes } = useGPUNodes()
   const { drillToResources } = useDrillDownActions()
   const {
@@ -238,9 +239,13 @@ export function ResourceCapacity({ config: _config }: ResourceCapacityProps) {
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          {isRefreshing && (
-            <Loader2 className="w-3 h-3 text-blue-400 animate-spin" />
-          )}
+          <RefreshIndicator
+            isRefreshing={isRefreshing}
+            lastUpdated={lastRefresh ? new Date(lastRefresh) : null}
+            size="sm"
+            showLabel={true}
+            staleThresholdMinutes={5}
+          />
         </div>
         <div className="flex items-center gap-2">
           <ClusterFilterDropdown
