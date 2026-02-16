@@ -26,6 +26,7 @@ console-server
 Thumbs.db
 
 # Logs
+*.out
 *.log
 npm-debug.log*
 
