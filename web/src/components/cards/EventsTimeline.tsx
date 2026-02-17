@@ -13,9 +13,19 @@ import { useClusters } from '../../hooks/useMCP'
 import { useCachedEvents } from '../../hooks/useCachedData'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { Skeleton, SkeletonStats } from '../ui/Skeleton'
+import { RefreshIndicator } from '../ui/RefreshIndicator'
 import { useCardLoadingState } from './CardDataContext'
 import { CardClusterFilter } from '../../lib/cards'
 import { useTranslation } from 'react-i18next'
+import { DynamicCardErrorBoundary } from './DynamicCardErrorBoundary'
+import {
+  CHART_HEIGHT_STANDARD,
+  CHART_GRID_STROKE,
+  CHART_AXIS_STROKE,
+  CHART_TOOLTIP_BG,
+  CHART_TOOLTIP_BORDER,
+  CHART_TICK_COLOR,
+} from '../../lib/constants'
 
 interface TimePoint {
   time: string
@@ -78,11 +88,14 @@ function groupEventsByTime(events: Array<{ type: string; lastSeen?: string; firs
   return buckets
 }
 
-export function EventsTimeline() {
+function EventsTimelineInternal() {
   const { t } = useTranslation()
   const {
     events,
     isLoading: hookLoading,
+    isDemoFallback,
+    isRefreshing,
+    lastRefresh,
   } = useCachedEvents(undefined, undefined, { limit: 100, category: 'realtime' })
 
   const { deduplicatedClusters: clusters } = useClusters()
@@ -90,6 +103,7 @@ export function EventsTimeline() {
   // Report state to CardWrapper for refresh animation
   const { showSkeleton, showEmptyState } = useCardLoadingState({
     isLoading: hookLoading,
+    isDemoData: isDemoFallback,
     hasAnyData: events.length > 0,
   })
   const { selectedClusters, isAllClustersSelected, clusterInfoMap } = useGlobalFilters()
@@ -193,6 +207,13 @@ export function EventsTimeline() {
       {/* Controls - single row: Time Range → Cluster Filter → Refresh */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
+          <RefreshIndicator
+            isRefreshing={isRefreshing}
+            lastUpdated={lastRefresh ? new Date(lastRefresh) : null}
+            size="sm"
+            showLabel={true}
+            staleThresholdMinutes={5}
+          />
           {localClusterFilter.length > 0 && (
             <span className="flex items-center gap-1 text-xs text-muted-foreground bg-secondary/50 px-1.5 py-0.5 rounded">
               <Server className="w-3 h-3" />
@@ -263,8 +284,8 @@ export function EventsTimeline() {
             No events in the last hour
           </div>
         ) : (
-          <div style={{ width: '100%', minHeight: 160, height: 160 }}>
-          <ResponsiveContainer width="100%" height={160}>
+          <div style={{ width: '100%', minHeight: CHART_HEIGHT_STANDARD, height: CHART_HEIGHT_STANDARD }}>
+          <ResponsiveContainer width="100%" height={CHART_HEIGHT_STANDARD}>
             <AreaChart data={timeSeriesData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
               <defs>
                 <linearGradient id="gradientWarnings" x1="0" y1="0" x2="0" y2="1">
@@ -276,27 +297,27 @@ export function EventsTimeline() {
                   <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+              <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_STROKE} />
               <XAxis
                 dataKey="time"
-                tick={{ fill: '#888', fontSize: 10 }}
-                axisLine={{ stroke: '#333' }}
+                tick={{ fill: CHART_TICK_COLOR, fontSize: 10 }}
+                axisLine={{ stroke: CHART_AXIS_STROKE }}
                 tickLine={false}
               />
               <YAxis
-                tick={{ fill: '#888', fontSize: 10 }}
+                tick={{ fill: CHART_TICK_COLOR, fontSize: 10 }}
                 axisLine={false}
                 tickLine={false}
                 allowDecimals={false}
               />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: '#1a1a2e',
-                  border: '1px solid #333',
+                  backgroundColor: CHART_TOOLTIP_BG,
+                  border: `1px solid ${CHART_TOOLTIP_BORDER}`,
                   borderRadius: '8px',
                   fontSize: '12px',
                 }}
-                labelStyle={{ color: '#888' }}
+                labelStyle={{ color: CHART_TICK_COLOR }}
               />
               <Area
                 type="stepAfter"
@@ -334,5 +355,13 @@ export function EventsTimeline() {
         </div>
       </div>
     </div>
+  )
+}
+
+export function EventsTimeline() {
+  return (
+    <DynamicCardErrorBoundary cardId="EventsTimeline">
+      <EventsTimelineInternal />
+    </DynamicCardErrorBoundary>
   )
 }

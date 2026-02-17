@@ -10,6 +10,8 @@ import { kubectlProxy } from '../../lib/kubectlProxy'
 import { useCardLoadingState, useCardDemoState } from './CardDataContext'
 import { isDemoMode as checkIsDemoMode } from '../../lib/demoMode'
 import { DynamicCardErrorBoundary } from './DynamicCardErrorBoundary'
+import { useToast } from '../ui/Toast'
+import { LOCAL_AGENT_HTTP_URL, STORAGE_KEY_OPA_CACHE, STORAGE_KEY_OPA_CACHE_TIME } from '../../lib/constants'
 
 // Sort options for clusters
 type SortByOption = 'name' | 'violations' | 'policies'
@@ -512,6 +514,7 @@ function ClusterOPAModal({
   }) => void
 }) {
   const { t } = useTranslation(['cards', 'common'])
+  const { showToast } = useToast()
   const [activeTab, setActiveTab] = useState<OPAModalTab>('policies')
   const [showCreateMenu, setShowCreateMenu] = useState(false)
   const [showTemplateModal, setShowTemplateModal] = useState(false)
@@ -675,9 +678,11 @@ Please proceed with applying this policy.`,
         ['patch', policy.kind.toLowerCase(), policy.name, '--type=merge', '-p', `{"spec":{"enforcementAction":"${newMode}"}}`],
         { context: clusterName, timeout: 15000 }
       )
+      showToast('Policy mode updated successfully', 'success')
       onRefresh()
     } catch (err) {
       console.error('Failed to toggle mode:', err)
+      showToast('Failed to toggle policy mode', 'error')
     }
   }
 
@@ -689,9 +694,11 @@ Please proceed with applying this policy.`,
         { context: clusterName, timeout: 15000 }
       )
       setDeleteConfirm(null)
+      showToast('Policy deleted successfully', 'success')
       onRefresh()
     } catch (err) {
       console.error('Failed to delete policy:', err)
+      showToast('Failed to delete policy', 'error')
     }
   }
 
@@ -1083,7 +1090,7 @@ function OPAPoliciesInternal({ config: _config }: OPAPoliciesProps) {
   const [agentClusters, setAgentClusters] = useState<{ name: string; healthy?: boolean }[]>([])
   useEffect(() => {
     if (shouldUseDemoData) return
-    fetch('http://127.0.0.1:8585/clusters')
+    fetch(`${LOCAL_AGENT_HTTP_URL}/clusters`)
       .then(res => res.json())
       .then(data => {
         if (data.clusters) {
@@ -1104,10 +1111,10 @@ function OPAPoliciesInternal({ config: _config }: OPAPoliciesProps) {
   const [statuses, setStatuses] = useState<Record<string, GatekeeperStatus>>(() => {
     if (checkIsDemoMode()) return generateDemoStatuses()
     try {
-      const cached = localStorage.getItem('opa-statuses-cache')
+      const cached = localStorage.getItem(STORAGE_KEY_OPA_CACHE)
       if (cached) {
         const parsed = JSON.parse(cached)
-        const cacheTime = localStorage.getItem('opa-statuses-cache-time')
+        const cacheTime = localStorage.getItem(STORAGE_KEY_OPA_CACHE_TIME)
         const cacheAge = cacheTime ? Date.now() - parseInt(cacheTime, 10) : Infinity
         if (cacheAge < 10 * 60 * 1000) { // 10 minutes
           return parsed
@@ -1128,8 +1135,8 @@ function OPAPoliciesInternal({ config: _config }: OPAPoliciesProps) {
     )
     if (Object.keys(completedStatuses).length > 0) {
       try {
-        localStorage.setItem('opa-statuses-cache', JSON.stringify(completedStatuses))
-        localStorage.setItem('opa-statuses-cache-time', Date.now().toString())
+        localStorage.setItem(STORAGE_KEY_OPA_CACHE, JSON.stringify(completedStatuses))
+        localStorage.setItem(STORAGE_KEY_OPA_CACHE_TIME, Date.now().toString())
       } catch (e) {
         console.error('[OPA] Failed to cache statuses:', e)
       }

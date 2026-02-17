@@ -20,6 +20,20 @@ import (
 	"github.com/kubestellar/console/pkg/settings"
 )
 
+const (
+	agentDefaultTimeout  = 30 * time.Second
+	agentExtendedTimeout = 60 * time.Second
+	agentCommandTimeout  = 45 * time.Second
+	healthCheckTimeout   = 2 * time.Second
+	registryTimeout      = 10 * time.Second
+	consoleHealthTimeout = 5 * time.Second
+	stabilizationDelay   = 3 * time.Second
+	startupDelay         = 500 * time.Millisecond
+	metricsHistoryTick   = 10 * time.Minute
+	agentFileMode           = 0600
+	defaultHealthCheckURL   = "http://127.0.0.1:8080/health"
+)
+
 // Version is set by ldflags during build
 var Version = "dev"
 
@@ -329,7 +343,7 @@ func (s *Server) Start() error {
 		log.Println("Prediction worker started")
 	}
 	if s.metricsHistory != nil {
-		s.metricsHistory.Start(10 * time.Minute)
+		s.metricsHistory.Start(metricsHistoryTick)
 		log.Println("Metrics history started")
 	}
 
@@ -453,7 +467,7 @@ func (s *Server) handleGPUNodesHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cluster := r.URL.Query().Get("cluster")
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), agentDefaultTimeout)
 	defer cancel()
 
 	var allNodes []k8s.GPUNode
@@ -479,7 +493,7 @@ func (s *Server) handleGPUNodesHTTP(w http.ResponseWriter, r *http.Request) {
 			wg.Add(1)
 			go func(clusterName string) {
 				defer wg.Done()
-				clusterCtx, clusterCancel := context.WithTimeout(ctx, 30*time.Second)
+				clusterCtx, clusterCancel := context.WithTimeout(ctx, agentDefaultTimeout)
 				defer clusterCancel()
 				nodes, err := s.k8sClient.GetGPUNodes(clusterCtx, clusterName)
 				if err == nil && len(nodes) > 0 {
@@ -516,7 +530,7 @@ func (s *Server) handleNodesHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cluster := r.URL.Query().Get("cluster")
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), agentDefaultTimeout)
 	defer cancel()
 
 	var allNodes []k8s.NodeInfo
@@ -544,7 +558,7 @@ func (s *Server) handleNodesHTTP(w http.ResponseWriter, r *http.Request) {
 			wg.Add(1)
 			go func(clusterName string) {
 				defer wg.Done()
-				clusterCtx, clusterCancel := context.WithTimeout(ctx, 30*time.Second)
+				clusterCtx, clusterCancel := context.WithTimeout(ctx, agentDefaultTimeout)
 				defer clusterCancel()
 				nodes, err := s.k8sClient.GetNodes(clusterCtx, clusterName)
 				if err == nil && len(nodes) > 0 {
@@ -594,7 +608,7 @@ func (s *Server) handleEventsHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), agentDefaultTimeout)
 	defer cancel()
 
 	// Get events from the cluster
@@ -639,7 +653,7 @@ func (s *Server) handleNamespacesHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), agentExtendedTimeout)
 	defer cancel()
 
 	namespaces, err := s.k8sClient.ListNamespacesWithDetails(ctx, cluster)
@@ -673,7 +687,7 @@ func (s *Server) handleDeploymentsHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), agentDefaultTimeout)
 	defer cancel()
 
 	// If namespace not specified, get deployments from all namespaces
@@ -708,7 +722,7 @@ func (s *Server) handleReplicaSetsHTTP(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]interface{}{"replicasets": []interface{}{}, "error": "cluster parameter required"})
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), agentDefaultTimeout)
 	defer cancel()
 	replicasets, err := s.k8sClient.GetReplicaSets(ctx, cluster, namespace)
 	if err != nil {
@@ -736,7 +750,7 @@ func (s *Server) handleStatefulSetsHTTP(w http.ResponseWriter, r *http.Request) 
 		json.NewEncoder(w).Encode(map[string]interface{}{"statefulsets": []interface{}{}, "error": "cluster parameter required"})
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), agentDefaultTimeout)
 	defer cancel()
 	statefulsets, err := s.k8sClient.GetStatefulSets(ctx, cluster, namespace)
 	if err != nil {
@@ -764,7 +778,7 @@ func (s *Server) handleDaemonSetsHTTP(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]interface{}{"daemonsets": []interface{}{}, "error": "cluster parameter required"})
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), agentDefaultTimeout)
 	defer cancel()
 	daemonsets, err := s.k8sClient.GetDaemonSets(ctx, cluster, namespace)
 	if err != nil {
@@ -792,7 +806,7 @@ func (s *Server) handleCronJobsHTTP(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]interface{}{"cronjobs": []interface{}{}, "error": "cluster parameter required"})
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), agentDefaultTimeout)
 	defer cancel()
 	cronjobs, err := s.k8sClient.GetCronJobs(ctx, cluster, namespace)
 	if err != nil {
@@ -820,7 +834,7 @@ func (s *Server) handleIngressesHTTP(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]interface{}{"ingresses": []interface{}{}, "error": "cluster parameter required"})
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), agentDefaultTimeout)
 	defer cancel()
 	ingresses, err := s.k8sClient.GetIngresses(ctx, cluster, namespace)
 	if err != nil {
@@ -848,7 +862,7 @@ func (s *Server) handleNetworkPoliciesHTTP(w http.ResponseWriter, r *http.Reques
 		json.NewEncoder(w).Encode(map[string]interface{}{"networkpolicies": []interface{}{}, "error": "cluster parameter required"})
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), agentDefaultTimeout)
 	defer cancel()
 	policies, err := s.k8sClient.GetNetworkPolicies(ctx, cluster, namespace)
 	if err != nil {
@@ -876,7 +890,7 @@ func (s *Server) handleServicesHTTP(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]interface{}{"services": []interface{}{}, "error": "cluster parameter required"})
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), agentDefaultTimeout)
 	defer cancel()
 	services, err := s.k8sClient.GetServices(ctx, cluster, namespace)
 	if err != nil {
@@ -904,7 +918,7 @@ func (s *Server) handleConfigMapsHTTP(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]interface{}{"configmaps": []interface{}{}, "error": "cluster parameter required"})
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), agentDefaultTimeout)
 	defer cancel()
 	configmaps, err := s.k8sClient.GetConfigMaps(ctx, cluster, namespace)
 	if err != nil {
@@ -932,7 +946,7 @@ func (s *Server) handleSecretsHTTP(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]interface{}{"secrets": []interface{}{}, "error": "cluster parameter required"})
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), agentDefaultTimeout)
 	defer cancel()
 	secrets, err := s.k8sClient.GetSecrets(ctx, cluster, namespace)
 	if err != nil {
@@ -960,7 +974,7 @@ func (s *Server) handleServiceAccountsHTTP(w http.ResponseWriter, r *http.Reques
 		json.NewEncoder(w).Encode(map[string]interface{}{"serviceaccounts": []interface{}{}, "error": "cluster parameter required"})
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), agentDefaultTimeout)
 	defer cancel()
 	serviceaccounts, err := s.k8sClient.GetServiceAccounts(ctx, cluster, namespace)
 	if err != nil {
@@ -988,7 +1002,7 @@ func (s *Server) handleJobsHTTP(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]interface{}{"jobs": []interface{}{}, "error": "cluster parameter required"})
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), agentDefaultTimeout)
 	defer cancel()
 	jobs, err := s.k8sClient.GetJobs(ctx, cluster, namespace)
 	if err != nil {
@@ -1016,7 +1030,7 @@ func (s *Server) handleHPAsHTTP(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]interface{}{"hpas": []interface{}{}, "error": "cluster parameter required"})
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), agentDefaultTimeout)
 	defer cancel()
 	hpas, err := s.k8sClient.GetHPAs(ctx, cluster, namespace)
 	if err != nil {
@@ -1044,7 +1058,7 @@ func (s *Server) handlePVCsHTTP(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]interface{}{"pvcs": []interface{}{}, "error": "cluster parameter required"})
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), agentDefaultTimeout)
 	defer cancel()
 	pvcs, err := s.k8sClient.GetPVCs(ctx, cluster, namespace)
 	if err != nil {
@@ -1081,7 +1095,7 @@ func (s *Server) handlePodsHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), agentCommandTimeout)
 	defer cancel()
 
 	pods, err := s.k8sClient.GetPods(ctx, cluster, namespace)
@@ -1122,7 +1136,7 @@ func (s *Server) handleClusterHealthHTTP(w http.ResponseWriter, r *http.Request)
 	// Use background context instead of request context so the health check
 	// continues even if the frontend disconnects. Results are cached, so
 	// completing the check benefits subsequent requests.
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), agentExtendedTimeout)
 	defer cancel()
 
 	health, err := s.k8sClient.GetClusterHealth(ctx, cluster)
@@ -1188,7 +1202,7 @@ func (s *Server) handleRestartBackend(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Wait for backend to become healthy
-	time.Sleep(3 * time.Second)
+	time.Sleep(stabilizationDelay)
 	healthy := s.checkBackendHealth()
 
 	log.Printf("[RestartBackend] Backend restarted (killed=%v, healthy=%v)", killed, healthy)
@@ -1226,7 +1240,7 @@ func (s *Server) killBackendProcess() bool {
 		}
 	}
 
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(startupDelay)
 	return true
 }
 
@@ -1258,8 +1272,8 @@ func (s *Server) startBackendProcess() error {
 
 // checkBackendHealth verifies the backend is responding on port 8080
 func (s *Server) checkBackendHealth() bool {
-	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get("http://127.0.0.1:8080/health")
+	client := &http.Client{Timeout: healthCheckTimeout}
+	resp, err := client.Get(defaultHealthCheckURL)
 	if err != nil {
 		return false
 	}
@@ -2000,7 +2014,7 @@ func (s *Server) saveTokenUsage() {
 	}
 
 	path := getTokenUsagePath()
-	if err := os.WriteFile(path, data, 0600); err != nil {
+	if err := os.WriteFile(path, data, agentFileMode); err != nil {
 		log.Printf("Warning: could not save token usage: %v", err)
 	}
 }
@@ -2562,7 +2576,7 @@ func (s *Server) handleProvidersHealth(w http.ResponseWriter, r *http.Request) {
 	totalProviders := len(providerStatusPageAPI) + len(providerPingEndpoints)
 	results := make([]ProviderHealthStatus, 0, totalProviders)
 
-	client := &http.Client{Timeout: 5 * time.Second}
+	client := &http.Client{Timeout: consoleHealthTimeout}
 
 	// Statuspage.io providers (Anthropic, OpenAI)
 	for id, apiURL := range providerStatusPageAPI {

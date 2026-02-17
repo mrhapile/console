@@ -238,6 +238,7 @@ const CARD_CATALOG = {
     { type: 'iframe_embed', title: 'Iframe Embed', description: 'Embed external dashboards like Grafana, Prometheus, or Kibana', visualization: 'status' },
   ],
   'Misc': [
+    { type: 'buildpacks_status', title: 'Buildpacks Status', description: 'Cloud Native Buildpacks detection, builders, and image build status', visualization: 'status' },
     { type: 'weather', title: 'Weather', description: 'Weather conditions with multi-day forecasts and animated backgrounds', visualization: 'status' },
     { type: 'github_activity', title: 'GitHub Activity', description: 'Monitor GitHub repository activity - PRs, issues, releases, and contributors', visualization: 'table' },
     { type: 'kubectl', title: 'Kubectl', description: 'Interactive kubectl terminal with AI assistance, YAML editor, and command history', visualization: 'table' },
@@ -915,8 +916,8 @@ export function AddCardModal({ isOpen, onClose, onAddCards, existingCardTypes = 
   const tCard = t as (key: string, defaultValue?: string) => string
   const { showToast } = useToast()
   const [activeTab, setActiveTab] = useState<'ai' | 'browse'>('browse')
-  const [showCardFactory, setShowCardFactory] = useState(false)
-  const [showStatFactory, setShowStatFactory] = useState(false)
+  const [isCardFactoryOpen, setIsCardFactoryOpen] = useState(false)
+  const [isStatFactoryOpen, setIsStatFactoryOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [suggestions, setSuggestions] = useState<CardSuggestion[]>([])
   const [selectedCards, setSelectedCards] = useState<Set<number>>(new Set())
@@ -1121,14 +1122,14 @@ export function AddCardModal({ isOpen, onClose, onAddCards, existingCardTypes = 
                     />
                   </div>
                   <button
-                    onClick={() => setShowCardFactory(true)}
+                    onClick={() => setIsCardFactoryOpen(true)}
                     className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 transition-colors text-sm font-medium whitespace-nowrap shrink-0"
                   >
                     <Wand2 className="w-4 h-4" />
                     {t('dashboard.addCard.createCustom')}
                   </button>
                   <button
-                    onClick={() => setShowStatFactory(true)}
+                    onClick={() => setIsStatFactoryOpen(true)}
                     className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 transition-colors text-sm font-medium whitespace-nowrap shrink-0"
                   >
                     <Activity className="w-4 h-4" />
@@ -1424,8 +1425,8 @@ export function AddCardModal({ isOpen, onClose, onAddCards, existingCardTypes = 
 
       {/* Card Factory Modal */}
       <CardFactoryModal
-        isOpen={showCardFactory}
-        onClose={() => setShowCardFactory(false)}
+        isOpen={isCardFactoryOpen}
+        onClose={() => setIsCardFactoryOpen(false)}
         onCardCreated={(cardId) => {
           // Add the newly created dynamic card to the dashboard
           onAddCards([{
@@ -1440,8 +1441,8 @@ export function AddCardModal({ isOpen, onClose, onAddCards, existingCardTypes = 
 
       {/* Stat Block Factory Modal */}
       <StatBlockFactoryModal
-        isOpen={showStatFactory}
-        onClose={() => setShowStatFactory(false)}
+        isOpen={isStatFactoryOpen}
+        onClose={() => setIsStatFactoryOpen(false)}
       />
     </>
   )

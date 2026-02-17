@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCircle, ExternalLink, AlertCircle, FileCheck } from
 import { CardSearchInput } from '../../lib/cards'
 import { useReportCardDataState } from './CardDataContext'
 import { useTranslation } from 'react-i18next'
+import { DynamicCardErrorBoundary } from './DynamicCardErrorBoundary'
 
 interface KyvernoPoliciesProps {
   config?: Record<string, unknown>
@@ -61,7 +62,7 @@ const DEMO_STATS = {
   auditCount: 5,
 }
 
-export function KyvernoPolicies({ config: _config }: KyvernoPoliciesProps) {
+function KyvernoPoliciesInternal({ config: _config }: KyvernoPoliciesProps) {
   const { t } = useTranslation()
   useReportCardDataState({ hasData: true, isFailed: false, consecutiveFailures: 0 })
   const [localSearch, setLocalSearch] = useState('')
@@ -232,5 +233,13 @@ export function KyvernoPolicies({ config: _config }: KyvernoPoliciesProps) {
         </a>
       </div>
     </div>
+  )
+}
+
+export function KyvernoPolicies({ config: _config }: KyvernoPoliciesProps) {
+  return (
+    <DynamicCardErrorBoundary cardId="KyvernoPolicies">
+      <KyvernoPoliciesInternal config={_config} />
+    </DynamicCardErrorBoundary>
   )
 }

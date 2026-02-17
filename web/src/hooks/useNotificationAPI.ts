@@ -1,7 +1,8 @@
 import { useState, useCallback } from 'react'
 import { Alert, AlertChannel } from '../types/alerts'
+import { BACKEND_DEFAULT_URL, STORAGE_KEY_AUTH_TOKEN } from '../lib/constants'
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'
+const API_BASE = import.meta.env.VITE_API_BASE_URL || BACKEND_DEFAULT_URL
 
 interface TestNotificationRequest {
   type: 'slack' | 'email' | 'webhook'
@@ -18,7 +19,7 @@ export function useNotificationAPI() {
   const [error, setError] = useState<string | null>(null)
 
   const getAuthHeaders = useCallback(() => {
-    const token = localStorage.getItem('auth_token')
+    const token = localStorage.getItem(STORAGE_KEY_AUTH_TOKEN)
     return {
       'Content-Type': 'application/json',
       ...(token && { Authorization: `Bearer ${token}` }),

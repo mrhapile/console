@@ -4,6 +4,7 @@ import { useDrillDownActions } from '../../hooks/useDrillDown'
 import { useCardData, commonComparators } from '../../lib/cards/cardHooks'
 import { CardSearchInput, CardControlsRow, CardPaginationFooter } from '../../lib/cards/CardComponents'
 import { useReportCardDataState } from './CardDataContext'
+import { DynamicCardErrorBoundary } from './DynamicCardErrorBoundary'
 
 interface OpenCostOverviewProps {
   config?: {
@@ -40,7 +41,7 @@ const DEMO_NAMESPACE_COSTS: NamespaceCost[] = [
   { namespace: 'ingress-nginx', cpuCost: 120, memCost: 80, storageCost: 5, totalCost: 205 },
 ]
 
-export function OpenCostOverview({ config: _config }: OpenCostOverviewProps) {
+function OpenCostOverviewInternal({ config: _config }: OpenCostOverviewProps) {
   const { t } = useTranslation('common')
   const { drillToCost } = useDrillDownActions()
   useReportCardDataState({ hasData: true, isFailed: false, consecutiveFailures: 0 })
@@ -234,5 +235,13 @@ export function OpenCostOverview({ config: _config }: OpenCostOverviewProps) {
         </a>
       </div>
     </div>
+  )
+}
+
+export function OpenCostOverview({ config: _config }: OpenCostOverviewProps) {
+  return (
+    <DynamicCardErrorBoundary cardId="OpenCostOverview">
+      <OpenCostOverviewInternal config={_config} />
+    </DynamicCardErrorBoundary>
   )
 }

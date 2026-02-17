@@ -8,6 +8,7 @@ import { useCardData, commonComparators } from '../../lib/cards/cardHooks'
 import { CardSearchInput, CardControlsRow, CardPaginationFooter, CardAIActions } from '../../lib/cards/CardComponents'
 import { ClusterBadge } from '../ui/ClusterBadge'
 import { useTranslation } from 'react-i18next'
+import { DynamicCardErrorBoundary } from './DynamicCardErrorBoundary'
 
 type SortByOption = 'status' | 'name' | 'capacity' | 'age'
 
@@ -67,7 +68,7 @@ function getStatusColor(status: string) {
   }
 }
 
-export function PVCStatus() {
+function PVCStatusInternal() {
   const { t } = useTranslation()
   const { pvcs, isLoading, error, consecutiveFailures, isFailed } = usePVCs()
   const { drillToPVC } = useDrillDownActions()
@@ -287,5 +288,13 @@ export function PVCStatus() {
         needsPagination={needsPagination}
       />
     </div>
+  )
+}
+
+export function PVCStatus() {
+  return (
+    <DynamicCardErrorBoundary cardId="PVCStatus">
+      <PVCStatusInternal />
+    </DynamicCardErrorBoundary>
   )
 }

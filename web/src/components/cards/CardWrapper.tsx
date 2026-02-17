@@ -1,7 +1,7 @@
 import { ReactNode, useState, useEffect, useCallback, useRef, useMemo, createContext, useContext, ComponentType, Suspense } from 'react'
 import { createPortal } from 'react-dom'
 import {
-  Maximize2, MoreVertical, Clock, Settings, Replace, Trash2, MessageCircle, RefreshCw, MoveHorizontal, ChevronRight, ChevronDown, Info, Download, Link2,
+  Maximize2, MoreVertical, Clock, Settings, Replace, Trash2, RefreshCw, MoveHorizontal, ChevronRight, ChevronDown, Info, Download, Link2,
   // Card icons
   AlertTriangle, Box, Activity, Database, Server, Cpu, Network, Shield, Package, GitBranch, FileCode, Gauge, AlertCircle, Layers, HardDrive, Globe, Users, Terminal, TrendingUp, Gamepad2, Puzzle, Target, Zap, Crown, Ghost, Bird, Rocket, Wand2, Stethoscope, MonitorCheck, Workflow, Split, Router, BookOpen, Cloudy, Rss, Frame, Wrench, Phone,
 } from 'lucide-react'
@@ -252,6 +252,7 @@ export const CARD_TITLES: Record<string, string> = {
   helm_history: 'Helm History',
   helm_values_diff: 'Helm Values Diff',
   kustomization_status: 'Kustomization Status',
+  buildpacks_status: 'Buildpacks Status',
   overlay_comparison: 'Overlay Comparison',
   chart_versions: 'Helm Chart Versions',
 
@@ -546,7 +547,7 @@ const CARD_ICONS: Record<string, { icon: ComponentType<{ className?: string }>, 
   deployment_missions: { icon: Rocket, color: 'text-blue-400' },
   deployment_progress: { icon: Clock, color: 'text-blue-400' },
   deployment_status: { icon: Box, color: 'text-purple-400' },
-  deployment_issues: { icon: AlertTriangle, color: 'text-orange-400' },
+  deployment_issues: { icon: AlertTriangle, color: 'text-red-400' },
   statefulset_status: { icon: Database, color: 'text-purple-400' },
   daemonset_status: { icon: Server, color: 'text-blue-400' },
   replicaset_status: { icon: Box, color: 'text-cyan-400' },
@@ -556,7 +557,7 @@ const CARD_ICONS: Record<string, { icon: ComponentType<{ className?: string }>, 
   resource_marshall: { icon: GitBranch, color: 'text-blue-400' },
 
   // Pod and resource cards
-  pod_issues: { icon: AlertTriangle, color: 'text-orange-400' },
+  pod_issues: { icon: AlertTriangle, color: 'text-red-400' },
   top_pods: { icon: Box, color: 'text-purple-400' },
   resource_capacity: { icon: Gauge, color: 'text-blue-400' },
   resource_usage: { icon: Gauge, color: 'text-purple-400' },
@@ -593,6 +594,7 @@ const CARD_ICONS: Record<string, { icon: ComponentType<{ className?: string }>, 
   helm_history: { icon: Clock, color: 'text-purple-400' },
   helm_values_diff: { icon: FileCode, color: 'text-yellow-400' },
   kustomization_status: { icon: Layers, color: 'text-purple-400' },
+  buildpacks_status: { icon: Package, color: 'text-purple-400' },
   overlay_comparison: { icon: Layers, color: 'text-blue-400' },
   chart_versions: { icon: Package, color: 'text-emerald-400' },
 
@@ -1273,6 +1275,7 @@ export function CardWrapper({
                 <RefreshCw className={cn('w-4 h-4', (isVisuallySpinning || effectiveIsLoading || forceSkeletonForOffline) && 'animate-spin')} />
               </button>
             )}
+            {/* Chat button - feature not yet implemented
             <button
               data-tour="card-chat"
               onClick={() => {}}
@@ -1281,6 +1284,7 @@ export function CardWrapper({
             >
               <MessageCircle className="w-4 h-4" />
             </button>
+            */}
             <button
               onClick={() => setIsExpanded(true)}
               className="p-1.5 rounded-lg hover:bg-secondary/50 text-muted-foreground hover:text-foreground transition-colors"

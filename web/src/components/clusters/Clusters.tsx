@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from 'react'
+import { useState, useMemo, useEffect, useCallback, useId } from 'react'
 import { useSearchParams, useLocation } from 'react-router-dom'
 import { Pencil, X, Check, Loader2, WifiOff, ChevronRight, CheckCircle, AlertTriangle, AlertCircle, ChevronDown, HardDrive, Network, FolderOpen, Plus, Trash2, Box, Layers, Server, List, GitBranch, Eye, Terminal, FileText, Info, Activity, Briefcase, Lock, Settings, LayoutGrid, Wrench } from 'lucide-react'
 import {
@@ -50,6 +50,7 @@ import { Gauge } from '../charts/Gauge'
 import { ClusterCardSkeleton, StatsOverviewSkeleton } from '../ui/ClusterCardSkeleton'
 import { useIsModeSwitching } from '../../lib/unified/demo'
 import { useTranslation } from 'react-i18next'
+import { LOCAL_AGENT_HTTP_URL, STORAGE_KEY_CLUSTER_LAYOUT } from '../../lib/constants'
 
 // Helper to format labels/annotations for tooltip
 function formatMetadata(labels?: Record<string, string>, annotations?: Record<string, string>): string {
@@ -95,6 +96,7 @@ function ResourceDetailModal({ resource, onClose }: ResourceDetailModalProps) {
   const { t } = useTranslation()
   const [activeTab, setActiveTab] = useState<'describe' | 'labels' | 'logs'>('describe')
   const { startMission } = useMissions()
+  const titleId = useId()
 
   const handleRepairPod = () => {
     const issues = resource.data?.issues as string[] | undefined
@@ -182,10 +184,20 @@ Start by running diagnostic commands to understand what's happening.`,
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="glass p-6 rounded-lg w-[700px] max-h-[80vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+    <div 
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" 
+      onClick={onClose}
+      role="presentation"
+    >
+      <div 
+        className="glass p-6 rounded-lg w-[700px] max-h-[80vh] overflow-hidden flex flex-col" 
+        onClick={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+      >
         <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
+          <div id={titleId} className="flex items-center gap-2">
             <span className={`flex items-center gap-1 px-2 py-1 rounded text-sm font-medium ${getKindColors()}`}>
               {getKindIcon()}
               {resource.kind}
@@ -829,6 +841,7 @@ export function _ClusterDetail({ clusterName, onClose, onRename }: _ClusterDetai
   const [showNodeDetails, setShowNodeDetails] = useState(false)
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set())
   const [expandedNamespace, setExpandedNamespace] = useState<string | null>(null)
+  const titleId = useId()
 
   // ESC to close
   useEffect(() => {
@@ -892,8 +905,18 @@ export function _ClusterDetail({ clusterName, onClose, onRename }: _ClusterDetai
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="glass p-6 rounded-lg w-[800px] max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+    <div 
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" 
+      onClick={onClose}
+      role="presentation"
+    >
+      <div 
+        className="glass p-6 rounded-lg w-[800px] max-h-[80vh] overflow-y-auto" 
+        onClick={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+      >
         {/* Header with status icons */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
@@ -906,11 +929,11 @@ export function _ClusterDetail({ clusterName, onClose, onRename }: _ClusterDetai
                 <CheckCircle className="w-4 h-4" />
               </span>
             ) : (
-              <span className="flex items-center gap-1.5 px-2 py-1 rounded bg-orange-500/20 text-orange-400" title={t('cluster.unhealthy')}>
+              <span className="flex items-center gap-1.5 px-2 py-1 rounded bg-red-500/20 text-red-400" title={t('cluster.unhealthy')}>
                 <AlertTriangle className="w-4 h-4" />
               </span>
             )}
-            <h2 className="text-xl font-semibold text-foreground">{clusterName.split('/').pop()}</h2>
+            <h2 id={titleId} className="text-xl font-semibold text-foreground">{clusterName.split('/').pop()}</h2>
             {onRename && (
               <button
                 onClick={() => onRename(clusterName)}
@@ -1043,7 +1066,7 @@ export function _ClusterDetail({ clusterName, onClose, onRename }: _ClusterDetai
         {(podIssues.length > 0 || clusterDeploymentIssues.length > 0) && (
           <div className="mb-6">
             <h3 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-orange-400" />
+              <AlertTriangle className="w-4 h-4 text-red-400" />
               Issues ({podIssues.length + clusterDeploymentIssues.length})
             </h3>
             <div className="space-y-2">
@@ -1124,24 +1147,24 @@ export function _ClusterDetail({ clusterName, onClose, onRename }: _ClusterDetai
                 return (
                   <div
                     key={issueId}
-                    className="rounded-lg bg-orange-500/10 border border-orange-500/20 overflow-hidden"
+                    className="rounded-lg bg-red-500/10 border border-red-500/20 overflow-hidden"
                   >
                     <button
                       onClick={() => toggleIssue(issueId)}
-                      className="w-full p-3 flex items-center justify-between text-left hover:bg-orange-500/5 transition-colors"
+                      className="w-full p-3 flex items-center justify-between text-left hover:bg-red-500/5 transition-colors"
                     >
                       <div className="flex items-center gap-2">
-                        {isExpanded ? <ChevronDown className="w-4 h-4 text-orange-400" /> : <ChevronRight className="w-4 h-4 text-orange-400" />}
+                        {isExpanded ? <ChevronDown className="w-4 h-4 text-red-400" /> : <ChevronRight className="w-4 h-4 text-red-400" />}
                         <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 font-medium"><Layers className="w-3 h-3" />Deploy</span>
                         <span className="font-medium text-foreground">{issue.name}</span>
                         <span className="text-xs text-muted-foreground">({issue.namespace})</span>
                       </div>
-                      <span className="text-xs px-2 py-1 rounded bg-orange-500/20 text-orange-400">
+                      <span className="text-xs px-2 py-1 rounded bg-red-500/20 text-red-400">
                         {issue.readyReplicas}/{issue.replicas} ready
                       </span>
                     </button>
                     {isExpanded && (
-                      <div className="px-3 pb-3 pt-0 border-t border-orange-500/20">
+                      <div className="px-3 pb-3 pt-0 border-t border-red-500/20">
                         <div className="pl-6 space-y-2 text-sm">
                           <div>
                             <span className="text-muted-foreground">{t('drilldown.fields.namespace')}</span>
@@ -1422,7 +1445,7 @@ export function Clusters() {
   const [sortBy, setSortBy] = useState<'name' | 'nodes' | 'pods' | 'health'>('name')
   const [sortAsc, setSortAsc] = useState(true)
   const [layoutMode, setLayoutMode] = useState<ClusterLayoutMode>(() => {
-    const stored = localStorage.getItem('kubestellar-cluster-layout-mode')
+    const stored = localStorage.getItem(STORAGE_KEY_CLUSTER_LAYOUT)
     return (stored as ClusterLayoutMode) || 'grid'
   })
   const [renamingCluster, setRenamingCluster] = useState<string | null>(null)
@@ -1516,7 +1539,7 @@ export function Clusters() {
 
   const handleRenameContext = async (oldName: string, newName: string) => {
     if (!isConnected) throw new Error('Local agent not connected')
-    const response = await fetch('http://127.0.0.1:8585/rename-context', {
+    const response = await fetch(`${LOCAL_AGENT_HTTP_URL}/rename-context`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ oldName, newName }),
@@ -1769,7 +1792,7 @@ export function Clusters() {
                 layoutMode={layoutMode}
                 onLayoutModeChange={(mode) => {
                   setLayoutMode(mode)
-                  localStorage.setItem('kubestellar-cluster-layout-mode', mode)
+                  localStorage.setItem(STORAGE_KEY_CLUSTER_LAYOUT, mode)
                 }}
               />
               <ClusterGrid

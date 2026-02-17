@@ -8,6 +8,7 @@
 import { useState, useMemo } from 'react'
 import { Download, Monitor, Smartphone, Copy, Check, ExternalLink, Info } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { BACKEND_DEFAULT_URL } from '../../lib/constants'
 import { BaseModal } from '../../lib/modals'
 import {
   WIDGET_CARDS,
@@ -33,7 +34,7 @@ export function WidgetExportModal({ isOpen, onClose, cardType, mode: _mode = 'pi
   const [selectedCard, setSelectedCard] = useState<string | null>(cardType || null)
   const [selectedStats, setSelectedStats] = useState<string[]>([])
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null)
-  const [apiEndpoint, setApiEndpoint] = useState('http://localhost:8080')
+  const [apiEndpoint, setApiEndpoint] = useState(BACKEND_DEFAULT_URL)
   const [refreshInterval, setRefreshInterval] = useState(30)
   const [copied, setCopied] = useState(false)
   const [showCode, setShowCode] = useState(false)
@@ -113,7 +114,7 @@ export function WidgetExportModal({ isOpen, onClose, cardType, mode: _mode = 'pi
   }
 
   return (
-    <BaseModal isOpen={isOpen} onClose={onClose} size="lg">
+    <BaseModal isOpen={isOpen} onClose={onClose} size="lg" closeOnBackdrop={false}>
       <BaseModal.Header
         title={t('widgets.exportDesktopWidget')}
         icon={Download}
@@ -951,7 +952,7 @@ function NightlyE2EPreview() {
         { acronym: 'PPC', dots: ['g','r','g','g','g','r','g'] },
         { acronym: 'SA', dots: ['g','g','g','g','g','g','g'] },
         { acronym: 'TPC', dots: ['g','g','g','r','g','g','g'] },
-        { acronym: 'WEP', dots: ['g','g','g','g','g','g','y'] },
+        { acronym: 'WEP', dots: ['g','g','g','g','g','g','b'] },
         { acronym: 'WVA', dots: ['g','r','g','g','r','g','g'] },
         { acronym: 'BM', dots: ['r','r','g','r','g','r','g'] },
       ],
@@ -962,7 +963,7 @@ function NightlyE2EPreview() {
         { acronym: 'IS', dots: ['g','g','g','g','g','g','g'] },
         { acronym: 'PD', dots: ['r','g','g','g','g','g','g'] },
         { acronym: 'WEP', dots: ['g','g','g','g','g','g','g'] },
-        { acronym: 'BM', dots: ['y','g','g','r','g','g','g'] },
+        { acronym: 'BM', dots: ['b','g','g','r','g','g','g'] },
       ],
     },
     {
@@ -975,7 +976,7 @@ function NightlyE2EPreview() {
       ],
     },
   ]
-  const dotColor: Record<string, string> = { g: '#22c55e', r: '#ef4444', y: '#eab308' }
+  const dotColor: Record<string, string> = { g: '#22c55e', r: '#ef4444', b: '#60a5fa' }
 
   return (
     <div style={{ ...ps.card, width: 320, fontSize: '10px', padding: '10px 12px' }}>
@@ -993,7 +994,7 @@ function NightlyE2EPreview() {
               <span style={{ width: '24px', fontWeight: 600, color: '#94a3b8' }}>{g.acronym}</span>
               <div style={{ display: 'flex', gap: '2px' }}>
                 {g.dots.length > 0 ? g.dots.map((d, i) => (
-                  <span key={i} style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: dotColor[d], display: 'inline-block' }} />
+                  <span key={i} style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: dotColor[d], display: 'inline-block', ...(d === 'b' ? { animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' } : {}) }} />
                 )) : (
                   <span style={{ color: '#4b5563', fontSize: '8px' }}>no runs</span>
                 )}

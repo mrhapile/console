@@ -71,6 +71,7 @@ const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
 const COLOR_CLASSES: Record<string, string> = {
   purple: 'text-purple-400',
   green: 'text-green-400',
+  red: 'text-red-400',
   orange: 'text-orange-400',
   yellow: 'text-yellow-400',
   cyan: 'text-cyan-400',
@@ -179,7 +180,7 @@ function StatBlock({ blockId, stats, hasData, onClick, color, icon }: StatBlockP
 
   // Value color - some blocks have colored values
   const valueColor = ['healthy'].includes(blockId) ? 'text-green-400' :
-    ['unhealthy'].includes(blockId) ? 'text-orange-400' :
+    ['unhealthy'].includes(blockId) ? 'text-red-400' :
     ['unreachable'].includes(blockId) ? 'text-yellow-400' : 'text-foreground'
 
   return (
@@ -215,7 +216,7 @@ export function StatsOverview({
 }: StatsOverviewProps) {
   const { t: _t } = useTranslation()
   const { blocks, saveBlocks, visibleBlocks, defaultBlocks } = useStatsConfig(dashboardType, configKey)
-  const [showConfig, setShowConfig] = useState(false)
+  const [isConfigOpen, setIsConfigOpen] = useState(false)
   const { status: agentStatus } = useLocalAgent()
   const { isDemoMode } = useDemoMode()
 
@@ -271,7 +272,7 @@ export function StatsOverview({
       {/* Configure button */}
       {showConfigButton && (
         <button
-          onClick={() => setShowConfig(true)}
+          onClick={() => setIsConfigOpen(true)}
           className="absolute -top-8 right-0 p-1 text-muted-foreground hover:text-foreground hover:bg-secondary rounded transition-colors"
           title="Configure stats"
         >
@@ -310,8 +311,8 @@ export function StatsOverview({
 
       {/* Config modal */}
       <StatsConfigModal
-        isOpen={showConfig}
-        onClose={() => setShowConfig(false)}
+        isOpen={isConfigOpen}
+        onClose={() => setIsConfigOpen(false)}
         blocks={blocks}
         onSave={saveBlocks}
         defaultBlocks={defaultBlocks}

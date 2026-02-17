@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { isAgentUnavailable } from './useLocalAgent'
 import { clusterCacheRef } from './mcp/shared'
 import { isDemoMode } from '../lib/demoMode'
+import { LOCAL_AGENT_HTTP_URL, STORAGE_KEY_TOKEN } from '../lib/constants'
 
 // Types
 export interface Workload {
@@ -50,14 +51,12 @@ export interface DeployResult {
 }
 
 function authHeaders(): Record<string, string> {
-  const token = localStorage.getItem('token')
+  const token = localStorage.getItem(STORAGE_KEY_TOKEN)
   const headers: Record<string, string> = {}
   if (token) headers['Authorization'] = `Bearer ${token}`
   return headers
 }
 
-
-const AGENT_URL = 'http://127.0.0.1:8585'
 
 function getDemoWorkloads(cluster?: string, namespace?: string): Workload[] {
   const workloads: Workload[] = [
@@ -99,7 +98,7 @@ async function fetchWorkloadsViaAgent(opts?: {
 
       const ctrl = new AbortController()
       const tid = setTimeout(() => ctrl.abort(), 15000)
-      const res = await fetch(`${AGENT_URL}/deployments?${params}`, {
+      const res = await fetch(`${LOCAL_AGENT_HTTP_URL}/deployments?${params}`, {
         signal: ctrl.signal,
         headers: { Accept: 'application/json' },
       })

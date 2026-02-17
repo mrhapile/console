@@ -1,5 +1,13 @@
+import {
+  MCP_HOOK_TIMEOUT_MS,
+  BACKEND_HEALTH_CHECK_TIMEOUT_MS,
+  STORAGE_KEY_TOKEN,
+  STORAGE_KEY_USER_CACHE,
+  DEMO_TOKEN_VALUE,
+} from './constants'
+
 const API_BASE = ''
-const DEFAULT_TIMEOUT = 15000 // 15 seconds default timeout
+const DEFAULT_TIMEOUT = MCP_HOOK_TIMEOUT_MS
 const BACKEND_CHECK_INTERVAL = 10000 // 10 seconds between backend checks when unavailable
 
 // Error class for unauthenticated requests
@@ -35,8 +43,8 @@ function handle401(): void {
   showSessionExpiredBanner()
 
   // Clear auth state
-  localStorage.removeItem('token')
-  localStorage.removeItem('kc-user-cache')
+  localStorage.removeItem(STORAGE_KEY_TOKEN)
+  localStorage.removeItem(STORAGE_KEY_USER_CACHE)
 
   // Redirect to login after a delay so the user sees the banner
   setTimeout(() => {
@@ -134,7 +142,7 @@ export async function checkBackendAvailability(forceCheck = false): Promise<bool
     try {
       const response = await fetch(`${API_BASE}/api/health`, {
         method: 'GET',
-        signal: AbortSignal.timeout(2000),
+        signal: AbortSignal.timeout(BACKEND_HEALTH_CHECK_TIMEOUT_MS),
       })
       // Backend is available if it responds at all (even 401 unauthorized)
       // Only 5xx or network errors indicate backend is down
@@ -175,7 +183,7 @@ export async function checkOAuthConfigured(): Promise<{ backendUp: boolean; oaut
   try {
     const response = await fetch(`${API_BASE}/health`, {
       method: 'GET',
-      signal: AbortSignal.timeout(2000),
+      signal: AbortSignal.timeout(BACKEND_HEALTH_CHECK_TIMEOUT_MS),
     })
     if (!response.ok) return { backendUp: false, oauthConfigured: false }
     const data = await response.json()
@@ -233,7 +241,7 @@ class ApiClient {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     }
-    const token = localStorage.getItem('token')
+    const token = localStorage.getItem(STORAGE_KEY_TOKEN)
     if (token) {
       headers['Authorization'] = `Bearer ${token}`
     }
@@ -241,9 +249,9 @@ class ApiClient {
   }
 
   private hasToken(): boolean {
-    const token = localStorage.getItem('token')
+    const token = localStorage.getItem(STORAGE_KEY_TOKEN)
     // Demo token doesn't count as a real token for backend API calls
-    return !!token && token !== 'demo-token'
+    return !!token && token !== DEMO_TOKEN_VALUE
   }
 
   private createAbortController(timeout: number): { controller: AbortController; timeoutId: ReturnType<typeof setTimeout> } {
