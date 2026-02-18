@@ -706,6 +706,9 @@ export interface UseCacheOptions<T> {
   /** When true and demoData is provided, fall back to demoData if live fetch returns empty data.
    *  Use this for "demo until X is installed" cards that are in DEMO_DATA_CARDS. (default: false) */
   demoWhenEmpty?: boolean
+  /** When true, the fetcher runs even in demo mode. Use for cards that serve live data
+   *  on Netlify (e.g. nightly E2E status backed by a Netlify Function). (default: false) */
+  liveInDemoMode?: boolean
   /** Merge function for combining old and new data */
   merge?: (oldData: T, newData: T) => T
   /** Share cache across components with same key (default: true) */
@@ -749,6 +752,7 @@ export function useCache<T>({
   autoRefresh = true,
   enabled = true,
   demoWhenEmpty = false,
+  liveInDemoMode = false,
   merge,
   shared = true,
   progressiveFetcher,
@@ -757,8 +761,8 @@ export function useCache<T>({
   const demoMode = useSyncExternalStore(subscribeDemoMode, isDemoMode, isDemoMode)
 
   // Effective enabled: both the passed prop AND not in demo mode
-  // This handles cases where enabled: !isDemoMode() was passed but component didn't re-render
-  const effectiveEnabled = enabled && !demoMode
+  // liveInDemoMode bypasses the demo check for cards backed by serverless functions
+  const effectiveEnabled = enabled && (!demoMode || liveInDemoMode)
 
   // Get or create cache store
   const storeRef = useRef<CacheStore<T> | null>(null)

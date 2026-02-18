@@ -44,6 +44,7 @@ export function useNightlyE2EData() {
     demoData: { guides: DEMO_DATA, isDemo: true },
     persist: true,
     refreshInterval,
+    liveInDemoMode: true, // Backed by Netlify Function — always fetch live data
     fetcher: async () => {
       // Try authenticated endpoint first, then public fallback
       const endpoints = ['/api/nightly-e2e/runs', '/api/public/nightly-e2e/runs']
