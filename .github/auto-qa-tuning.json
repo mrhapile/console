@@ -1,8 +1,65 @@
 {
   "schema_version": 1,
-  "last_updated": "",
+  "last_updated": "2026-02-18T02:13:26Z",
   "rolling_window_days": 30,
-  "categories": {},
+  "categories": {
+    "other": {
+      "merged": 1,
+      "closed": 2,
+      "acceptance_rate": 0.33,
+      "status": "normal",
+      "last_evaluated": "2026-02-18T02:13:26Z"
+    },
+    "security": {
+      "merged": 1,
+      "closed": 0,
+      "acceptance_rate": 1,
+      "status": "normal",
+      "last_evaluated": "2026-02-18T02:13:26Z"
+    },
+    "resilience": {
+      "merged": 1,
+      "closed": 1,
+      "acceptance_rate": 0.5,
+      "status": "normal",
+      "last_evaluated": "2026-02-18T02:13:26Z"
+    },
+    "performance": {
+      "merged": 1,
+      "closed": 0,
+      "acceptance_rate": 1,
+      "status": "normal",
+      "last_evaluated": "2026-02-18T02:13:26Z"
+    },
+    "consistency": {
+      "merged": 2,
+      "closed": 0,
+      "acceptance_rate": 1,
+      "status": "normal",
+      "last_evaluated": "2026-02-18T02:13:26Z"
+    },
+    "dom-errors": {
+      "merged": 1,
+      "closed": 0,
+      "acceptance_rate": 1,
+      "status": "normal",
+      "last_evaluated": "2026-02-18T02:13:26Z"
+    },
+    "a11y": {
+      "merged": 0,
+      "closed": 2,
+      "acceptance_rate": 0,
+      "status": "normal",
+      "last_evaluated": "2026-02-18T02:13:26Z"
+    },
+    "ui-design": {
+      "merged": 0,
+      "closed": 1,
+      "acceptance_rate": 0,
+      "status": "normal",
+      "last_evaluated": "2026-02-18T02:13:26Z"
+    }
+  },
   "weekly_insights": {
     "best_pr_size": "",
     "size_acceptance": {},
@@ -13,5 +70,13 @@
     "last_scan_date": "",
     "suggested_checks": []
   },
-  "history": []
+  "history": [
+    {
+      "date": "2026-02-18",
+      "total_merged": 7,
+      "total_closed": 6,
+      "categories_blocked": [],
+      "categories_boosted": []
+    }
+  ]
 }
