@@ -538,3 +538,173 @@ func TestMCS_ParseConditions(t *testing.T) {
 		t.Errorf("expected 2 conditions, got %d", len(exports[0].Conditions))
 	}
 }
+
+func TestParsePorts_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name      string
+		ports     []interface{}
+		wantCount int
+		wantPort  int32
+	}{
+		{
+			name: "int64 port",
+			ports: []interface{}{
+				map[string]interface{}{"port": int64(8080), "name": "http"},
+			},
+			wantCount: 1,
+			wantPort:  8080,
+		},
+		{
+			name: "float64 port",
+			ports: []interface{}{
+				map[string]interface{}{"port": float64(443), "name": "https"},
+			},
+			wantCount: 1,
+			wantPort:  443,
+		},
+		{
+			name: "unexpected port type (string) - skipped",
+			ports: []interface{}{
+				map[string]interface{}{"port": "not-a-number", "name": "broken"},
+			},
+			wantCount: 1,
+			wantPort:  0, // port stays at zero default
+		},
+		{
+			name: "non-map item - skipped",
+			ports: []interface{}{
+				"not-a-map",
+				int64(42),
+			},
+			wantCount: 0,
+		},
+		{
+			name:      "empty ports",
+			ports:     []interface{}{},
+			wantCount: 0,
+		},
+		{
+			name: "port with appProtocol",
+			ports: []interface{}{
+				map[string]interface{}{
+					"port":        int64(9090),
+					"protocol":    "UDP",
+					"appProtocol": "grpc",
+					"name":        "metrics",
+				},
+			},
+			wantCount: 1,
+			wantPort:  9090,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parsePorts(tt.ports)
+			if len(result) != tt.wantCount {
+				t.Errorf("expected %d ports, got %d", tt.wantCount, len(result))
+			}
+			if tt.wantCount > 0 && len(result) > 0 {
+				if result[0].Port != tt.wantPort {
+					t.Errorf("expected port %d, got %d", tt.wantPort, result[0].Port)
+				}
+			}
+		})
+	}
+}
+
+func TestDetermineServiceExportStatus_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name       string
+		conditions []v1alpha1.Condition
+		want       v1alpha1.ServiceExportStatus
+	}{
+		{
+			name:       "No conditions = Pending",
+			conditions: []v1alpha1.Condition{},
+			want:       v1alpha1.ServiceExportStatusPending,
+		},
+		{
+			name: "Valid=True = Ready",
+			conditions: []v1alpha1.Condition{
+				{Type: "Valid", Status: "True"},
+			},
+			want: v1alpha1.ServiceExportStatusReady,
+		},
+		{
+			name: "Ready=False = Failed",
+			conditions: []v1alpha1.Condition{
+				{Type: "Ready", Status: "False"},
+			},
+			want: v1alpha1.ServiceExportStatusFailed,
+		},
+		{
+			name: "Non-matching condition types = Unknown",
+			conditions: []v1alpha1.Condition{
+				{Type: "Synced", Status: "True"},
+				{Type: "Available", Status: "True"},
+			},
+			want: v1alpha1.ServiceExportStatusUnknown,
+		},
+		{
+			name: "Valid with unknown status = Unknown",
+			conditions: []v1alpha1.Condition{
+				{Type: "Valid", Status: "Unknown"},
+			},
+			want: v1alpha1.ServiceExportStatusUnknown,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := determineServiceExportStatus(tt.conditions)
+			if got != tt.want {
+				t.Errorf("determineServiceExportStatus() = %s, want %s", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseServiceExportsFromList_NonUnstructuredList(t *testing.T) {
+	// Test the fallback branch when input is not *unstructured.UnstructuredList
+	m, _ := NewMultiClusterClient("")
+
+	// Pass nil — should return empty and no error
+	result, err := m.parseServiceExportsFromList(nil, "c1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 0 {
+		t.Errorf("expected 0 exports for nil input, got %d", len(result))
+	}
+
+	// Pass a string — should return empty and no error
+	result, err = m.parseServiceExportsFromList("not-a-list", "c1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 0 {
+		t.Errorf("expected 0 exports for string input, got %d", len(result))
+	}
+}
+
+func TestParseServiceImportsFromList_NonUnstructuredList(t *testing.T) {
+	// Test the fallback branch when input is not *unstructured.UnstructuredList
+	m, _ := NewMultiClusterClient("")
+
+	result, err := m.parseServiceImportsFromList(nil, "c1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 0 {
+		t.Errorf("expected 0 imports for nil input, got %d", len(result))
+	}
+
+	result, err = m.parseServiceImportsFromList("not-a-list", "c1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 0 {
+		t.Errorf("expected 0 imports for string input, got %d", len(result))
+	}
+}

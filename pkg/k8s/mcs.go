@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"context"
+	"log"
 	"sync"
 	"time"
 
@@ -88,7 +89,9 @@ func (m *MultiClusterClient) parseServiceExportsFromList(list interface{}, conte
 
 			// Parse conditions from the unstructured content
 			content := item.UnstructuredContent()
-			if conditions, found, _ := unstructuredNestedSlice(content, "status", "conditions"); found {
+			if conditions, found, err := unstructuredNestedSlice(content, "status", "conditions"); err != nil {
+				log.Printf("[mcs] error reading conditions for ServiceExport %s: %v", item.GetName(), err)
+			} else if found {
 				export.Conditions = parseConditions(conditions)
 				export.Status = determineServiceExportStatus(export.Conditions)
 			}
@@ -177,17 +180,23 @@ func (m *MultiClusterClient) parseServiceImportsFromList(list interface{}, conte
 			content := item.UnstructuredContent()
 
 			// Parse spec
-			if spec, found, _ := unstructuredNestedMap(content, "spec"); found {
+			if spec, found, err := unstructuredNestedMap(content, "spec"); err != nil {
+				log.Printf("[mcs] error reading spec for ServiceImport %s: %v", item.GetName(), err)
+			} else if found {
 				if t, ok := spec["type"].(string); ok {
 					imp.Type = v1alpha1.ServiceImportType(t)
 				}
-				if ports, found, _ := unstructuredNestedSlice(content, "spec", "ports"); found {
+				if ports, found, err := unstructuredNestedSlice(content, "spec", "ports"); err != nil {
+					log.Printf("[mcs] error reading ports for ServiceImport %s: %v", item.GetName(), err)
+				} else if found {
 					imp.Ports = parsePorts(ports)
 				}
 			}
 
 			// Parse status for source cluster
-			if clusters, found, _ := unstructuredNestedSlice(content, "status", "clusters"); found {
+			if clusters, found, err := unstructuredNestedSlice(content, "status", "clusters"); err != nil {
+				log.Printf("[mcs] error reading clusters for ServiceImport %s: %v", item.GetName(), err)
+			} else if found {
 				if len(clusters) > 0 {
 					if cluster, ok := clusters[0].(map[string]interface{}); ok {
 						if name, ok := cluster["cluster"].(string); ok {
@@ -201,7 +210,9 @@ func (m *MultiClusterClient) parseServiceImportsFromList(list interface{}, conte
 			imp.DNSName = imp.Name + "." + imp.Namespace + ".svc.clusterset.local"
 
 			// Parse conditions
-			if conditions, found, _ := unstructuredNestedSlice(content, "status", "conditions"); found {
+			if conditions, found, err := unstructuredNestedSlice(content, "status", "conditions"); err != nil {
+				log.Printf("[mcs] error reading conditions for ServiceImport %s: %v", item.GetName(), err)
+			} else if found {
 				imp.Conditions = parseConditions(conditions)
 			}
 

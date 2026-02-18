@@ -249,33 +249,128 @@ func TestListHTTPRoutes(t *testing.T) {
 }
 
 func TestDetermineGatewayStatus(t *testing.T) {
-	// Private function, but we can verify it via ListGateways or if exported via other means.
-	// Since we are in package k8s, we can call it directly.
 	tests := []struct {
+		name       string
 		conditions []v1alpha1.Condition
 		want       v1alpha1.GatewayStatus
 	}{
 		{
+			"Programmed",
 			[]v1alpha1.Condition{{Type: "Programmed", Status: "True"}},
 			v1alpha1.GatewayStatusProgrammed,
 		},
 		{
+			"Accepted only",
 			[]v1alpha1.Condition{{Type: "Accepted", Status: "True"}},
 			v1alpha1.GatewayStatusAccepted,
 		},
 		{
+			"Not accepted",
 			[]v1alpha1.Condition{{Type: "Accepted", Status: "False"}},
 			v1alpha1.GatewayStatusNotAccepted,
 		},
 		{
+			"Empty = Pending",
 			[]v1alpha1.Condition{},
 			v1alpha1.GatewayStatusPending,
+		},
+		{
+			"Non-matching conditions = Unknown",
+			[]v1alpha1.Condition{{Type: "Ready", Status: "True"}},
+			v1alpha1.GatewayStatusUnknown,
+		},
+		{
+			"Programmed takes precedence over Accepted",
+			[]v1alpha1.Condition{
+				{Type: "Accepted", Status: "True"},
+				{Type: "Programmed", Status: "True"},
+			},
+			v1alpha1.GatewayStatusProgrammed,
 		},
 	}
 
 	for _, tt := range tests {
-		if got := determineGatewayStatus(tt.conditions); got != tt.want {
-			t.Errorf("determineGatewayStatus(%v) = %v, want %v", tt.conditions, got, tt.want)
-		}
+		t.Run(tt.name, func(t *testing.T) {
+			if got := determineGatewayStatus(tt.conditions); got != tt.want {
+				t.Errorf("determineGatewayStatus() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDetermineHTTPRouteStatus(t *testing.T) {
+	tests := []struct {
+		name       string
+		conditions []v1alpha1.Condition
+		want       v1alpha1.HTTPRouteStatus
+	}{
+		{
+			"All accepted",
+			[]v1alpha1.Condition{
+				{Type: "Accepted", Status: "True"},
+				{Type: "Accepted", Status: "True"},
+			},
+			v1alpha1.HTTPRouteStatusAccepted,
+		},
+		{
+			"Partially accepted",
+			[]v1alpha1.Condition{
+				{Type: "Accepted", Status: "True"},
+				{Type: "Accepted", Status: "False"},
+			},
+			v1alpha1.HTTPRouteStatusPartiallyValid,
+		},
+		{
+			"None accepted",
+			[]v1alpha1.Condition{
+				{Type: "Accepted", Status: "False"},
+			},
+			v1alpha1.HTTPRouteStatusNotAccepted,
+		},
+		{
+			"No Accepted conditions = Unknown",
+			[]v1alpha1.Condition{
+				{Type: "Resolved", Status: "True"},
+			},
+			v1alpha1.HTTPRouteStatusUnknown,
+		},
+		{
+			"Empty = Unknown",
+			[]v1alpha1.Condition{},
+			v1alpha1.HTTPRouteStatusUnknown,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := determineHTTPRouteStatus(tt.conditions); got != tt.want {
+				t.Errorf("determineHTTPRouteStatus() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseGatewaysFromList_NonUnstructuredList(t *testing.T) {
+	m, _ := NewMultiClusterClient("")
+
+	// Pass nil to trigger the fallback branch
+	result, err := m.parseGatewaysFromList(nil, "c1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 0 {
+		t.Errorf("expected 0 gateways for nil input, got %d", len(result))
+	}
+}
+
+func TestParseHTTPRoutesFromList_NonUnstructuredList(t *testing.T) {
+	m, _ := NewMultiClusterClient("")
+
+	result, err := m.parseHTTPRoutesFromList(nil, "c1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 0 {
+		t.Errorf("expected 0 routes for nil input, got %d", len(result))
 	}
 }
