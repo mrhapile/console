@@ -69,28 +69,39 @@ func TestDeleteWorkload(t *testing.T) {
 func TestGetClusterCapabilities(t *testing.T) {
 	m, _ := NewMultiClusterClient("")
 
-	// Setup fake client for cluster c1
-	fakeClient := k8sfake.NewSimpleClientset()
-	m.clients = map[string]kubernetes.Interface{
-		"c1": fakeClient,
-	}
-
-	node := &corev1.Node{
+	node1 := &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "node1",
 			Labels: map[string]string{
-				"gpu-type": "nvidia-a100",
+				"nvidia.com/gpu.product": "Tesla-A100",
 			},
 		},
 		Status: corev1.NodeStatus{
 			Capacity: corev1.ResourceList{
-				"nvidia.com/gpu": resource.MustParse("1"),
+				corev1.ResourceCPU:    resource.MustParse("16"),
+				corev1.ResourceMemory: resource.MustParse("64Gi"),
+			},
+			Allocatable: corev1.ResourceList{
+				"nvidia.com/gpu": resource.MustParse("2"),
+			},
+		},
+	}
+	node2 := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "node2",
+		},
+		Status: corev1.NodeStatus{
+			Capacity: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("8"),
+				corev1.ResourceMemory: resource.MustParse("32Gi"),
 			},
 		},
 	}
 
-	fakeClient.CoreV1().Nodes().Create(context.Background(), node, metav1.CreateOptions{})
-
+	fakeClient := k8sfake.NewSimpleClientset(node1, node2)
+	m.clients = map[string]kubernetes.Interface{
+		"c1": fakeClient,
+	}
 	m.rawConfig = &api.Config{Contexts: map[string]*api.Context{"c1": {Cluster: "cl1"}}}
 
 	caps, err := m.GetClusterCapabilities(context.Background())
@@ -101,42 +112,30 @@ func TestGetClusterCapabilities(t *testing.T) {
 		t.Fatal("Expected capabilities")
 	}
 	if len(caps.Items) != 1 {
-		t.Errorf("Expected 1 capability item, got %d", len(caps.Items))
-	}
-	if len(caps.Items) > 0 && caps.Items[0].NodeCount != 1 {
-		t.Errorf("Expected 1 node, got %d", caps.Items[0].NodeCount)
-	}
-}
-
-func TestLabelClusterNodes(t *testing.T) {
-	scheme := runtime.NewScheme()
-	gvrMap := map[schema.GroupVersionResource]string{
-		{Group: "", Version: "v1", Resource: "nodes"}: "NodeList",
+		t.Fatalf("Expected 1 capability item, got %d", len(caps.Items))
 	}
 
-	nodeObj := &unstructured.Unstructured{
-		Object: map[string]interface{}{
-			"apiVersion": "v1",
-			"kind":       "Node",
-			"metadata": map[string]interface{}{
-				"name": "node1",
-			},
-		},
+	cap := caps.Items[0]
+	if cap.NodeCount != 2 {
+		t.Errorf("Expected 2 nodes, got %d", cap.NodeCount)
 	}
-
-	fakeDyn := fake.NewSimpleDynamicClientWithCustomListKinds(scheme, gvrMap, nodeObj)
-
-	m, _ := NewMultiClusterClient("")
-	m.dynamicClients["c1"] = fakeDyn
-	m.rawConfig = &api.Config{Contexts: map[string]*api.Context{"c1": {Cluster: "cluster1"}}}
-
-	err := m.LabelClusterNodes(context.Background(), "c1", map[string]string{"foo": "bar"})
-	if err != nil {
-		t.Fatalf("LabelClusterNodes failed: %v", err)
+	if cap.GPUCount != 2 {
+		t.Errorf("Expected 2 GPUs, got %d", cap.GPUCount)
+	}
+	if cap.GPUType != "Tesla-A100" {
+		t.Errorf("Expected GPU type Tesla-A100, got %s", cap.GPUType)
+	}
+	// CPU capacity comes from first node
+	if cap.CPUCapacity != "16" {
+		t.Errorf("Expected CPUCapacity=16, got %s", cap.CPUCapacity)
+	}
+	// Memory capacity comes from first node
+	if cap.MemCapacity != "64Gi" {
+		t.Errorf("Expected MemCapacity=64Gi, got %s", cap.MemCapacity)
 	}
 }
 
-func TestRemoveClusterNodeLabels(t *testing.T) {
+func TestNodeLabels_AddAndRemove(t *testing.T) {
 	scheme := runtime.NewScheme()
 	gvrMap := map[schema.GroupVersionResource]string{
 		{Group: "", Version: "v1", Resource: "nodes"}: "NodeList",
@@ -149,7 +148,8 @@ func TestRemoveClusterNodeLabels(t *testing.T) {
 			"metadata": map[string]interface{}{
 				"name": "node1",
 				"labels": map[string]interface{}{
-					"foo": "bar",
+					"existing-label": "keep-me",
+					"remove-me":      "bye",
 				},
 			},
 		},
@@ -161,20 +161,66 @@ func TestRemoveClusterNodeLabels(t *testing.T) {
 	m.dynamicClients["c1"] = fakeDyn
 	m.rawConfig = &api.Config{Contexts: map[string]*api.Context{"c1": {Cluster: "cluster1"}}}
 
-	err := m.RemoveClusterNodeLabels(context.Background(), "c1", []string{"foo"})
+	gvrNodes := schema.GroupVersionResource{Version: "v1", Resource: "nodes"}
+
+	// Phase 1: Add new labels
+	err := m.LabelClusterNodes(context.Background(), "c1", map[string]string{
+		"new-label": "added",
+		"role":      "worker",
+	})
+	if err != nil {
+		t.Fatalf("LabelClusterNodes failed: %v", err)
+	}
+
+	// Verify labels after add
+	updatedNode, err := fakeDyn.Resource(gvrNodes).Get(context.Background(), "node1", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Failed to get node after labeling: %v", err)
+	}
+	labels, _, _ := unstructured.NestedStringMap(updatedNode.Object, "metadata", "labels")
+
+	// Existing label preserved
+	if labels["existing-label"] != "keep-me" {
+		t.Errorf("Existing label lost: expected keep-me, got %s", labels["existing-label"])
+	}
+	// New label present
+	if labels["new-label"] != "added" {
+		t.Errorf("New label missing: expected added, got %s", labels["new-label"])
+	}
+	if labels["role"] != "worker" {
+		t.Errorf("Role label missing: expected worker, got %s", labels["role"])
+	}
+	// Old label still present
+	if labels["remove-me"] != "bye" {
+		t.Errorf("remove-me label should still be present: got %s", labels["remove-me"])
+	}
+
+	// Phase 2: Remove specific labels
+	err = m.RemoveClusterNodeLabels(context.Background(), "c1", []string{"remove-me"})
 	if err != nil {
 		t.Fatalf("RemoveClusterNodeLabels failed: %v", err)
 	}
 
-	// Verify label removed
-	updatedNode, err := fakeDyn.Resource(schema.GroupVersionResource{Version: "v1", Resource: "nodes"}).Get(context.Background(), "node1", metav1.GetOptions{})
+	// Verify labels after remove
+	updatedNode, err = fakeDyn.Resource(gvrNodes).Get(context.Background(), "node1", metav1.GetOptions{})
 	if err != nil {
-		t.Fatalf("Failed to get node: %v", err)
+		t.Fatalf("Failed to get node after remove: %v", err)
 	}
+	labels, _, _ = unstructured.NestedStringMap(updatedNode.Object, "metadata", "labels")
 
-	labels, _, _ := unstructured.NestedStringMap(updatedNode.Object, "metadata", "labels")
-	if _, ok := labels["foo"]; ok {
-		t.Error("Label foo should be removed")
+	// Removed label gone
+	if _, exists := labels["remove-me"]; exists {
+		t.Error("Label 'remove-me' should have been removed")
+	}
+	// Other labels preserved
+	if labels["existing-label"] != "keep-me" {
+		t.Errorf("Existing label should be preserved: got %s", labels["existing-label"])
+	}
+	if labels["new-label"] != "added" {
+		t.Errorf("New label should be preserved: got %s", labels["new-label"])
+	}
+	if labels["role"] != "worker" {
+		t.Errorf("Role label should be preserved: got %s", labels["role"])
 	}
 }
 

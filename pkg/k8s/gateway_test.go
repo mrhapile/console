@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
+	k8sfake "k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/clientcmd/api"
 )
@@ -128,7 +129,7 @@ func TestListGateways(t *testing.T) {
 			m.dynamicClients[tt.contextName] = fakeDyn
 
 			// We need to inject dummy typed client to make ListGateways iterate over this cluster
-			m.clients[tt.contextName] = nil // Just map entry presence is enough for iteration
+			m.clients[tt.contextName] = k8sfake.NewSimpleClientset()
 
 			gws, err := m.ListGateways(context.Background())
 			if err != nil {
@@ -230,7 +231,7 @@ func TestListHTTPRoutes(t *testing.T) {
 			})
 			tt.setupClient(t, fakeDyn)
 			m.dynamicClients[tt.contextName] = fakeDyn
-			m.clients[tt.contextName] = nil
+			m.clients[tt.contextName] = k8sfake.NewSimpleClientset()
 
 			routes, err := m.ListHTTPRoutes(context.Background())
 			if err != nil {

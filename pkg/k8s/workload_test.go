@@ -5,10 +5,12 @@ import (
 	"testing"
 	"time"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic/fake"
+	k8sfake "k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/clientcmd/api"
 )
@@ -62,26 +64,7 @@ func TestResolveWorkloadDependencies(t *testing.T) {
 	}
 
 	scheme := runtime.NewScheme()
-
-	gvrMap := map[schema.GroupVersionResource]string{
-		{Group: "autoscaling", Version: "v2", Resource: "horizontalpodautoscalers"}:                         "HorizontalPodAutoscalerList",
-		{Group: "", Version: "v1", Resource: "services"}:                                                    "ServiceList",
-		{Group: "networking.k8s.io", Version: "v1", Resource: "ingresses"}:                                  "IngressList",
-		{Group: "networking.k8s.io", Version: "v1", Resource: "networkpolicies"}:                            "NetworkPolicyList",
-		{Group: "policy", Version: "v1", Resource: "poddisruptionbudgets"}:                                  "PodDisruptionBudgetList",
-		{Group: "apiextensions.k8s.io", Version: "v1", Resource: "customresourcedefinitions"}:               "CustomResourceDefinitionList",
-		{Group: "admissionregistration.k8s.io", Version: "v1", Resource: "validatingwebhookconfigurations"}: "ValidatingWebhookConfigurationList",
-		{Group: "admissionregistration.k8s.io", Version: "v1", Resource: "mutatingwebhookconfigurations"}:   "MutatingWebhookConfigurationList",
-		{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "roles"}:                              "RoleList",
-		{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "rolebindings"}:                       "RoleBindingList",
-		{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "clusterroles"}:                       "ClusterRoleList",
-		{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "clusterrolebindings"}:                "ClusterRoleBindingList",
-		{Group: "", Version: "v1", Resource: "persistentvolumeclaims"}:                                      "PersistentVolumeClaimList",
-		{Group: "apps", Version: "v1", Resource: "deployments"}:                                             "DeploymentList",
-		{Group: "", Version: "v1", Resource: "configmaps"}:                                                  "ConfigMapList",
-		{Group: "", Version: "v1", Resource: "secrets"}:                                                     "SecretList",
-		{Group: "", Version: "v1", Resource: "serviceaccounts"}:                                             "ServiceAccountList",
-	}
+	gvrMap := buildTestGVRMap()
 
 	fakeDyn := fake.NewSimpleDynamicClientWithCustomListKinds(scheme, gvrMap, deployObj, cmObj)
 
@@ -199,6 +182,31 @@ func TestListWorkloads(t *testing.T) {
 		},
 	}
 
+	// Also add a deployment in a different namespace for filtering
+	deployKube := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "apps/v1",
+			"kind":       "Deployment",
+			"metadata": map[string]interface{}{
+				"name":              "coredns",
+				"namespace":         "kube-system",
+				"creationTimestamp": time.Now().UTC().Format(time.RFC3339),
+			},
+			"spec": map[string]interface{}{
+				"replicas": int64(1),
+				"template": map[string]interface{}{
+					"spec": map[string]interface{}{
+						"containers": []interface{}{map[string]interface{}{"name": "c1", "image": "coredns"}},
+					},
+				},
+			},
+			"status": map[string]interface{}{
+				"readyReplicas":     int64(1),
+				"availableReplicas": int64(1),
+			},
+		},
+	}
+
 	scheme := runtime.NewScheme()
 	gvrMap := map[schema.GroupVersionResource]string{
 		{Group: "apps", Version: "v1", Resource: "deployments"}:  "DeploymentList",
@@ -207,25 +215,43 @@ func TestListWorkloads(t *testing.T) {
 	}
 
 	// We need a reactor that returns the object for LIST operations
-	fakeDyn := fake.NewSimpleDynamicClientWithCustomListKinds(scheme, gvrMap, deployObj, stsObj, dsObj)
+	fakeDyn := fake.NewSimpleDynamicClientWithCustomListKinds(scheme, gvrMap, deployObj, stsObj, dsObj, deployKube)
 	fakeDyn.PrependReactor("list", "*", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		gvr := action.GetResource()
+		la := action.(k8stesting.ListAction)
+		ns := la.GetNamespace()
+
 		if gvr.Resource == "deployments" {
+			items := []unstructured.Unstructured{}
+			if ns == "" || ns == "default" {
+				items = append(items, *deployObj)
+			}
+			if ns == "" || ns == "kube-system" {
+				items = append(items, *deployKube)
+			}
 			return true, &unstructured.UnstructuredList{
 				Object: map[string]interface{}{"kind": "DeploymentList", "apiVersion": "apps/v1"},
-				Items:  []unstructured.Unstructured{*deployObj},
+				Items:  items,
 			}, nil
 		}
 		if gvr.Resource == "statefulsets" {
+			items := []unstructured.Unstructured{}
+			if ns == "" || ns == "default" {
+				items = append(items, *stsObj)
+			}
 			return true, &unstructured.UnstructuredList{
 				Object: map[string]interface{}{"kind": "StatefulSetList", "apiVersion": "apps/v1"},
-				Items:  []unstructured.Unstructured{*stsObj},
+				Items:  items,
 			}, nil
 		}
 		if gvr.Resource == "daemonsets" {
+			items := []unstructured.Unstructured{}
+			if ns == "" || ns == "default" {
+				items = append(items, *dsObj)
+			}
 			return true, &unstructured.UnstructuredList{
 				Object: map[string]interface{}{"kind": "DaemonSetList", "apiVersion": "apps/v1"},
-				Items:  []unstructured.Unstructured{*dsObj},
+				Items:  items,
 			}, nil
 		}
 		return true, &unstructured.UnstructuredList{Items: []unstructured.Unstructured{}}, nil
@@ -234,10 +260,9 @@ func TestListWorkloads(t *testing.T) {
 	m, _ := NewMultiClusterClient("")
 	m.rawConfig = &api.Config{Contexts: map[string]*api.Context{"c1": {Cluster: "cluster1"}}}
 	m.dynamicClients["c1"] = fakeDyn
-	// Fake typed client for iteration
-	m.clients["c1"] = nil
+	m.clients["c1"] = k8sfake.NewSimpleClientset() // safe inject, not nil
 
-	// Test List all
+	// Test List all in default namespace
 	wls, err := m.ListWorkloads(context.Background(), "", "default", "")
 	if err != nil {
 		t.Fatalf("ListWorkloads failed: %v", err)
@@ -286,6 +311,112 @@ func TestListWorkloads(t *testing.T) {
 	}
 }
 
+func TestListWorkloadsForCluster(t *testing.T) {
+	scheme := runtime.NewScheme()
+	gvrMap := map[schema.GroupVersionResource]string{
+		{Group: "apps", Version: "v1", Resource: "deployments"}:  "DeploymentList",
+		{Group: "apps", Version: "v1", Resource: "statefulsets"}: "StatefulSetList",
+		{Group: "apps", Version: "v1", Resource: "daemonsets"}:   "DaemonSetList",
+	}
+
+	deployDefault := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "apps/v1", "kind": "Deployment",
+			"metadata": map[string]interface{}{
+				"name": "dep1", "namespace": "default",
+				"creationTimestamp": time.Now().UTC().Format(time.RFC3339),
+			},
+			"spec": map[string]interface{}{
+				"replicas": int64(1),
+				"template": map[string]interface{}{
+					"spec": map[string]interface{}{
+						"containers": []interface{}{map[string]interface{}{"name": "c", "image": "nginx"}},
+					},
+				},
+			},
+			"status": map[string]interface{}{"readyReplicas": int64(1), "availableReplicas": int64(1)},
+		},
+	}
+
+	stsDefault := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "apps/v1", "kind": "StatefulSet",
+			"metadata": map[string]interface{}{
+				"name": "sts1", "namespace": "default",
+				"creationTimestamp": time.Now().UTC().Format(time.RFC3339),
+			},
+			"spec":   map[string]interface{}{"replicas": int64(1)},
+			"status": map[string]interface{}{"readyReplicas": int64(1)},
+		},
+	}
+
+	tests := []struct {
+		name         string
+		namespace    string
+		workloadType string
+		wantCount    int
+	}{
+		{"All types, default ns", "default", "", 2},
+		{"Deployment only", "default", "Deployment", 1},
+		{"StatefulSet only", "default", "StatefulSet", 1},
+		{"DaemonSet only (none)", "default", "DaemonSet", 0},
+		{"Non-existent namespace", "nonexistent", "", 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fakeDyn := fake.NewSimpleDynamicClientWithCustomListKinds(scheme, gvrMap, deployDefault, stsDefault)
+			fakeDyn.PrependReactor("list", "*", func(action k8stesting.Action) (bool, runtime.Object, error) {
+				gvr := action.GetResource()
+				la := action.(k8stesting.ListAction)
+				ns := la.GetNamespace()
+
+				// Return objects only for "default" namespace
+				if ns != "default" {
+					kind := gvrMap[gvr]
+					if kind == "" {
+						kind = "List"
+					}
+					return true, &unstructured.UnstructuredList{
+						Object: map[string]interface{}{"kind": kind, "apiVersion": gvr.GroupVersion().String()},
+						Items:  []unstructured.Unstructured{},
+					}, nil
+				}
+
+				switch gvr.Resource {
+				case "deployments":
+					return true, &unstructured.UnstructuredList{
+						Object: map[string]interface{}{"kind": "DeploymentList", "apiVersion": "apps/v1"},
+						Items:  []unstructured.Unstructured{*deployDefault},
+					}, nil
+				case "statefulsets":
+					return true, &unstructured.UnstructuredList{
+						Object: map[string]interface{}{"kind": "StatefulSetList", "apiVersion": "apps/v1"},
+						Items:  []unstructured.Unstructured{*stsDefault},
+					}, nil
+				default:
+					return true, &unstructured.UnstructuredList{
+						Object: map[string]interface{}{"kind": gvrMap[gvr], "apiVersion": gvr.GroupVersion().String()},
+						Items:  []unstructured.Unstructured{},
+					}, nil
+				}
+			})
+
+			m, _ := NewMultiClusterClient("")
+			m.rawConfig = &api.Config{Contexts: map[string]*api.Context{"c1": {Cluster: "cluster1"}}}
+			m.dynamicClients["c1"] = fakeDyn
+
+			wls, err := m.ListWorkloadsForCluster(context.Background(), "c1", tt.namespace, tt.workloadType)
+			if err != nil {
+				t.Fatalf("ListWorkloadsForCluster failed: %v", err)
+			}
+			if len(wls) != tt.wantCount {
+				t.Errorf("Expected %d workloads, got %d", tt.wantCount, len(wls))
+			}
+		})
+	}
+}
+
 func TestDeployWorkload(t *testing.T) {
 	deployObj := &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -294,6 +425,7 @@ func TestDeployWorkload(t *testing.T) {
 			"metadata": map[string]interface{}{
 				"name":      "dep1",
 				"namespace": "default",
+				"labels":    map[string]interface{}{"app": "nginx"},
 			},
 			"spec": map[string]interface{}{
 				"replicas": int64(1),
@@ -312,33 +444,11 @@ func TestDeployWorkload(t *testing.T) {
 	}
 
 	scheme := runtime.NewScheme()
-	gvrMap := map[schema.GroupVersionResource]string{
-		{Group: "autoscaling", Version: "v2", Resource: "horizontalpodautoscalers"}:                         "HorizontalPodAutoscalerList",
-		{Group: "", Version: "v1", Resource: "services"}:                                                    "ServiceList",
-		{Group: "networking.k8s.io", Version: "v1", Resource: "ingresses"}:                                  "IngressList",
-		{Group: "networking.k8s.io", Version: "v1", Resource: "networkpolicies"}:                            "NetworkPolicyList",
-		{Group: "policy", Version: "v1", Resource: "poddisruptionbudgets"}:                                  "PodDisruptionBudgetList",
-		{Group: "apiextensions.k8s.io", Version: "v1", Resource: "customresourcedefinitions"}:               "CustomResourceDefinitionList",
-		{Group: "admissionregistration.k8s.io", Version: "v1", Resource: "validatingwebhookconfigurations"}: "ValidatingWebhookConfigurationList",
-		{Group: "admissionregistration.k8s.io", Version: "v1", Resource: "mutatingwebhookconfigurations"}:   "MutatingWebhookConfigurationList",
-		{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "roles"}:                              "RoleList",
-		{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "rolebindings"}:                       "RoleBindingList",
-		{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "clusterroles"}:                       "ClusterRoleList",
-		{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "clusterrolebindings"}:                "ClusterRoleBindingList",
-		{Group: "", Version: "v1", Resource: "persistentvolumeclaims"}:                                      "PersistentVolumeClaimList",
-		{Group: "apps", Version: "v1", Resource: "deployments"}:                                             "DeploymentList",
-		{Group: "apps", Version: "v1", Resource: "statefulsets"}:                                            "StatefulSetList",
-		{Group: "apps", Version: "v1", Resource: "daemonsets"}:                                              "DaemonSetList",
-		{Group: "", Version: "v1", Resource: "configmaps"}:                                                  "ConfigMapList",
-		{Group: "", Version: "v1", Resource: "secrets"}:                                                     "SecretList",
-		{Group: "", Version: "v1", Resource: "serviceaccounts"}:                                             "ServiceAccountList",
-		{Group: "", Version: "v1", Resource: "namespaces"}:                                                  "NamespaceList",
-	}
+	gvrMap := buildTestGVRMap()
 
-	// Fake client for src and target
-	fakeDyn := fake.NewSimpleDynamicClientWithCustomListKinds(scheme, gvrMap, deployObj)
-	fakeDyn.PrependReactor("list", "*", func(action k8stesting.Action) (bool, runtime.Object, error) {
-		// Return valid list for deployments, empty for others
+	// Separate source and target clients
+	sourceClient := fake.NewSimpleDynamicClientWithCustomListKinds(scheme, gvrMap, deployObj)
+	sourceClient.PrependReactor("list", "*", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		gvr := action.GetResource()
 		if gvr.Resource == "deployments" {
 			return true, &unstructured.UnstructuredList{
@@ -348,10 +458,17 @@ func TestDeployWorkload(t *testing.T) {
 		}
 		return true, &unstructured.UnstructuredList{Items: []unstructured.Unstructured{}}, nil
 	})
-	// Allow Create of Namespace and Deployment on target
-	fakeDyn.PrependReactor("create", "*", func(action k8stesting.Action) (bool, runtime.Object, error) {
+
+	targetClient := fake.NewSimpleDynamicClientWithCustomListKinds(scheme, gvrMap)
+	targetClient.PrependReactor("list", "*", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		return true, &unstructured.UnstructuredList{Items: []unstructured.Unstructured{}}, nil
+	})
+
+	var createdObj *unstructured.Unstructured
+	targetClient.PrependReactor("create", "*", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		createAction := action.(k8stesting.CreateAction)
-		return true, createAction.GetObject(), nil
+		createdObj = createAction.GetObject().(*unstructured.Unstructured)
+		return true, createdObj, nil
 	})
 
 	m, _ := NewMultiClusterClient("")
@@ -359,11 +476,11 @@ func TestDeployWorkload(t *testing.T) {
 		"src": {Cluster: "source"},
 		"tgt": {Cluster: "target"},
 	}}
-	m.dynamicClients["src"] = fakeDyn
-	m.dynamicClients["tgt"] = fakeDyn
+	m.dynamicClients["src"] = sourceClient
+	m.dynamicClients["tgt"] = targetClient
 
-	opts := &DeployOptions{DeployedBy: "me"}
-	resp, err := m.DeployWorkload(context.Background(), "src", "default", "dep1", []string{"tgt"}, 2, opts)
+	opts := &DeployOptions{DeployedBy: "test-user"}
+	resp, err := m.DeployWorkload(context.Background(), "src", "default", "dep1", []string{"tgt"}, 5, opts)
 	if err != nil {
 		t.Fatalf("DeployWorkload failed: %v", err)
 	}
@@ -372,5 +489,44 @@ func TestDeployWorkload(t *testing.T) {
 	}
 	if len(resp.DeployedTo) != 1 || resp.DeployedTo[0] != "tgt" {
 		t.Errorf("Expected deployed to tgt, got %v", resp.DeployedTo)
+	}
+
+	// Verify the object was created on the target
+	if createdObj == nil {
+		t.Fatal("Expected object to be created on target, got nil")
+	}
+
+	// Verify replicas override
+	spec, ok := createdObj.Object["spec"].(map[string]interface{})
+	if !ok {
+		t.Fatal("Expected spec in created object")
+	}
+	if replicas, ok := spec["replicas"].(int64); !ok || replicas != 5 {
+		t.Errorf("Expected replicas=5, got %v", spec["replicas"])
+	}
+
+	// Verify kubestellar.io/deployed-by label
+	labels := createdObj.GetLabels()
+	if labels == nil {
+		t.Fatal("Expected labels on created object")
+	}
+	if labels["kubestellar.io/deployed-by"] != "test-user" {
+		t.Errorf("Expected deployed-by=test-user, got %s", labels["kubestellar.io/deployed-by"])
+	}
+	if labels["kubestellar.io/managed-by"] != "kubestellar-console" {
+		t.Errorf("Expected managed-by=kubestellar-console, got %s", labels["kubestellar.io/managed-by"])
+	}
+
+	// Verify source object was NOT mutated
+	srcLabels := deployObj.GetLabels()
+	if _, exists := srcLabels["kubestellar.io/deployed-by"]; exists {
+		t.Error("Source object should not have been mutated with deployed-by label")
+	}
+
+	// Verify deployment exists only on target (source should still have original)
+	gvr := schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}
+	_, srcErr := sourceClient.Resource(gvr).Namespace("default").Get(context.Background(), "dep1", metav1.GetOptions{})
+	if srcErr != nil {
+		t.Errorf("Source should still have dep1: %v", srcErr)
 	}
 }

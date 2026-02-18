@@ -6,32 +6,13 @@ import (
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/tools/clientcmd/api"
 )
 
 func TestMonitorWorkload(t *testing.T) {
 	scheme := runtime.NewScheme()
-	gvrMap := map[schema.GroupVersionResource]string{
-		{Group: "apps", Version: "v1", Resource: "deployments"}:                                             "DeploymentList",
-		{Group: "", Version: "v1", Resource: "services"}:                                                    "ServiceList",
-		{Group: "networking.k8s.io", Version: "v1", Resource: "ingresses"}:                                  "IngressList",
-		{Group: "autoscaling", Version: "v2", Resource: "horizontalpodautoscalers"}:                         "HorizontalPodAutoscalerList",
-		{Group: "", Version: "v1", Resource: "configmaps"}:                                                  "ConfigMapList",
-		{Group: "", Version: "v1", Resource: "secrets"}:                                                     "SecretList",
-		{Group: "", Version: "v1", Resource: "persistentvolumeclaims"}:                                      "PersistentVolumeClaimList",
-		{Group: "", Version: "v1", Resource: "serviceaccounts"}:                                             "ServiceAccountList",
-		{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "rolebindings"}:                       "RoleBindingList",
-		{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "clusterrolebindings"}:                "ClusterRoleBindingList",
-		{Group: "networking.k8s.io", Version: "v1", Resource: "networkpolicies"}:                            "NetworkPolicyList",
-		{Group: "policy", Version: "v1", Resource: "poddisruptionbudgets"}:                                  "PodDisruptionBudgetList",
-		{Group: "apiextensions.k8s.io", Version: "v1", Resource: "customresourcedefinitions"}:               "CustomResourceDefinitionList",
-		{Group: "admissionregistration.k8s.io", Version: "v1", Resource: "validatingwebhookconfigurations"}: "ValidatingWebhookConfigurationList",
-		{Group: "admissionregistration.k8s.io", Version: "v1", Resource: "mutatingwebhookconfigurations"}:   "MutatingWebhookConfigurationList",
-		{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "clusterroles"}:                       "ClusterRoleList",
-		{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "roles"}:                              "RoleList",
-	}
+	gvrMap := buildTestGVRMap()
 
 	// Add a ConfigMap reference to make sure we have dependencies
 	deployObj := &unstructured.Unstructured{
@@ -120,25 +101,7 @@ func TestMonitorWorkload(t *testing.T) {
 
 func TestMonitorWorkload_Unhealthy(t *testing.T) {
 	scheme := runtime.NewScheme()
-	gvrMap := map[schema.GroupVersionResource]string{
-		{Group: "apps", Version: "v1", Resource: "deployments"}:                                             "DeploymentList",
-		{Group: "", Version: "v1", Resource: "services"}:                                                    "ServiceList",
-		{Group: "networking.k8s.io", Version: "v1", Resource: "ingresses"}:                                  "IngressList",
-		{Group: "autoscaling", Version: "v2", Resource: "horizontalpodautoscalers"}:                         "HorizontalPodAutoscalerList",
-		{Group: "", Version: "v1", Resource: "configmaps"}:                                                  "ConfigMapList",
-		{Group: "", Version: "v1", Resource: "secrets"}:                                                     "SecretList",
-		{Group: "", Version: "v1", Resource: "persistentvolumeclaims"}:                                      "PersistentVolumeClaimList",
-		{Group: "", Version: "v1", Resource: "serviceaccounts"}:                                             "ServiceAccountList",
-		{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "rolebindings"}:                       "RoleBindingList",
-		{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "clusterrolebindings"}:                "ClusterRoleBindingList",
-		{Group: "networking.k8s.io", Version: "v1", Resource: "networkpolicies"}:                            "NetworkPolicyList",
-		{Group: "policy", Version: "v1", Resource: "poddisruptionbudgets"}:                                  "PodDisruptionBudgetList",
-		{Group: "apiextensions.k8s.io", Version: "v1", Resource: "customresourcedefinitions"}:               "CustomResourceDefinitionList",
-		{Group: "admissionregistration.k8s.io", Version: "v1", Resource: "validatingwebhookconfigurations"}: "ValidatingWebhookConfigurationList",
-		{Group: "admissionregistration.k8s.io", Version: "v1", Resource: "mutatingwebhookconfigurations"}:   "MutatingWebhookConfigurationList",
-		{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "clusterroles"}:                       "ClusterRoleList",
-		{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "roles"}:                              "RoleList",
-	}
+	gvrMap := buildTestGVRMap()
 
 	// Deployment with issues (0/3 replicas)
 	deployObj := &unstructured.Unstructured{
@@ -383,21 +346,92 @@ func TestCheckResourceHealth_Variants(t *testing.T) {
 
 func TestKindToCategory(t *testing.T) {
 	tests := []struct {
-		kind string
-		want string
+		kind DependencyKind
+		want ResourceCategory
 	}{
-		{"Deployment", "other"}, // Default
-		{"Service", "networking"},
-		{"Secret", "config"},
-		{"PersistentVolumeClaim", "storage"},
-		{"ServiceAccount", "rbac"},
-		{"Unknown", "other"},
+		{DepService, CategoryNetworking},
+		{DepIngress, CategoryNetworking},
+		{DepNetworkPolicy, CategoryNetworking},
+		{DepSecret, CategoryConfig},
+		{DepConfigMap, CategoryConfig},
+		{DepPVC, CategoryStorage},
+		{DepServiceAccount, CategoryRBAC},
+		{DepRole, CategoryRBAC},
+		{DepRoleBinding, CategoryRBAC},
+		{DepClusterRole, CategoryRBAC},
+		{DepClusterRoleBinding, CategoryRBAC},
+		{DepHPA, CategoryScaling},
+		{DepPDB, CategoryScaling},
+		{DependencyKind("Unknown"), CategoryOther},
 	}
 
 	for _, tt := range tests {
-		got := kindToCategory(DependencyKind(tt.kind))
-		if string(got) != tt.want {
+		got := kindToCategory(tt.kind)
+		if got != tt.want {
 			t.Errorf("kindToCategory(%s) = %s, want %s", tt.kind, got, tt.want)
 		}
+	}
+}
+
+func TestCalculateOverallStatus(t *testing.T) {
+	tests := []struct {
+		name      string
+		resources []MonitoredResource
+		want      ResourceHealthStatus
+	}{
+		{
+			name:      "All healthy",
+			resources: []MonitoredResource{{Status: HealthStatusHealthy}, {Status: HealthStatusHealthy}},
+			want:      HealthStatusHealthy,
+		},
+		{
+			name:      "Empty resources",
+			resources: []MonitoredResource{},
+			want:      HealthStatusHealthy,
+		},
+		{
+			name:      "One degraded",
+			resources: []MonitoredResource{{Status: HealthStatusHealthy}, {Status: HealthStatusDegraded}},
+			want:      HealthStatusDegraded,
+		},
+		{
+			name:      "One unhealthy (required)",
+			resources: []MonitoredResource{{Status: HealthStatusHealthy}, {Status: HealthStatusUnhealthy, Optional: false}},
+			want:      HealthStatusUnhealthy,
+		},
+		{
+			name:      "Unhealthy takes precedence over degraded",
+			resources: []MonitoredResource{{Status: HealthStatusDegraded}, {Status: HealthStatusUnhealthy}},
+			want:      HealthStatusUnhealthy,
+		},
+		{
+			name:      "Optional unhealthy ignored",
+			resources: []MonitoredResource{{Status: HealthStatusHealthy}, {Status: HealthStatusUnhealthy, Optional: true}},
+			want:      HealthStatusHealthy,
+		},
+		{
+			name:      "Optional missing ignored",
+			resources: []MonitoredResource{{Status: HealthStatusHealthy}, {Status: HealthStatusMissing, Optional: true}},
+			want:      HealthStatusHealthy,
+		},
+		{
+			name:      "Required missing = unhealthy",
+			resources: []MonitoredResource{{Status: HealthStatusHealthy}, {Status: HealthStatusMissing, Optional: false}},
+			want:      HealthStatusUnhealthy,
+		},
+		{
+			name:      "Optional unhealthy + degraded = degraded",
+			resources: []MonitoredResource{{Status: HealthStatusUnhealthy, Optional: true}, {Status: HealthStatusDegraded}},
+			want:      HealthStatusDegraded,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := calculateOverallStatus(tt.resources)
+			if got != tt.want {
+				t.Errorf("calculateOverallStatus() = %s, want %s", got, tt.want)
+			}
+		})
 	}
 }

@@ -65,6 +65,9 @@ func TestFindPodIssues(t *testing.T) {
 				if i.Status != "CrashLoopBackOff" {
 					t.Errorf("expected status CrashLoopBackOff, got %s", i.Status)
 				}
+				if len(i.Issues) == 0 {
+					t.Fatal("expected at least one issue")
+				}
 				if i.Issues[0] != "CrashLoopBackOff" {
 					t.Errorf("expected issue CrashLoopBackOff, got %s", i.Issues[0])
 				}
@@ -146,6 +149,9 @@ func TestFindPodIssues(t *testing.T) {
 			}(),
 			expectedCount: 1,
 			validate: func(t *testing.T, i PodIssue) {
+				if len(i.Issues) == 0 {
+					t.Fatal("expected at least one issue")
+				}
 				if i.Issues[0] != "Pending" {
 					t.Errorf("expected Pending issue, got %s", i.Issues[0])
 				}
