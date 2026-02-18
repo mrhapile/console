@@ -34,7 +34,14 @@ export function WidgetExportModal({ isOpen, onClose, cardType, mode: _mode = 'pi
   const [selectedCard, setSelectedCard] = useState<string | null>(cardType || null)
   const [selectedStats, setSelectedStats] = useState<string[]>([])
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null)
-  const [apiEndpoint, setApiEndpoint] = useState(BACKEND_DEFAULT_URL)
+  const [apiEndpoint, setApiEndpoint] = useState(() => {
+    // Use the current site origin on Netlify deployments so exported widgets
+    // fetch from the Netlify Functions; fall back to local backend otherwise.
+    const host = window.location.hostname
+    if (host === 'console.kubestellar.io' || host.includes('netlify.app'))
+      return window.location.origin
+    return BACKEND_DEFAULT_URL
+  })
   const [refreshInterval, setRefreshInterval] = useState(30)
   const [copied, setCopied] = useState(false)
   const [showCode, setShowCode] = useState(false)
