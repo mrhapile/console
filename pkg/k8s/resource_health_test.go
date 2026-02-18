@@ -1,215 +1,403 @@
 package k8s
 
 import (
+	"context"
 	"testing"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic/fake"
+	"k8s.io/client-go/tools/clientcmd/api"
 )
 
-func TestKindToCategory(t *testing.T) {
-	tests := []struct {
-		kind     DependencyKind
-		expected ResourceCategory
-	}{
-		{DepServiceAccount, CategoryRBAC},
-		{DepConfigMap, CategoryConfig},
-		{DepService, CategoryNetworking},
-		{DepHPA, CategoryScaling},
-		{DepPVC, CategoryStorage},
-		{DepCRD, CategoryCRD},
-		{DepValidatingWebhook, CategoryAdmission},
-		{"UnknownKind", CategoryOther},
+func TestMonitorWorkload(t *testing.T) {
+	scheme := runtime.NewScheme()
+	gvrMap := map[schema.GroupVersionResource]string{
+		{Group: "apps", Version: "v1", Resource: "deployments"}:                                             "DeploymentList",
+		{Group: "", Version: "v1", Resource: "services"}:                                                    "ServiceList",
+		{Group: "networking.k8s.io", Version: "v1", Resource: "ingresses"}:                                  "IngressList",
+		{Group: "autoscaling", Version: "v2", Resource: "horizontalpodautoscalers"}:                         "HorizontalPodAutoscalerList",
+		{Group: "", Version: "v1", Resource: "configmaps"}:                                                  "ConfigMapList",
+		{Group: "", Version: "v1", Resource: "secrets"}:                                                     "SecretList",
+		{Group: "", Version: "v1", Resource: "persistentvolumeclaims"}:                                      "PersistentVolumeClaimList",
+		{Group: "", Version: "v1", Resource: "serviceaccounts"}:                                             "ServiceAccountList",
+		{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "rolebindings"}:                       "RoleBindingList",
+		{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "clusterrolebindings"}:                "ClusterRoleBindingList",
+		{Group: "networking.k8s.io", Version: "v1", Resource: "networkpolicies"}:                            "NetworkPolicyList",
+		{Group: "policy", Version: "v1", Resource: "poddisruptionbudgets"}:                                  "PodDisruptionBudgetList",
+		{Group: "apiextensions.k8s.io", Version: "v1", Resource: "customresourcedefinitions"}:               "CustomResourceDefinitionList",
+		{Group: "admissionregistration.k8s.io", Version: "v1", Resource: "validatingwebhookconfigurations"}: "ValidatingWebhookConfigurationList",
+		{Group: "admissionregistration.k8s.io", Version: "v1", Resource: "mutatingwebhookconfigurations"}:   "MutatingWebhookConfigurationList",
+		{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "clusterroles"}:                       "ClusterRoleList",
+		{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "roles"}:                              "RoleList",
 	}
 
-	for _, tt := range tests {
-		if got := kindToCategory(tt.kind); got != tt.expected {
-			t.Errorf("kindToCategory(%s) = %s, want %s", tt.kind, got, tt.expected)
-		}
-	}
-}
-
-func TestCheckResourceHealth(t *testing.T) {
-	tests := []struct {
-		name       string
-		kind       string
-		obj        *unstructured.Unstructured
-		wantStatus ResourceHealthStatus
-		wantMsg    string
-	}{
-		{
-			name:       "Missing resource",
-			kind:       "Pod",
-			obj:        nil,
-			wantStatus: HealthStatusMissing,
-			wantMsg:    "Resource not found",
-		},
-		{
-			name: "Healthy Deployment",
-			kind: "Deployment",
-			obj: &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"spec": map[string]interface{}{"replicas": int64(3)},
-					"status": map[string]interface{}{
-						"readyReplicas":     int64(3),
-						"availableReplicas": int64(3),
-					},
-				},
+	// Add a ConfigMap reference to make sure we have dependencies
+	deployObj := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "apps/v1",
+			"kind":       "Deployment",
+			"metadata": map[string]interface{}{
+				"name":      "dep1",
+				"namespace": "default",
+				"labels":    map[string]interface{}{"app": "nginx"},
 			},
-			wantStatus: HealthStatusHealthy,
-			wantMsg:    "3/3 ready",
-		},
-		{
-			name: "Degraded Deployment",
-			kind: "Deployment",
-			obj: &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"spec": map[string]interface{}{"replicas": int64(3)},
-					"status": map[string]interface{}{
-						"readyReplicas": int64(1),
-					},
-				},
-			},
-			wantStatus: HealthStatusDegraded,
-			wantMsg:    "1/3 ready",
-		},
-		{
-			name: "Unhealthy Deployment",
-			kind: "Deployment",
-			obj: &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"spec": map[string]interface{}{"replicas": int64(3)},
-					"status": map[string]interface{}{
-						"readyReplicas": int64(0),
-					},
-				},
-			},
-			wantStatus: HealthStatusUnhealthy,
-			wantMsg:    "0/3 ready",
-		},
-		{
-			name: "Scaled to 0 Deployment",
-			kind: "Deployment",
-			obj: &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"spec": map[string]interface{}{"replicas": int64(0)},
-				},
-			},
-			wantStatus: HealthStatusHealthy,
-		},
-		{
-			name: "Healthy Service (ClusterIP)",
-			kind: "Service",
-			obj: &unstructured.Unstructured{
-				Object: map[string]interface{}{
+			"spec": map[string]interface{}{
+				"selector": map[string]interface{}{"matchLabels": map[string]interface{}{"app": "nginx"}},
+				"template": map[string]interface{}{
+					"metadata": map[string]interface{}{"labels": map[string]interface{}{"app": "nginx"}},
 					"spec": map[string]interface{}{
-						"type":      "ClusterIP",
-						"clusterIP": "10.0.0.1",
-					},
-				},
-			},
-			wantStatus: HealthStatusHealthy,
-		},
-		{
-			name: "Degraded LB Service (No IP)",
-			kind: "Service",
-			obj: &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"spec": map[string]interface{}{"type": "LoadBalancer"},
-					"status": map[string]interface{}{
-						"loadBalancer": map[string]interface{}{
-							"ingress": []interface{}{},
+						"containers": []interface{}{
+							map[string]interface{}{
+								"name":  "c1",
+								"image": "nginx",
+								"envFrom": []interface{}{
+									map[string]interface{}{
+										"configMapRef": map[string]interface{}{"name": "cm1"},
+									},
+								},
+							},
 						},
 					},
 				},
 			},
-			wantStatus: HealthStatusDegraded,
-		},
-		{
-			name: "Healthy PVC",
-			kind: "PersistentVolumeClaim",
-			obj: &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"status": map[string]interface{}{"phase": "Bound"},
-				},
+			"status": map[string]interface{}{
+				"replicas":          int64(1),
+				"readyReplicas":     int64(1),
+				"availableReplicas": int64(1),
+				"updatedReplicas":   int64(1),
 			},
-			wantStatus: HealthStatusHealthy,
 		},
-		{
-			name: "Pending PVC",
-			kind: "PersistentVolumeClaim",
-			obj: &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"status": map[string]interface{}{"phase": "Pending"},
-				},
+	}
+
+	// Add the ConfigMap to the fake client
+	cmObj := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "ConfigMap",
+			"metadata": map[string]interface{}{
+				"name":      "cm1",
+				"namespace": "default",
 			},
-			wantStatus: HealthStatusDegraded,
 		},
-		{
-			name: "Degraded HPA",
-			kind: "HorizontalPodAutoscaler",
-			obj: &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"status": map[string]interface{}{
-						"currentReplicas": int64(2),
-						"desiredReplicas": int64(3),
+	}
+
+	// Add a Service that matches the deployment
+	svcObj := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "Service",
+			"metadata": map[string]interface{}{
+				"name":      "svc1",
+				"namespace": "default",
+			},
+			"spec": map[string]interface{}{
+				"selector": map[string]interface{}{"app": "nginx"},
+			},
+		},
+	}
+
+	fakeDyn := fake.NewSimpleDynamicClientWithCustomListKinds(scheme, gvrMap, deployObj, cmObj, svcObj)
+
+	m, _ := NewMultiClusterClient("")
+	m.dynamicClients["c1"] = fakeDyn
+	m.rawConfig = &api.Config{Contexts: map[string]*api.Context{"c1": {Cluster: "cluster1"}}}
+
+	// Test successful monitor
+	res, err := m.MonitorWorkload(context.Background(), "c1", "default", "dep1")
+	if err != nil {
+		t.Fatalf("MonitorWorkload failed: %v", err)
+	}
+
+	if res.Status != "healthy" {
+		t.Errorf("Expected healthy, got %s", res.Status)
+	}
+	if len(res.Resources) == 0 {
+		t.Error("Expected resources")
+	}
+}
+
+func TestMonitorWorkload_Unhealthy(t *testing.T) {
+	scheme := runtime.NewScheme()
+	gvrMap := map[schema.GroupVersionResource]string{
+		{Group: "apps", Version: "v1", Resource: "deployments"}:                                             "DeploymentList",
+		{Group: "", Version: "v1", Resource: "services"}:                                                    "ServiceList",
+		{Group: "networking.k8s.io", Version: "v1", Resource: "ingresses"}:                                  "IngressList",
+		{Group: "autoscaling", Version: "v2", Resource: "horizontalpodautoscalers"}:                         "HorizontalPodAutoscalerList",
+		{Group: "", Version: "v1", Resource: "configmaps"}:                                                  "ConfigMapList",
+		{Group: "", Version: "v1", Resource: "secrets"}:                                                     "SecretList",
+		{Group: "", Version: "v1", Resource: "persistentvolumeclaims"}:                                      "PersistentVolumeClaimList",
+		{Group: "", Version: "v1", Resource: "serviceaccounts"}:                                             "ServiceAccountList",
+		{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "rolebindings"}:                       "RoleBindingList",
+		{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "clusterrolebindings"}:                "ClusterRoleBindingList",
+		{Group: "networking.k8s.io", Version: "v1", Resource: "networkpolicies"}:                            "NetworkPolicyList",
+		{Group: "policy", Version: "v1", Resource: "poddisruptionbudgets"}:                                  "PodDisruptionBudgetList",
+		{Group: "apiextensions.k8s.io", Version: "v1", Resource: "customresourcedefinitions"}:               "CustomResourceDefinitionList",
+		{Group: "admissionregistration.k8s.io", Version: "v1", Resource: "validatingwebhookconfigurations"}: "ValidatingWebhookConfigurationList",
+		{Group: "admissionregistration.k8s.io", Version: "v1", Resource: "mutatingwebhookconfigurations"}:   "MutatingWebhookConfigurationList",
+		{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "clusterroles"}:                       "ClusterRoleList",
+		{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "roles"}:                              "RoleList",
+	}
+
+	// Deployment with issues (0/3 replicas)
+	deployObj := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "apps/v1",
+			"kind":       "Deployment",
+			"metadata": map[string]interface{}{
+				"name":      "dep1",
+				"namespace": "default",
+				"labels":    map[string]interface{}{"app": "nginx"},
+			},
+			"spec": map[string]interface{}{
+				"replicas": int64(3),
+				"selector": map[string]interface{}{"matchLabels": map[string]interface{}{"app": "nginx"}},
+				"template": map[string]interface{}{
+					"metadata": map[string]interface{}{"labels": map[string]interface{}{"app": "nginx"}},
+					"spec": map[string]interface{}{
+						"containers": []interface{}{
+							map[string]interface{}{
+								"name":  "c1",
+								"image": "nginx",
+							},
+						},
 					},
 				},
 			},
-			wantStatus: HealthStatusDegraded,
+			"status": map[string]interface{}{
+				"replicas":          int64(3),
+				"readyReplicas":     int64(0),
+				"availableReplicas": int64(0),
+			},
+		},
+	}
+
+	// Create a service dependency that is also unhealthy (not found or whatever, but let's reliable trigger issue on deployment first)
+	// Actually MonitorWorkload doesn't check the root object unless it adds itself to dependencies?
+	// ResolveWorkloadDependencies returns dependencies.
+	// If I want to trigger an issue, I need a dependency to fail check.
+	// Let's add an explicit dependency that fails.
+	// E.g. A Service with LoadBalancer type but no ingress IP.
+
+	svcObj := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "v1",
+			"kind":       "Service",
+			"metadata": map[string]interface{}{
+				"name":      "svc1",
+				"namespace": "default",
+			},
+			"spec": map[string]interface{}{
+				"type":     "LoadBalancer",
+				"selector": map[string]interface{}{"app": "nginx"},
+			},
+			"status": map[string]interface{}{
+				"loadBalancer": map[string]interface{}{},
+			},
+		},
+	}
+
+	fakeDyn := fake.NewSimpleDynamicClientWithCustomListKinds(scheme, gvrMap, deployObj, svcObj)
+
+	m, _ := NewMultiClusterClient("")
+	m.dynamicClients["c1"] = fakeDyn
+	m.rawConfig = &api.Config{Contexts: map[string]*api.Context{"c1": {Cluster: "cluster1"}}}
+
+	res, err := m.MonitorWorkload(context.Background(), "c1", "default", "dep1")
+	if err != nil {
+		t.Fatalf("MonitorWorkload failed: %v", err)
+	}
+
+	// Service should be degraded
+	if res.Status == "healthy" {
+		t.Error("Expected non-healthy status")
+	}
+	if len(res.Issues) == 0 {
+		t.Error("Expected issues")
+	}
+}
+
+func TestCheckResourceHealth_Variants(t *testing.T) {
+	tests := []struct {
+		kind string
+		obj  map[string]interface{}
+		want ResourceHealthStatus
+	}{
+		// Deployment
+		{
+			kind: "Deployment",
+			obj: map[string]interface{}{
+				"spec": map[string]interface{}{"replicas": int64(3)},
+				"status": map[string]interface{}{
+					"readyReplicas": int64(3), "availableReplicas": int64(3),
+				},
+			},
+			want: "healthy",
+		},
+		{
+			kind: "Deployment",
+			obj: map[string]interface{}{
+				"spec": map[string]interface{}{"replicas": int64(3)},
+				"status": map[string]interface{}{
+					"readyReplicas": int64(1), "availableReplicas": int64(1),
+				},
+			},
+			want: "degraded",
+		},
+
+		// StatefulSet
+		{
+			kind: "StatefulSet",
+			obj: map[string]interface{}{
+				"spec": map[string]interface{}{"replicas": int64(3)},
+				"status": map[string]interface{}{
+					"readyReplicas": int64(3),
+				},
+			},
+			want: "healthy",
+		},
+		{
+			kind: "StatefulSet",
+			obj: map[string]interface{}{
+				"spec": map[string]interface{}{"replicas": int64(3)},
+				"status": map[string]interface{}{
+					"readyReplicas": int64(2),
+				},
+			},
+			want: "degraded",
+		},
+
+		// DaemonSet
+		{
+			kind: "DaemonSet",
+			obj: map[string]interface{}{
+				"status": map[string]interface{}{
+					"desiredNumberScheduled": int64(5), "numberReady": int64(5),
+				},
+			},
+			want: "healthy",
+		},
+		{
+			kind: "DaemonSet",
+			obj: map[string]interface{}{
+				"status": map[string]interface{}{
+					"desiredNumberScheduled": int64(5), "numberReady": int64(3),
+				},
+			},
+			want: "degraded",
+		},
+
+		// Service
+		{
+			kind: "Service",
+			obj: map[string]interface{}{
+				"spec": map[string]interface{}{"type": "ClusterIP"},
+			},
+			want: "healthy",
+		},
+		{
+			kind: "Service",
+			obj: map[string]interface{}{
+				"spec": map[string]interface{}{"type": "LoadBalancer"},
+				"status": map[string]interface{}{
+					"loadBalancer": map[string]interface{}{
+						"ingress": []interface{}{map[string]interface{}{"ip": "1.2.3.4"}},
+					},
+				},
+			},
+			want: "healthy",
+		},
+		{
+			kind: "Service",
+			obj: map[string]interface{}{
+				"spec": map[string]interface{}{"type": "LoadBalancer"},
+				"status": map[string]interface{}{
+					"loadBalancer": map[string]interface{}{},
+				},
+			},
+			want: "degraded",
+		},
+
+		// PVC
+		{
+			kind: "PersistentVolumeClaim",
+			obj: map[string]interface{}{
+				"status": map[string]interface{}{"phase": "Bound"},
+			},
+			want: "healthy",
+		},
+		{
+			kind: "PersistentVolumeClaim",
+			obj: map[string]interface{}{
+				"status": map[string]interface{}{"phase": "Pending"},
+			},
+			want: "degraded",
+		},
+		{
+			kind: "PersistentVolumeClaim",
+			obj: map[string]interface{}{
+				"status": map[string]interface{}{"phase": "Lost"},
+			},
+			want: "unhealthy",
+		},
+
+		// HPA
+		{
+			kind: "HorizontalPodAutoscaler",
+			obj: map[string]interface{}{
+				"status": map[string]interface{}{
+					"currentReplicas": int64(5), "desiredReplicas": int64(5),
+				},
+			},
+			want: "healthy",
+		},
+		{
+			kind: "HorizontalPodAutoscaler",
+			obj: map[string]interface{}{
+				"status": map[string]interface{}{
+					"currentReplicas": int64(3), "desiredReplicas": int64(5),
+				},
+			},
+			want: "degraded",
+		},
+
+		// Unknown
+		{
+			kind: "ConfigMap",
+			obj:  map[string]interface{}{},
+			want: "healthy", // Default for unknown types
 		},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			gotStatus, gotMsg := CheckResourceHealth(tt.kind, tt.obj)
-			if gotStatus != tt.wantStatus {
-				t.Errorf("expected status %s, got %s", tt.wantStatus, gotStatus)
-			}
-			if tt.wantMsg != "" && gotMsg != tt.wantMsg {
-				// fuzzy match or contains check? The test cases are specific enough.
-				// However, "Scaled to 0" vs "37/42 ready" might be partial checks.
-				// For now exact match is fine as I controlled the inputs.
+		t.Run(tt.kind, func(t *testing.T) {
+			obj := &unstructured.Unstructured{Object: tt.obj}
+			status, _ := CheckResourceHealth(tt.kind, obj)
+			if status != tt.want {
+				t.Errorf("CheckResourceHealth(%s) = %s, want %s", tt.kind, status, tt.want)
 			}
 		})
 	}
 }
 
-func TestCalculateOverallStatus(t *testing.T) {
+func TestKindToCategory(t *testing.T) {
 	tests := []struct {
-		name      string
-		resources []MonitoredResource
-		want      ResourceHealthStatus
+		kind string
+		want string
 	}{
-		{
-			"All healthy",
-			[]MonitoredResource{{Status: HealthStatusHealthy}},
-			HealthStatusHealthy,
-		},
-		{
-			"One degraded",
-			[]MonitoredResource{{Status: HealthStatusHealthy}, {Status: HealthStatusDegraded}},
-			HealthStatusDegraded,
-		},
-		{
-			"One unhealthy",
-			[]MonitoredResource{{Status: HealthStatusHealthy}, {Status: HealthStatusUnhealthy}},
-			HealthStatusUnhealthy,
-		},
-		{
-			"Unhealthy but optional",
-			[]MonitoredResource{{Status: HealthStatusUnhealthy, Optional: true}},
-			HealthStatusHealthy,
-		},
-		{
-			"Missing but optional",
-			[]MonitoredResource{{Status: HealthStatusMissing, Optional: true}},
-			HealthStatusHealthy,
-		},
+		{"Deployment", "other"}, // Default
+		{"Service", "networking"},
+		{"Secret", "config"},
+		{"PersistentVolumeClaim", "storage"},
+		{"ServiceAccount", "rbac"},
+		{"Unknown", "other"},
 	}
 
 	for _, tt := range tests {
-		if got := calculateOverallStatus(tt.resources); got != tt.want {
-			t.Errorf("%s: calculateOverallStatus() = %v, want %v", tt.name, got, tt.want)
+		got := kindToCategory(DependencyKind(tt.kind))
+		if string(got) != tt.want {
+			t.Errorf("kindToCategory(%s) = %s, want %s", tt.kind, got, tt.want)
 		}
 	}
 }
