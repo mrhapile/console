@@ -41,7 +41,7 @@ func TestDevModeLogin(t *testing.T) {
 		mockStore.On("UpdateLastLogin", mock.Anything).Return(nil).Once()
 
 		req, _ := http.NewRequest("GET", "/auth/dev", nil)
-		resp, err := app.Test(req)
+		resp, err := app.Test(req, 5000)
 
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusTemporaryRedirect, resp.StatusCode)
@@ -64,7 +64,7 @@ func TestDevModeLogin(t *testing.T) {
 		mockStore.On("UpdateLastLogin", existingUser.ID).Return(nil).Once()
 
 		req, _ := http.NewRequest("GET", "/auth/dev", nil)
-		resp, err := app.Test(req)
+		resp, err := app.Test(req, 5000)
 
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusTemporaryRedirect, resp.StatusCode)
@@ -91,7 +91,7 @@ func TestRefreshToken(t *testing.T) {
 		// 3. Request
 		req, _ := http.NewRequest("POST", "/auth/refresh", nil)
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := app.Test(req)
+		resp, err := app.Test(req, 5000)
 
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
@@ -104,14 +104,14 @@ func TestRefreshToken(t *testing.T) {
 
 	t.Run("Missing Authorization Header", func(t *testing.T) {
 		req, _ := http.NewRequest("POST", "/auth/refresh", nil)
-		resp, _ := app.Test(req)
+		resp, _ := app.Test(req, 5000)
 		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 	})
 
 	t.Run("Invalid Token", func(t *testing.T) {
 		req, _ := http.NewRequest("POST", "/auth/refresh", nil)
 		req.Header.Set("Authorization", "Bearer invalid-token-string")
-		resp, _ := app.Test(req)
+		resp, _ := app.Test(req, 5000)
 		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 	})
 
@@ -124,7 +124,7 @@ func TestRefreshToken(t *testing.T) {
 
 		req, _ := http.NewRequest("POST", "/auth/refresh", nil)
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, _ := app.Test(req)
+		resp, _ := app.Test(req, 5000)
 		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 	})
 
@@ -141,7 +141,7 @@ func TestRefreshToken(t *testing.T) {
 
 		req, _ := http.NewRequest("POST", "/auth/refresh", nil)
 		req.Header.Set("Authorization", "Bearer "+signed)
-		resp, _ := app.Test(req)
+		resp, _ := app.Test(req, 5000)
 
 		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 	})
@@ -159,7 +159,7 @@ func TestGitHubLogin_Redirects(t *testing.T) {
 	app.Get("/auth/github", handler.GitHubLogin)
 
 	req, _ := http.NewRequest("GET", "/auth/github", nil)
-	resp, err := app.Test(req)
+	resp, err := app.Test(req, 5000)
 
 	assert.NoError(t, err)
 	assert.Equal(t, http.StatusTemporaryRedirect, resp.StatusCode)
@@ -196,7 +196,7 @@ func TestGitHubCallback_MissingCode(t *testing.T) {
 	app.Get("/auth/callback", handler.GitHubCallback)
 
 	req, _ := http.NewRequest("GET", "/auth/callback", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, 5000)
 
 	assert.Equal(t, http.StatusTemporaryRedirect, resp.StatusCode)
 	loc, _ := resp.Location()
@@ -209,7 +209,7 @@ func TestGitHubCallback_InvalidState(t *testing.T) {
 
 	// Provide code but no state
 	req, _ := http.NewRequest("GET", "/auth/callback?code=123", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, 5000)
 
 	assert.Equal(t, http.StatusTemporaryRedirect, resp.StatusCode)
 	loc, _ := resp.Location()

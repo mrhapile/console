@@ -7,6 +7,9 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/kubestellar/console/pkg/k8s"
 	"github.com/kubestellar/console/pkg/settings"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic/fake"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 )
 
@@ -58,4 +61,38 @@ func setupTestEnv(t *testing.T) *testEnv {
 		K8sClient: k8sClient,
 		Hub:       hub,
 	}
+}
+
+// injectDynamicCluster creates a fake dynamic client with custom list kinds (for CRD resources
+// like Gateway, HTTPRoute, ServiceExport, etc.) and injects both dynamic and typed clients
+// into the test environment for the given cluster name.
+//
+// gvrKinds maps each GVR to its list kind string (e.g. "GatewayList").
+// Returns the dynamic client for reactor registration.
+func injectDynamicCluster(env *testEnv, cluster string, gvrKinds map[schema.GroupVersionResource]string) *fake.FakeDynamicClient {
+	scheme := runtime.NewScheme()
+	dynClient := fake.NewSimpleDynamicClientWithCustomListKinds(scheme, gvrKinds)
+	env.K8sClient.InjectDynamicClient(cluster, dynClient)
+	env.K8sClient.InjectClient(cluster, k8sfake.NewSimpleClientset())
+	return dynClient
+}
+
+// injectDynamicClusterWithObjects creates a fake dynamic client seeded with typed K8s objects
+// (Deployments, Pods, Services, etc.) and injects both dynamic and typed clients into the test
+// environment for the given cluster name.
+//
+// The scheme must have the relevant types registered (e.g. via k8sscheme.AddToScheme).
+// typedObjects are optional typed K8s objects to seed into the typed client.
+// Returns the dynamic client for further reactor registration if needed.
+func injectDynamicClusterWithObjects(
+	env *testEnv,
+	cluster string,
+	scheme *runtime.Scheme,
+	dynamicObjects []runtime.Object,
+	typedObjects ...runtime.Object,
+) *fake.FakeDynamicClient {
+	dynClient := fake.NewSimpleDynamicClient(scheme, dynamicObjects...)
+	env.K8sClient.InjectDynamicClient(cluster, dynClient)
+	env.K8sClient.InjectClient(cluster, k8sfake.NewSimpleClientset(typedObjects...))
+	return dynClient
 }

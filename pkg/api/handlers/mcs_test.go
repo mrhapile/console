@@ -14,17 +14,28 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/dynamic/fake"
-	k8sfake "k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 )
+
+// serviceExportGVRs returns the GVR-to-list-kind map for ServiceExport resources.
+func serviceExportGVRs() map[schema.GroupVersionResource]string {
+	return map[schema.GroupVersionResource]string{
+		{Group: "multicluster.x-k8s.io", Version: "v1alpha1", Resource: "serviceexports"}: "ServiceExportList",
+	}
+}
+
+// serviceImportGVRs returns the GVR-to-list-kind map for ServiceImport resources.
+func serviceImportGVRs() map[schema.GroupVersionResource]string {
+	return map[schema.GroupVersionResource]string{
+		{Group: "multicluster.x-k8s.io", Version: "v1alpha1", Resource: "serviceimports"}: "ServiceImportList",
+	}
+}
 
 func TestListServiceExports(t *testing.T) {
 	env := setupTestEnv(t)
 	handler := NewMCSHandlers(env.K8sClient, env.Hub)
 	env.App.Get("/api/mcs/exports", handler.ListServiceExports)
 
-	scheme := runtime.NewScheme()
 	export := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "multicluster.x-k8s.io/v1alpha1",
@@ -36,14 +47,8 @@ func TestListServiceExports(t *testing.T) {
 		},
 	}
 
-	gvr := schema.GroupVersionResource{Group: "multicluster.x-k8s.io", Version: "v1alpha1", Resource: "serviceexports"}
-	dynClient := fake.NewSimpleDynamicClientWithCustomListKinds(scheme, map[schema.GroupVersionResource]string{
-		gvr: "ServiceExportList",
-	})
-	env.K8sClient.InjectDynamicClient("test-cluster", dynClient)
-	env.K8sClient.InjectClient("test-cluster", k8sfake.NewSimpleClientset())
+	dynClient := injectDynamicCluster(env, "test-cluster", serviceExportGVRs())
 
-	// Success reactor
 	dynClient.PrependReactor("list", "*", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, &unstructured.UnstructuredList{
 			Object: map[string]interface{}{"kind": "ServiceExportList", "apiVersion": "multicluster.x-k8s.io/v1alpha1"},
@@ -53,7 +58,7 @@ func TestListServiceExports(t *testing.T) {
 
 	// Case 1: List all
 	req, _ := http.NewRequest("GET", "/api/mcs/exports", nil)
-	resp, err := env.App.Test(req)
+	resp, err := env.App.Test(req, 5000)
 	require.NoError(t, err)
 	assert.Equal(t, 200, resp.StatusCode)
 
@@ -64,12 +69,12 @@ func TestListServiceExports(t *testing.T) {
 	require.NotEmpty(t, list.Items)
 	assert.Equal(t, "my-svc", list.Items[0].Name)
 
-	// Case 2: Specific cluster failure
+	// Case 2: Specific cluster failure — error swallowed, returns 200
 	dynClient.PrependReactor("list", "*", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("export list error")
 	})
 	req2, _ := http.NewRequest("GET", "/api/mcs/exports?cluster=test-cluster", nil)
-	resp2, err := env.App.Test(req2)
+	resp2, err := env.App.Test(req2, 5000)
 	require.NoError(t, err)
 	assert.Equal(t, 200, resp2.StatusCode)
 }
@@ -79,7 +84,6 @@ func TestGetServiceExport(t *testing.T) {
 	handler := NewMCSHandlers(env.K8sClient, env.Hub)
 	env.App.Get("/api/mcs/exports/:cluster/:namespace/:name", handler.GetServiceExport)
 
-	scheme := runtime.NewScheme()
 	export := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "multicluster.x-k8s.io/v1alpha1",
@@ -91,14 +95,8 @@ func TestGetServiceExport(t *testing.T) {
 		},
 	}
 
-	gvr := schema.GroupVersionResource{Group: "multicluster.x-k8s.io", Version: "v1alpha1", Resource: "serviceexports"}
-	dynClient := fake.NewSimpleDynamicClientWithCustomListKinds(scheme, map[schema.GroupVersionResource]string{
-		gvr: "ServiceExportList",
-	})
-	env.K8sClient.InjectDynamicClient("c1", dynClient)
-	env.K8sClient.InjectClient("c1", k8sfake.NewSimpleClientset())
+	dynClient := injectDynamicCluster(env, "c1", serviceExportGVRs())
 
-	// Success reactor
 	dynClient.PrependReactor("list", "*", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, &unstructured.UnstructuredList{
 			Object: map[string]interface{}{"kind": "ServiceExportList", "apiVersion": "multicluster.x-k8s.io/v1alpha1"},
@@ -108,16 +106,16 @@ func TestGetServiceExport(t *testing.T) {
 
 	// Found
 	req, _ := http.NewRequest("GET", "/api/mcs/exports/c1/default/target-svc", nil)
-	resp, err := env.App.Test(req)
+	resp, err := env.App.Test(req, 5000)
 	require.NoError(t, err)
 	assert.Equal(t, 200, resp.StatusCode)
 
-	// Client Error
+	// Client Error → 404
 	dynClient.PrependReactor("list", "*", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("fail")
 	})
 	req2, _ := http.NewRequest("GET", "/api/mcs/exports/c1/default/target-svc", nil)
-	resp2, err := env.App.Test(req2)
+	resp2, err := env.App.Test(req2, 5000)
 	require.NoError(t, err)
 	assert.Equal(t, 404, resp2.StatusCode)
 }
@@ -127,7 +125,6 @@ func TestListServiceImports(t *testing.T) {
 	handler := NewMCSHandlers(env.K8sClient, env.Hub)
 	env.App.Get("/api/mcs/imports", handler.ListServiceImports)
 
-	scheme := runtime.NewScheme()
 	imp := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "multicluster.x-k8s.io/v1alpha1",
@@ -139,14 +136,8 @@ func TestListServiceImports(t *testing.T) {
 		},
 	}
 
-	gvr := schema.GroupVersionResource{Group: "multicluster.x-k8s.io", Version: "v1alpha1", Resource: "serviceimports"}
-	dynClient := fake.NewSimpleDynamicClientWithCustomListKinds(scheme, map[schema.GroupVersionResource]string{
-		gvr: "ServiceImportList",
-	})
-	env.K8sClient.InjectDynamicClient("test-cluster", dynClient)
-	env.K8sClient.InjectClient("test-cluster", k8sfake.NewSimpleClientset())
+	dynClient := injectDynamicCluster(env, "test-cluster", serviceImportGVRs())
 
-	// Success reactor
 	dynClient.PrependReactor("list", "*", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, &unstructured.UnstructuredList{
 			Object: map[string]interface{}{"kind": "ServiceImportList", "apiVersion": "multicluster.x-k8s.io/v1alpha1"},
@@ -156,7 +147,7 @@ func TestListServiceImports(t *testing.T) {
 
 	// List all
 	req, _ := http.NewRequest("GET", "/api/mcs/imports", nil)
-	resp, err := env.App.Test(req)
+	resp, err := env.App.Test(req, 5000)
 	require.NoError(t, err)
 	assert.Equal(t, 200, resp.StatusCode)
 
@@ -172,19 +163,14 @@ func TestCreateServiceExport(t *testing.T) {
 	handler := NewMCSHandlers(env.K8sClient, env.Hub)
 	env.App.Post("/api/mcs/exports", handler.CreateServiceExport)
 
-	// Case 1: Success
-	gvr := schema.GroupVersionResource{Group: "multicluster.x-k8s.io", Version: "v1alpha1", Resource: "serviceexports"}
-	dynClient := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
-		gvr: "ServiceExportList",
-	})
-	env.K8sClient.InjectDynamicClient("c1", dynClient)
-	env.K8sClient.InjectClient("c1", k8sfake.NewSimpleClientset())
+	dynClient := injectDynamicCluster(env, "c1", serviceExportGVRs())
 
 	// Success reactor
 	dynClient.PrependReactor("create", "*", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, &unstructured.Unstructured{}, nil
 	})
 
+	// Case 1: Success
 	payload := map[string]string{
 		"cluster":     "c1",
 		"namespace":   "default",
@@ -194,7 +180,7 @@ func TestCreateServiceExport(t *testing.T) {
 	req, _ := http.NewRequest("POST", "/api/mcs/exports", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := env.App.Test(req)
+	resp, err := env.App.Test(req, 5000)
 	require.NoError(t, err)
 	assert.Equal(t, 201, resp.StatusCode)
 
@@ -208,21 +194,20 @@ func TestCreateServiceExport(t *testing.T) {
 	}
 	assert.True(t, found, "Create action not found")
 
-	// Case 2: Validation Error
+	// Case 2: Validation Error (missing serviceName)
 	payloadInvalid := map[string]string{
 		"cluster":   "c1",
 		"namespace": "default",
-		// missing serviceName
 	}
 	bodyInvalid, _ := json.Marshal(payloadInvalid)
 	reqInvalid, _ := http.NewRequest("POST", "/api/mcs/exports", bytes.NewReader(bodyInvalid))
 	reqInvalid.Header.Set("Content-Type", "application/json")
 
-	respInvalid, err := env.App.Test(reqInvalid)
+	respInvalid, err := env.App.Test(reqInvalid, 5000)
 	require.NoError(t, err)
 	assert.Equal(t, 400, respInvalid.StatusCode)
 
-	// Case 3: Client Error
+	// Case 3: Client Error → 500
 	dynClient.PrependReactor("create", "*", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("create failed")
 	})
@@ -239,12 +224,7 @@ func TestDeleteServiceExport(t *testing.T) {
 	handler := NewMCSHandlers(env.K8sClient, env.Hub)
 	env.App.Delete("/api/mcs/exports/:cluster/:namespace/:name", handler.DeleteServiceExport)
 
-	gvr := schema.GroupVersionResource{Group: "multicluster.x-k8s.io", Version: "v1alpha1", Resource: "serviceexports"}
-	dynClient := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
-		gvr: "ServiceExportList",
-	})
-	env.K8sClient.InjectDynamicClient("c1", dynClient)
-	env.K8sClient.InjectClient("c1", k8sfake.NewSimpleClientset())
+	dynClient := injectDynamicCluster(env, "c1", serviceExportGVRs())
 
 	// Success reactor
 	dynClient.PrependReactor("delete", "*", func(action k8stesting.Action) (bool, runtime.Object, error) {
@@ -253,16 +233,16 @@ func TestDeleteServiceExport(t *testing.T) {
 
 	// Case 1: Success
 	req, _ := http.NewRequest("DELETE", "/api/mcs/exports/c1/default/svc1", nil)
-	resp, err := env.App.Test(req)
+	resp, err := env.App.Test(req, 5000)
 	require.NoError(t, err)
 	assert.Equal(t, 200, resp.StatusCode)
 
-	// Case 2: Client Error
+	// Case 2: Client Error → 500
 	dynClient.PrependReactor("delete", "*", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("delete failed")
 	})
 	reqFail, _ := http.NewRequest("DELETE", "/api/mcs/exports/c1/default/svc1", nil)
-	respFail, err := env.App.Test(reqFail)
+	respFail, err := env.App.Test(reqFail, 5000)
 	require.NoError(t, err)
 	assert.Equal(t, 500, respFail.StatusCode)
 }

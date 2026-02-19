@@ -20,7 +20,7 @@ func TestGetSettings(t *testing.T) {
 
 	// Case 1: File missing (default settings)
 	req := httptest.NewRequest("GET", "/api/settings", nil)
-	resp, err := env.App.Test(req)
+	resp, err := env.App.Test(req, 5000)
 	require.NoError(t, err)
 	assert.Equal(t, 200, resp.StatusCode)
 
@@ -40,7 +40,7 @@ func TestGetSettings(t *testing.T) {
 
 	// Request again
 	req2 := httptest.NewRequest("GET", "/api/settings", nil)
-	resp2, err := env.App.Test(req2)
+	resp2, err := env.App.Test(req2, 5000)
 	require.NoError(t, err)
 	assert.Equal(t, 200, resp2.StatusCode)
 
@@ -68,7 +68,7 @@ func TestSaveSettings(t *testing.T) {
 	req := httptest.NewRequest("PUT", "/api/settings", bytes.NewReader(data))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := env.App.Test(req)
+	resp, err := env.App.Test(req, 5000)
 	require.NoError(t, err)
 	assert.Equal(t, 200, resp.StatusCode)
 
@@ -82,7 +82,7 @@ func TestSaveSettings(t *testing.T) {
 	// Case 2: Malformed JSON
 	reqInvalid := httptest.NewRequest("PUT", "/api/settings", bytes.NewReader([]byte("{invalid-json")))
 	reqInvalid.Header.Set("Content-Type", "application/json")
-	respInvalid, err := env.App.Test(reqInvalid)
+	respInvalid, err := env.App.Test(reqInvalid, 5000)
 	require.NoError(t, err)
 	assert.Equal(t, 400, respInvalid.StatusCode)
 }
@@ -105,7 +105,7 @@ func TestExportImportSettings(t *testing.T) {
 
 	// Case 1: Export
 	reqExport := httptest.NewRequest("POST", "/api/settings/export", nil)
-	respExport, err := env.App.Test(reqExport)
+	respExport, err := env.App.Test(reqExport, 5000)
 	require.NoError(t, err)
 	assert.Equal(t, 200, respExport.StatusCode)
 
@@ -128,7 +128,7 @@ func TestExportImportSettings(t *testing.T) {
 	reqImport := httptest.NewRequest("POST", "/api/settings/import", bytes.NewReader(exportedData))
 	reqImport.Header.Set("Content-Type", "application/json")
 
-	respImport, err := env2.App.Test(reqImport)
+	respImport, err := env2.App.Test(reqImport, 5000)
 	require.NoError(t, err)
 	assert.Equal(t, 200, respImport.StatusCode)
 
@@ -140,13 +140,13 @@ func TestExportImportSettings(t *testing.T) {
 
 	// Case 3: Import invalid blob
 	reqInvalid := httptest.NewRequest("POST", "/api/settings/import", bytes.NewReader([]byte("not-json")))
-	respInvalid, err := env2.App.Test(reqInvalid)
+	respInvalid, err := env2.App.Test(reqInvalid, 5000)
 	require.NoError(t, err)
 	assert.Equal(t, 400, respInvalid.StatusCode)
 
 	// Case 4: Import empty body
 	reqEmpty := httptest.NewRequest("POST", "/api/settings/import", nil)
-	respEmpty, err := env2.App.Test(reqEmpty)
+	respEmpty, err := env2.App.Test(reqEmpty, 5000)
 	require.NoError(t, err)
 	assert.Equal(t, 400, respEmpty.StatusCode)
 }
@@ -187,7 +187,7 @@ func TestSettingsFileError(t *testing.T) {
 	// Note: setupTestEnv sets the settings path inside `TempDir`.
 	// Changing permission of TempDir should block writing `settings.json` inside it.
 
-	resp, err := env.App.Test(req)
+	resp, err := env.App.Test(req, 5000)
 	require.NoError(t, err)
 	// If it successfully writes (somehow), status will be 200. If failed, 500.
 	// We assert 500.

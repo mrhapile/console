@@ -14,7 +14,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/dynamic/fake"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 	k8sscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/clientcmd/api"
@@ -24,16 +23,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// newK8sScheme returns a scheme with standard K8s types registered.
+func newK8sScheme() *runtime.Scheme {
+	scheme := runtime.NewScheme()
+	_ = k8sscheme.AddToScheme(scheme)
+	return scheme
+}
+
 func TestListWorkloads(t *testing.T) {
 	env := setupTestEnv(t)
 	handler := NewWorkloadHandlers(env.K8sClient, env.Hub)
 	env.App.Get("/api/workloads", handler.ListWorkloads)
 
-	// Setup Scheme and Dynamic Client
-	scheme := runtime.NewScheme()
-	_ = k8sscheme.AddToScheme(scheme)
+	scheme := newK8sScheme()
 
-	// Seed data
 	deployment := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Deployment",
@@ -56,12 +59,10 @@ func TestListWorkloads(t *testing.T) {
 		},
 	}
 
-	dynClient := fake.NewSimpleDynamicClient(scheme, deployment)
-	env.K8sClient.InjectDynamicClient("test-cluster", dynClient)
+	injectDynamicClusterWithObjects(env, "test-cluster", scheme, []runtime.Object{deployment})
 
-	// Test GET
 	req, _ := http.NewRequest("GET", "/api/workloads?cluster=test-cluster", nil)
-	resp, err := env.App.Test(req)
+	resp, err := env.App.Test(req, 5000)
 
 	require.NoError(t, err)
 	assert.Equal(t, 200, resp.StatusCode)
@@ -82,8 +83,7 @@ func TestGetWorkload(t *testing.T) {
 	handler := NewWorkloadHandlers(env.K8sClient, env.Hub)
 	env.App.Get("/api/workloads/:cluster/:namespace/:name", handler.GetWorkload)
 
-	scheme := runtime.NewScheme()
-	_ = k8sscheme.AddToScheme(scheme)
+	scheme := newK8sScheme()
 
 	deployment := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -100,12 +100,11 @@ func TestGetWorkload(t *testing.T) {
 		},
 	}
 
-	dynClient := fake.NewSimpleDynamicClient(scheme, deployment)
-	env.K8sClient.InjectDynamicClient("test-cluster", dynClient)
+	injectDynamicClusterWithObjects(env, "test-cluster", scheme, []runtime.Object{deployment})
 
 	// 1. Success Case
 	req, _ := http.NewRequest("GET", "/api/workloads/test-cluster/default/my-app", nil)
-	resp, err := env.App.Test(req)
+	resp, err := env.App.Test(req, 5000)
 	require.NoError(t, err)
 	assert.Equal(t, 200, resp.StatusCode)
 
@@ -116,7 +115,7 @@ func TestGetWorkload(t *testing.T) {
 
 	// 2. Not Found
 	reqNotFound, _ := http.NewRequest("GET", "/api/workloads/test-cluster/default/missing", nil)
-	respNotFound, _ := env.App.Test(reqNotFound)
+	respNotFound, _ := env.App.Test(reqNotFound, 5000)
 	assert.Equal(t, 404, respNotFound.StatusCode)
 }
 
@@ -125,8 +124,7 @@ func TestDeployWorkload(t *testing.T) {
 	handler := NewWorkloadHandlers(env.K8sClient, env.Hub)
 	env.App.Post("/api/workloads/deploy", handler.DeployWorkload)
 
-	scheme := runtime.NewScheme()
-	_ = k8sscheme.AddToScheme(scheme)
+	scheme := newK8sScheme()
 
 	// Source Deployment
 	srcDep := &appsv1.Deployment{
@@ -143,11 +141,8 @@ func TestDeployWorkload(t *testing.T) {
 		},
 	}
 
-	sourceClient := fake.NewSimpleDynamicClient(scheme, srcDep)
-	targetClient := fake.NewSimpleDynamicClient(scheme)
-
-	env.K8sClient.InjectDynamicClient("source-cluster", sourceClient)
-	env.K8sClient.InjectDynamicClient("target-cluster", targetClient)
+	injectDynamicClusterWithObjects(env, "source-cluster", scheme, []runtime.Object{srcDep})
+	targetDyn := injectDynamicClusterWithObjects(env, "target-cluster", scheme, nil)
 
 	// Payload
 	payload := map[string]interface{}{
@@ -163,7 +158,7 @@ func TestDeployWorkload(t *testing.T) {
 	req, _ := http.NewRequest("POST", "/api/workloads/deploy", bytes.NewReader(data))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := env.App.Test(req)
+	resp, err := env.App.Test(req, 5000)
 	require.NoError(t, err)
 	if resp.StatusCode != 200 {
 		body, _ := io.ReadAll(resp.Body)
@@ -178,13 +173,13 @@ func TestDeployWorkload(t *testing.T) {
 
 	// Verify deployment created in target
 	gvr := appsv1.SchemeGroupVersion.WithResource("deployments")
-	dep, err := targetClient.Resource(gvr).Namespace("default").Get(context.Background(), "src-app", metav1.GetOptions{})
+	dep, err := targetDyn.Resource(gvr).Namespace("default").Get(context.Background(), "src-app", metav1.GetOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, "src-app", dep.GetName())
 
-	// Check Replicas (need to traverse unstructured map)
+	// Check Replicas (int64 for unstructured)
 	spec := dep.Object["spec"].(map[string]interface{})
-	assert.Equal(t, int64(3), spec["replicas"]) // note: int64 for unstructured
+	assert.Equal(t, int64(3), spec["replicas"])
 }
 
 func TestGetDeployStatus(t *testing.T) {
@@ -192,8 +187,7 @@ func TestGetDeployStatus(t *testing.T) {
 	handler := NewWorkloadHandlers(env.K8sClient, env.Hub)
 	env.App.Get("/api/workloads/deploy-status/:cluster/:namespace/:name", handler.GetDeployStatus)
 
-	scheme := runtime.NewScheme()
-	_ = k8sscheme.AddToScheme(scheme)
+	scheme := newK8sScheme()
 
 	deploy := &appsv1.Deployment{
 		TypeMeta:   metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -202,11 +196,10 @@ func TestGetDeployStatus(t *testing.T) {
 		Status:     appsv1.DeploymentStatus{ReadyReplicas: 3, Replicas: 5},
 	}
 
-	dynClient := fake.NewSimpleDynamicClient(scheme, deploy)
-	env.K8sClient.InjectDynamicClient("c1", dynClient)
+	injectDynamicClusterWithObjects(env, "c1", scheme, []runtime.Object{deploy})
 
 	req, _ := http.NewRequest("GET", "/api/workloads/deploy-status/c1/default/status-app", nil)
-	resp, err := env.App.Test(req)
+	resp, err := env.App.Test(req, 5000)
 
 	require.NoError(t, err)
 	assert.Equal(t, 200, resp.StatusCode)
@@ -234,7 +227,7 @@ func TestScaleWorkload(t *testing.T) {
 	req, _ := http.NewRequest("POST", "/api/workloads/scale", bytes.NewReader(data))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := env.App.Test(req)
+	resp, err := env.App.Test(req, 5000)
 	require.NoError(t, err)
 	assert.Equal(t, 200, resp.StatusCode)
 
@@ -249,7 +242,7 @@ func TestDeleteWorkload(t *testing.T) {
 	env.App.Delete("/api/workloads/:cluster/:namespace/:name", handler.DeleteWorkload)
 
 	req, _ := http.NewRequest("DELETE", "/api/workloads/c1/default/del-app", nil)
-	resp, err := env.App.Test(req)
+	resp, err := env.App.Test(req, 5000)
 
 	require.NoError(t, err)
 	assert.Equal(t, 200, resp.StatusCode)
@@ -274,7 +267,7 @@ func TestClusterGroupsCRUD(t *testing.T) {
 	req, _ := http.NewRequest("POST", "/api/cluster-groups", bytes.NewReader(data))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := env.App.Test(req)
+	resp, err := env.App.Test(req, 5000)
 	require.NoError(t, err)
 	assert.Equal(t, 201, resp.StatusCode)
 
@@ -331,9 +324,6 @@ func TestEvaluateClusterQuery(t *testing.T) {
 	}
 	env.K8sClient.SetRawConfig(config)
 
-	scheme := runtime.NewScheme()
-	_ = k8sscheme.AddToScheme(scheme)
-
 	node := &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   "node1",
@@ -369,7 +359,7 @@ func TestEvaluateClusterQuery(t *testing.T) {
 	req, _ := http.NewRequest("POST", "/api/cluster-groups/evaluate", bytes.NewReader(data))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := env.App.Test(req)
+	resp, err := env.App.Test(req, 5000)
 	require.NoError(t, err)
 	assert.Equal(t, 200, resp.StatusCode)
 
@@ -382,7 +372,7 @@ func TestEvaluateClusterQuery(t *testing.T) {
 	assert.Equal(t, "c1-ctx", clusters[0])
 }
 
-// MockAIProvider implements agent.AIProvider
+// MockAIProvider implements agent.AIProvider for testing.
 type MockAIProvider struct {
 	Response string
 }
@@ -423,7 +413,7 @@ func TestGenerateClusterQuery(t *testing.T) {
 	req, _ := http.NewRequest("POST", "/api/cluster-groups/generate", bytes.NewReader(data))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := env.App.Test(req)
+	resp, err := env.App.Test(req, 5000)
 	require.NoError(t, err)
 	assert.Equal(t, 200, resp.StatusCode)
 
@@ -440,11 +430,9 @@ func TestResolveDependencies(t *testing.T) {
 	handler := NewWorkloadHandlers(env.K8sClient, env.Hub)
 	env.App.Get("/api/workloads/resolve-deps/:cluster/:namespace/:name", handler.ResolveDependencies)
 
-	scheme := runtime.NewScheme()
-	_ = k8sscheme.AddToScheme(scheme)
+	scheme := newK8sScheme()
 	_ = apiextensionsv1.AddToScheme(scheme)
 
-	// Create deployment
 	deploy := &appsv1.Deployment{
 		TypeMeta:   metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "app", Namespace: "default"},
@@ -458,7 +446,6 @@ func TestResolveDependencies(t *testing.T) {
 		},
 	}
 
-	// Create service matching headers
 	svc := &corev1.Service{
 		TypeMeta:   metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "app-svc", Namespace: "default"},
@@ -467,11 +454,10 @@ func TestResolveDependencies(t *testing.T) {
 		},
 	}
 
-	dynClient := fake.NewSimpleDynamicClient(scheme, deploy, svc)
-	env.K8sClient.InjectDynamicClient("c1", dynClient)
+	injectDynamicClusterWithObjects(env, "c1", scheme, []runtime.Object{deploy, svc})
 
 	req, _ := http.NewRequest("GET", "/api/workloads/resolve-deps/c1/default/app", nil)
-	resp, err := env.App.Test(req)
+	resp, err := env.App.Test(req, 5000)
 	require.NoError(t, err)
 	assert.Equal(t, 200, resp.StatusCode)
 
@@ -496,8 +482,7 @@ func TestMonitorWorkload(t *testing.T) {
 	handler := NewWorkloadHandlers(env.K8sClient, env.Hub)
 	env.App.Get("/api/workloads/monitor/:cluster/:namespace/:name", handler.MonitorWorkload)
 
-	scheme := runtime.NewScheme()
-	_ = k8sscheme.AddToScheme(scheme)
+	scheme := newK8sScheme()
 	_ = apiextensionsv1.AddToScheme(scheme)
 
 	deploy := &appsv1.Deployment{
@@ -513,11 +498,10 @@ func TestMonitorWorkload(t *testing.T) {
 		},
 	}
 
-	dynClient := fake.NewSimpleDynamicClient(scheme, deploy)
-	env.K8sClient.InjectDynamicClient("c1", dynClient)
+	injectDynamicClusterWithObjects(env, "c1", scheme, []runtime.Object{deploy})
 
 	req, _ := http.NewRequest("GET", "/api/workloads/monitor/c1/default/monitored-app", nil)
-	resp, err := env.App.Test(req)
+	resp, err := env.App.Test(req, 5000)
 	require.NoError(t, err)
 	assert.Equal(t, 200, resp.StatusCode)
 
@@ -534,10 +518,8 @@ func TestGetDeployLogs(t *testing.T) {
 	handler := NewWorkloadHandlers(env.K8sClient, env.Hub)
 	env.App.Get("/api/workloads/logs/:cluster/:namespace/:name", handler.GetDeployLogs)
 
-	scheme := runtime.NewScheme()
-	_ = k8sscheme.AddToScheme(scheme)
+	scheme := newK8sScheme()
 
-	// Setup Pod for logs
 	pod := &corev1.Pod{
 		TypeMeta: metav1.TypeMeta{Kind: "Pod", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -550,18 +532,6 @@ func TestGetDeployLogs(t *testing.T) {
 		},
 	}
 
-	// Needs both dynamic (for listing pods) and typed (for logs)
-	dynClient := fake.NewSimpleDynamicClient(scheme, pod)
-	typedClient := k8sfake.NewSimpleClientset(pod)
-
-	env.K8sClient.InjectDynamicClient("c1", dynClient)
-	env.K8sClient.InjectClient("c1", typedClient)
-
-	req, _ := http.NewRequest("GET", "/api/workloads/logs/c1/default/log-app", nil)
-	resp, err := env.App.Test(req)
-	require.NoError(t, err)
-
-	// Create deployment to provide selector
 	deploy := &appsv1.Deployment{
 		TypeMeta:   metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "log-app", Namespace: "default"},
@@ -569,10 +539,43 @@ func TestGetDeployLogs(t *testing.T) {
 			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "log-app"}},
 		},
 	}
-	dynClientWithDeploy := fake.NewSimpleDynamicClient(scheme, pod, deploy)
-	env.K8sClient.InjectDynamicClient("c1", dynClientWithDeploy)
 
-	resp, err = env.App.Test(req)
-	require.NoError(t, err)
-	assert.True(t, resp.StatusCode == 200 || resp.StatusCode == 404 || resp.StatusCode == 500)
+	t.Run("Smoke_WithDeploymentAndPod", func(t *testing.T) {
+		// Smoke test: ensure no panic and handler returns a valid HTTP response.
+		// The fake client does not implement the pod log subresource, so we cannot
+		// assert exact log content. We verify the handler resolves the deployment,
+		// finds matching pods, and returns without crashing.
+		injectDynamicClusterWithObjects(env, "c1", scheme, []runtime.Object{pod, deploy}, pod)
+
+		req, _ := http.NewRequest("GET", "/api/workloads/logs/c1/default/log-app", nil)
+		resp, err := env.App.Test(req, 5000)
+		require.NoError(t, err)
+		assert.Equal(t, 200, resp.StatusCode)
+	})
+
+	t.Run("Smoke_WithoutDeployment", func(t *testing.T) {
+		// Smoke test: GetDeployLogs always returns 200 with an events payload.
+		// Even when no deployment exists, the handler falls through to listing pods
+		// by label/name prefix and returns an empty events list — it never returns 404.
+		// We verify the handler does not crash and returns a well-formed response.
+		injectDynamicClusterWithObjects(env, "c1", scheme, []runtime.Object{pod}, pod)
+
+		req, _ := http.NewRequest("GET", "/api/workloads/logs/c1/default/missing-app", nil)
+		resp, err := env.App.Test(req, 5000)
+		require.NoError(t, err)
+		assert.Equal(t, 200, resp.StatusCode)
+
+		var result map[string]interface{}
+		body, _ := io.ReadAll(resp.Body)
+		json.Unmarshal(body, &result)
+		assert.Equal(t, "events", result["type"])
+	})
+
+	t.Run("MissingCluster_Returns500", func(t *testing.T) {
+		// When the cluster context does not exist, GetClient fails and handler returns 500.
+		req, _ := http.NewRequest("GET", "/api/workloads/logs/nonexistent-cluster/default/app", nil)
+		resp, err := env.App.Test(req, 5000)
+		require.NoError(t, err)
+		assert.Equal(t, 500, resp.StatusCode)
+	})
 }

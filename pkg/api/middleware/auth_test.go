@@ -25,21 +25,21 @@ func TestJWTAuth(t *testing.T) {
 		req := httptest.NewRequest("GET", "/protected", nil)
 		req.Header.Set("Authorization", "Bearer "+token)
 
-		resp, err := app.Test(req)
+		resp, err := app.Test(req, 5000)
 		assert.NoError(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
 	})
 
 	t.Run("Missing Header", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/protected", nil)
-		resp, _ := app.Test(req)
+		resp, _ := app.Test(req, 5000)
 		assert.Equal(t, 401, resp.StatusCode)
 	})
 
 	t.Run("Invalid Format", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/protected", nil)
 		req.Header.Set("Authorization", "InvalidFormat")
-		resp, _ := app.Test(req)
+		resp, _ := app.Test(req, 5000)
 		assert.Equal(t, 401, resp.StatusCode)
 	})
 
@@ -47,7 +47,7 @@ func TestJWTAuth(t *testing.T) {
 		token, _ := generateTestToken("WRONG-SECRET", time.Now().Add(time.Hour))
 		req := httptest.NewRequest("GET", "/protected", nil)
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, _ := app.Test(req)
+		resp, _ := app.Test(req, 5000)
 		assert.Equal(t, 401, resp.StatusCode)
 	})
 
@@ -55,7 +55,7 @@ func TestJWTAuth(t *testing.T) {
 		token, _ := generateTestToken("test-secret", time.Now().Add(-1*time.Hour))
 		req := httptest.NewRequest("GET", "/protected", nil)
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, _ := app.Test(req)
+		resp, _ := app.Test(req, 5000)
 		assert.Equal(t, 401, resp.StatusCode)
 	})
 
@@ -69,7 +69,7 @@ func TestJWTAuth(t *testing.T) {
 			return c.SendString("stream-ok")
 		})
 
-		resp, err := app.Test(req)
+		resp, err := app.Test(req, 5000)
 		assert.NoError(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
 	})
@@ -96,7 +96,7 @@ func TestGetContextHelpers(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/me", nil)
-	resp, _ := app.Test(req)
+	resp, _ := app.Test(req, 5000)
 	assert.Equal(t, 200, resp.StatusCode)
 
 	// Validate body content

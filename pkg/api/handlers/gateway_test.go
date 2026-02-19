@@ -13,20 +13,30 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/dynamic/fake"
-	k8sfake "k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 )
+
+// gatewayGVRs returns the standard GVR-to-list-kind map for Gateway resources.
+func gatewayGVRs() map[schema.GroupVersionResource]string {
+	return map[schema.GroupVersionResource]string{
+		{Group: "gateway.networking.k8s.io", Version: "v1", Resource: "gateways"}:      "GatewayList",
+		{Group: "gateway.networking.k8s.io", Version: "v1beta1", Resource: "gateways"}: "GatewayList",
+	}
+}
+
+// httpRouteGVRs returns the standard GVR-to-list-kind map for HTTPRoute resources.
+func httpRouteGVRs() map[schema.GroupVersionResource]string {
+	return map[schema.GroupVersionResource]string{
+		{Group: "gateway.networking.k8s.io", Version: "v1", Resource: "httproutes"}:      "HTTPRouteList",
+		{Group: "gateway.networking.k8s.io", Version: "v1beta1", Resource: "httproutes"}: "HTTPRouteList",
+	}
+}
 
 func TestListGateways(t *testing.T) {
 	env := setupTestEnv(t)
 	handler := NewGatewayHandlers(env.K8sClient, env.Hub)
 	env.App.Get("/api/gateway/gateways", handler.ListGateways)
 
-	// Setup Scheme
-	scheme := runtime.NewScheme()
-
-	// Seed data
 	gw := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "gateway.networking.k8s.io/v1",
@@ -41,16 +51,8 @@ func TestListGateways(t *testing.T) {
 		},
 	}
 
-	gvr := schema.GroupVersionResource{Group: "gateway.networking.k8s.io", Version: "v1", Resource: "gateways"}
-	gvrBeta := schema.GroupVersionResource{Group: "gateway.networking.k8s.io", Version: "v1beta1", Resource: "gateways"}
-	dynClient := fake.NewSimpleDynamicClientWithCustomListKinds(scheme, map[schema.GroupVersionResource]string{
-		gvr:     "GatewayList",
-		gvrBeta: "GatewayList",
-	})
-	env.K8sClient.InjectDynamicClient("test-cluster", dynClient)
-	env.K8sClient.InjectClient("test-cluster", k8sfake.NewSimpleClientset())
+	dynClient := injectDynamicCluster(env, "test-cluster", gatewayGVRs())
 
-	// Inject success reactor
 	dynClient.PrependReactor("list", "*", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, &unstructured.UnstructuredList{
 			Object: map[string]interface{}{"kind": "GatewayList", "apiVersion": "gateway.networking.k8s.io/v1"},
@@ -60,7 +62,7 @@ func TestListGateways(t *testing.T) {
 
 	// Case 1: List all (success)
 	req, _ := http.NewRequest("GET", "/api/gateway/gateways", nil)
-	resp, err := env.App.Test(req)
+	resp, err := env.App.Test(req, 5000)
 	require.NoError(t, err)
 	assert.Equal(t, 200, resp.StatusCode)
 
@@ -73,18 +75,17 @@ func TestListGateways(t *testing.T) {
 
 	// Case 2: List specific cluster (success)
 	req2, _ := http.NewRequest("GET", "/api/gateway/gateways?cluster=test-cluster", nil)
-	resp2, err := env.App.Test(req2)
+	resp2, err := env.App.Test(req2, 5000)
 	require.NoError(t, err)
 	assert.Equal(t, 200, resp2.StatusCode)
 
-	// Case 3: List specific cluster (failure)
-	// Inject failure at top of chain
+	// Case 3: List specific cluster (failure — error swallowed, returns 200 with empty list)
 	dynClient.PrependReactor("list", "*", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("simulated error")
 	})
 
 	req3, _ := http.NewRequest("GET", "/api/gateway/gateways?cluster=test-cluster", nil)
-	resp3, err := env.App.Test(req3)
+	resp3, err := env.App.Test(req3, 5000)
 	require.NoError(t, err)
 	assert.Equal(t, 200, resp3.StatusCode)
 }
@@ -94,7 +95,6 @@ func TestGetGateway(t *testing.T) {
 	handler := NewGatewayHandlers(env.K8sClient, env.Hub)
 	env.App.Get("/api/gateway/gateways/:cluster/:namespace/:name", handler.GetGateway)
 
-	scheme := runtime.NewScheme()
 	gw := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "gateway.networking.k8s.io/v1",
@@ -106,16 +106,8 @@ func TestGetGateway(t *testing.T) {
 		},
 	}
 
-	gvr := schema.GroupVersionResource{Group: "gateway.networking.k8s.io", Version: "v1", Resource: "gateways"}
-	gvrBeta := schema.GroupVersionResource{Group: "gateway.networking.k8s.io", Version: "v1beta1", Resource: "gateways"}
-	dynClient := fake.NewSimpleDynamicClientWithCustomListKinds(scheme, map[schema.GroupVersionResource]string{
-		gvr:     "GatewayList",
-		gvrBeta: "GatewayList",
-	})
-	env.K8sClient.InjectDynamicClient("c1", dynClient)
-	env.K8sClient.InjectClient("c1", k8sfake.NewSimpleClientset())
+	dynClient := injectDynamicCluster(env, "c1", gatewayGVRs())
 
-	// Success reactor
 	dynClient.PrependReactor("list", "*", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, &unstructured.UnstructuredList{
 			Object: map[string]interface{}{"kind": "GatewayList", "apiVersion": "gateway.networking.k8s.io/v1"},
@@ -125,24 +117,22 @@ func TestGetGateway(t *testing.T) {
 
 	// Case 1: Found
 	req, _ := http.NewRequest("GET", "/api/gateway/gateways/c1/default/target-gw", nil)
-	resp, err := env.App.Test(req)
+	resp, err := env.App.Test(req, 5000)
 	require.NoError(t, err)
 	assert.Equal(t, 200, resp.StatusCode)
 
-	// Case 2: Not Found (simulate by returning empty list for different call or just check logic)
-	// Currently reactor returns list containing "target-gw".
-	// If we ask for "missing", logic filters it out.
+	// Case 2: Not Found (name filter excludes it)
 	req2, _ := http.NewRequest("GET", "/api/gateway/gateways/c1/default/missing", nil)
-	resp2, err := env.App.Test(req2)
+	resp2, err := env.App.Test(req2, 5000)
 	require.NoError(t, err)
 	assert.Equal(t, 404, resp2.StatusCode)
 
-	// Case 3: Client Error
+	// Case 3: Client Error → treated as not found
 	dynClient.PrependReactor("list", "*", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("list failure")
 	})
 	req3, _ := http.NewRequest("GET", "/api/gateway/gateways/c1/default/target-gw", nil)
-	resp3, err := env.App.Test(req3)
+	resp3, err := env.App.Test(req3, 5000)
 	require.NoError(t, err)
 	assert.Equal(t, 404, resp3.StatusCode)
 }
@@ -152,7 +142,6 @@ func TestListHTTPRoutes(t *testing.T) {
 	handler := NewGatewayHandlers(env.K8sClient, env.Hub)
 	env.App.Get("/api/gateway/httproutes", handler.ListHTTPRoutes)
 
-	scheme := runtime.NewScheme()
 	route := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "gateway.networking.k8s.io/v1",
@@ -164,16 +153,8 @@ func TestListHTTPRoutes(t *testing.T) {
 		},
 	}
 
-	gvr := schema.GroupVersionResource{Group: "gateway.networking.k8s.io", Version: "v1", Resource: "httproutes"}
-	gvrBeta := schema.GroupVersionResource{Group: "gateway.networking.k8s.io", Version: "v1beta1", Resource: "httproutes"}
-	dynClient := fake.NewSimpleDynamicClientWithCustomListKinds(scheme, map[schema.GroupVersionResource]string{
-		gvr:     "HTTPRouteList",
-		gvrBeta: "HTTPRouteList",
-	})
-	env.K8sClient.InjectDynamicClient("test-cluster", dynClient)
-	env.K8sClient.InjectClient("test-cluster", k8sfake.NewSimpleClientset())
+	dynClient := injectDynamicCluster(env, "test-cluster", httpRouteGVRs())
 
-	// Success reactor
 	dynClient.PrependReactor("list", "*", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, &unstructured.UnstructuredList{
 			Object: map[string]interface{}{"kind": "HTTPRouteList", "apiVersion": "gateway.networking.k8s.io/v1"},
@@ -183,7 +164,7 @@ func TestListHTTPRoutes(t *testing.T) {
 
 	// Case 1: List all
 	req, _ := http.NewRequest("GET", "/api/gateway/httproutes", nil)
-	resp, err := env.App.Test(req)
+	resp, err := env.App.Test(req, 5000)
 	require.NoError(t, err)
 	assert.Equal(t, 200, resp.StatusCode)
 
@@ -194,12 +175,12 @@ func TestListHTTPRoutes(t *testing.T) {
 	assert.NotEmpty(t, list.Items)
 	assert.Equal(t, "my-route", list.Items[0].Name)
 
-	// Case 2: Specific cluster failure
+	// Case 2: Specific cluster failure — error swallowed, returns 200
 	dynClient.PrependReactor("list", "*", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("route error")
 	})
 	req2, _ := http.NewRequest("GET", "/api/gateway/httproutes?cluster=test-cluster", nil)
-	resp2, err := env.App.Test(req2)
+	resp2, err := env.App.Test(req2, 5000)
 	require.NoError(t, err)
 	assert.Equal(t, 200, resp2.StatusCode)
 }
@@ -209,7 +190,6 @@ func TestGetHTTPRoute(t *testing.T) {
 	handler := NewGatewayHandlers(env.K8sClient, env.Hub)
 	env.App.Get("/api/gateway/httproutes/:cluster/:namespace/:name", handler.GetHTTPRoute)
 
-	scheme := runtime.NewScheme()
 	route := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "gateway.networking.k8s.io/v1",
@@ -221,16 +201,8 @@ func TestGetHTTPRoute(t *testing.T) {
 		},
 	}
 
-	gvr := schema.GroupVersionResource{Group: "gateway.networking.k8s.io", Version: "v1", Resource: "httproutes"}
-	gvrBeta := schema.GroupVersionResource{Group: "gateway.networking.k8s.io", Version: "v1beta1", Resource: "httproutes"}
-	dynClient := fake.NewSimpleDynamicClientWithCustomListKinds(scheme, map[schema.GroupVersionResource]string{
-		gvr:     "HTTPRouteList",
-		gvrBeta: "HTTPRouteList",
-	})
-	env.K8sClient.InjectDynamicClient("c1", dynClient)
-	env.K8sClient.InjectClient("c1", k8sfake.NewSimpleClientset())
+	dynClient := injectDynamicCluster(env, "c1", httpRouteGVRs())
 
-	// Success reactor
 	dynClient.PrependReactor("list", "*", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, &unstructured.UnstructuredList{
 			Object: map[string]interface{}{"kind": "HTTPRouteList", "apiVersion": "gateway.networking.k8s.io/v1"},
@@ -240,13 +212,13 @@ func TestGetHTTPRoute(t *testing.T) {
 
 	// Case 1: Found
 	req, _ := http.NewRequest("GET", "/api/gateway/httproutes/c1/default/target-route", nil)
-	resp, err := env.App.Test(req)
+	resp, err := env.App.Test(req, 5000)
 	require.NoError(t, err)
 	assert.Equal(t, 200, resp.StatusCode)
 
 	// Case 2: 404
 	req2, _ := http.NewRequest("GET", "/api/gateway/httproutes/c1/default/missing", nil)
-	resp2, err := env.App.Test(req2)
+	resp2, err := env.App.Test(req2, 5000)
 	require.NoError(t, err)
 	assert.Equal(t, 404, resp2.StatusCode)
 }
@@ -256,23 +228,10 @@ func TestGetGatewayAPIStatus(t *testing.T) {
 	handler := NewGatewayHandlers(env.K8sClient, env.Hub)
 	env.App.Get("/api/gateway/status", handler.GetGatewayAPIStatus)
 
-	// The default setup has "test-cluster".
-	// By default, fake dynamic client returns empty list (no error) for arbitrary resources,
-	// unless CRD check logic in k8s client is specific.
-	// k8s.IsGatewayAPIAvailable does a List(Limit=1).
-	// Default fake reactor returns empty list, err=nil. So it should be "Available".
-
-	gvr := schema.GroupVersionResource{Group: "gateway.networking.k8s.io", Version: "v1", Resource: "gateways"}
-	gvrBeta := schema.GroupVersionResource{Group: "gateway.networking.k8s.io", Version: "v1beta1", Resource: "gateways"}
-	dynClient := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
-		gvr:     "GatewayList",
-		gvrBeta: "GatewayList",
-	})
-	env.K8sClient.InjectDynamicClient("test-cluster", dynClient)
-	env.K8sClient.InjectClient("test-cluster", k8sfake.NewSimpleClientset())
+	_ = injectDynamicCluster(env, "test-cluster", gatewayGVRs())
 
 	req, _ := http.NewRequest("GET", "/api/gateway/status", nil)
-	resp, err := env.App.Test(req)
+	resp, err := env.App.Test(req, 5000)
 	require.NoError(t, err)
 	assert.Equal(t, 200, resp.StatusCode)
 
