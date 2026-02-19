@@ -2,7 +2,6 @@ package k8s
 
 import (
 	"context"
-	"log"
 	"sync"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -96,37 +95,27 @@ func (m *MultiClusterClient) parseGatewaysFromList(list interface{}, contextName
 			content := item.UnstructuredContent()
 
 			// Parse spec
-			if spec, found, err := unstructuredNestedMap(content, "spec"); err != nil {
-				log.Printf("[gateway] error reading spec for %s: %v", item.GetName(), err)
-			} else if found {
+			if spec, found, _ := unstructuredNestedMap(content, "spec"); found {
 				if gatewayClassName, ok := spec["gatewayClassName"].(string); ok {
 					gw.GatewayClass = gatewayClassName
 				}
-				if listeners, found, err := unstructuredNestedSlice(content, "spec", "listeners"); err != nil {
-					log.Printf("[gateway] error reading listeners for %s: %v", item.GetName(), err)
-				} else if found {
+				if listeners, found, _ := unstructuredNestedSlice(content, "spec", "listeners"); found {
 					gw.Listeners = parseListeners(listeners)
 				}
 			}
 
 			// Parse status
-			if addresses, found, err := unstructuredNestedSlice(content, "status", "addresses"); err != nil {
-				log.Printf("[gateway] error reading addresses for %s: %v", item.GetName(), err)
-			} else if found {
+			if addresses, found, _ := unstructuredNestedSlice(content, "status", "addresses"); found {
 				gw.Addresses = parseAddresses(addresses)
 			}
 
-			if conditions, found, err := unstructuredNestedSlice(content, "status", "conditions"); err != nil {
-				log.Printf("[gateway] error reading conditions for %s: %v", item.GetName(), err)
-			} else if found {
+			if conditions, found, _ := unstructuredNestedSlice(content, "status", "conditions"); found {
 				gw.Conditions = parseConditions(conditions)
 				gw.Status = determineGatewayStatus(gw.Conditions)
 			}
 
 			// Count attached routes from listeners status
-			if listenerStatuses, found, err := unstructuredNestedSlice(content, "status", "listeners"); err != nil {
-				log.Printf("[gateway] error reading listener statuses for %s: %v", item.GetName(), err)
-			} else if found {
+			if listenerStatuses, found, _ := unstructuredNestedSlice(content, "status", "listeners"); found {
 				for _, ls := range listenerStatuses {
 					if lsMap, ok := ls.(map[string]interface{}); ok {
 						if attachedRoutes, ok := lsMap["attachedRoutes"].(int64); ok {
@@ -231,9 +220,7 @@ func (m *MultiClusterClient) parseHTTPRoutesFromList(list interface{}, contextNa
 			content := item.UnstructuredContent()
 
 			// Parse spec
-			if hostnames, found, err := unstructuredNestedSlice(content, "spec", "hostnames"); err != nil {
-				log.Printf("[httproute] error reading hostnames for %s: %v", item.GetName(), err)
-			} else if found {
+			if hostnames, found, _ := unstructuredNestedSlice(content, "spec", "hostnames"); found {
 				for _, h := range hostnames {
 					if hostname, ok := h.(string); ok {
 						route.Hostnames = append(route.Hostnames, hostname)
@@ -241,16 +228,12 @@ func (m *MultiClusterClient) parseHTTPRoutesFromList(list interface{}, contextNa
 				}
 			}
 
-			if parentRefs, found, err := unstructuredNestedSlice(content, "spec", "parentRefs"); err != nil {
-				log.Printf("[httproute] error reading parentRefs for %s: %v", item.GetName(), err)
-			} else if found {
+			if parentRefs, found, _ := unstructuredNestedSlice(content, "spec", "parentRefs"); found {
 				route.ParentRefs = parseParentRefs(parentRefs)
 			}
 
 			// Parse conditions from status
-			if conditions, found, err := unstructuredNestedSlice(content, "status", "parents"); err != nil {
-				log.Printf("[httproute] error reading parent conditions for %s: %v", item.GetName(), err)
-			} else if found {
+			if conditions, found, _ := unstructuredNestedSlice(content, "status", "parents"); found {
 				// HTTPRoute has parent-specific conditions
 				for _, parent := range conditions {
 					if parentMap, ok := parent.(map[string]interface{}); ok {
