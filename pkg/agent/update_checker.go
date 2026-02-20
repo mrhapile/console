@@ -759,7 +759,7 @@ func hasUncommittedChanges(repoPath string) bool {
 	if repoPath == "" {
 		return false
 	}
-	cmd := exec.Command("git", "status", "--porcelain")
+	cmd := exec.Command("git", "status", "--porcelain", "-uno")
 	cmd.Dir = repoPath
 	out, err := cmd.Output()
 	if err != nil {

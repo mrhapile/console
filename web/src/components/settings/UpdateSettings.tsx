@@ -32,6 +32,9 @@ import type { UpdateChannel } from '../../types/updates'
 /** Minimum spin duration to guarantee one full rotation (matches cards) */
 const MIN_SPIN_DURATION = 1000
 
+/** Initial progress bar percentage shown before WebSocket messages arrive */
+const INITIAL_PROGRESS_PCT = 5
+
 /** Scroll to a settings section by ID (mirrors Settings.tsx logic) */
 function scrollToSettingsSection(sectionId: string) {
   const element = document.getElementById(sectionId)
@@ -432,7 +435,7 @@ export function UpdateSettings() {
           <div className="w-full bg-secondary rounded-full h-2">
             <div
               className="bg-blue-500 h-2 rounded-full transition-all duration-500"
-              style={{ width: `${updateProgress?.progress ?? 5}%` }}
+              style={{ width: `${updateProgress?.progress ?? INITIAL_PROGRESS_PCT}%` }}
             />
           </div>
         </div>

@@ -22,6 +22,7 @@ const GITHUB_MAIN_SHA_URL =
   'https://api.github.com/repos/kubestellar/console/git/ref/heads/main'
 const CACHE_TTL_MS = 30 * 60 * 1000 // 30 minutes cache
 const MIN_CHECK_INTERVAL_MS = 30 * 60 * 1000 // 30 minutes minimum between checks
+const AUTO_UPDATE_POLL_MS = 60 * 1000 // Poll kc-agent for update status every 60s
 const DEV_SHA_CACHE_KEY = 'kc-dev-latest-sha'
 
 /**
@@ -770,6 +771,16 @@ function useVersionCheckCore() {
       fetchAutoUpdateStatus()
     }
   }, [agentConnected, agentSupportsAutoUpdate, channel, fetchAutoUpdateStatus])
+
+  // Periodic poll: re-fetch auto-update status every 60s so the UI picks up
+  // new commits detected by kc-agent without requiring manual "Check Now"
+  useEffect(() => {
+    if (!agentConnected || !agentSupportsAutoUpdate) return
+    const id = setInterval(() => {
+      fetchAutoUpdateStatus()
+    }, AUTO_UPDATE_POLL_MS)
+    return () => clearInterval(id)
+  }, [agentConnected, agentSupportsAutoUpdate, fetchAutoUpdateStatus])
 
   // For developer channel: fetch latest main SHA client-side (fallback when kc-agent doesn't support auto-update)
   useEffect(() => {

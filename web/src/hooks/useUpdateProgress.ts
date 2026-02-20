@@ -2,6 +2,8 @@ import { useEffect, useState, useRef } from 'react'
 import type { UpdateProgress } from '../types/updates'
 import { LOCAL_AGENT_WS_URL } from '../lib/constants/network'
 
+const WS_RECONNECT_MS = 5000 // Reconnect interval after WebSocket disconnect
+
 /**
  * Hook that listens for update_progress WebSocket broadcasts from kc-agent.
  * Uses a separate WebSocket connection to avoid interfering with the shared one.
@@ -44,7 +46,7 @@ export function useUpdateProgress() {
         ws.onclose = () => {
           wsRef.current = null
           // Reconnect after 5 seconds (faster during restarts)
-          reconnectTimer = setTimeout(connect, 5000)
+          reconnectTimer = setTimeout(connect, WS_RECONNECT_MS)
         }
 
         ws.onerror = () => {
@@ -52,7 +54,7 @@ export function useUpdateProgress() {
         }
       } catch {
         // Agent not available, retry later
-        reconnectTimer = setTimeout(connect, 5000)
+        reconnectTimer = setTimeout(connect, WS_RECONNECT_MS)
       }
     }
 
