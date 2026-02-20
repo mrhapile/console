@@ -154,8 +154,8 @@ func (uc *UpdateChecker) Status() AutoUpdateStatusResponse {
 		resp.LastUpdateResult = uc.lastUpdateError
 	}
 
-	// Fetch latest SHA for developer channel
-	if uc.channel == "developer" && uc.repoPath != "" {
+	// Fetch latest SHA when running from source (dev install method)
+	if uc.repoPath != "" {
 		if sha, err := fetchLatestMainSHA(); err == nil {
 			resp.LatestSHA = sha
 			resp.HasUpdate = sha != uc.currentSHA && uc.currentSHA != ""

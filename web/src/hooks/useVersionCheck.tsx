@@ -345,15 +345,28 @@ function useVersionCheckCore() {
   const fetchAutoUpdateStatus = useCallback(async () => {
     if (!agentSupportsAutoUpdate) return
     try {
+      console.debug('[version-check] Fetching auto-update status from kc-agent...')
       const resp = await fetch(`${LOCAL_AGENT_HTTP_URL}/auto-update/status`, {
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(10000),
       })
       if (resp.ok) {
         const data = (await resp.json()) as AutoUpdateStatus
+        console.debug('[version-check] Auto-update status:', data)
         setAutoUpdateStatus(data)
+        // Update latestMainSHA and lastChecked from agent response
+        if (data.latestSHA) {
+          setLatestMainSHA(data.latestSHA)
+        }
+        const now = Date.now()
+        setLastChecked(now)
+        localStorage.setItem(UPDATE_STORAGE_KEYS.LAST_CHECK, String(now))
+      } else {
+        console.debug('[version-check] Auto-update status failed:', resp.status)
+        setError(`kc-agent returned ${resp.status}`)
       }
-    } catch {
-      // Agent not available
+    } catch (err) {
+      console.debug('[version-check] Auto-update status error:', err)
+      setError('Could not reach kc-agent')
     }
   }, [agentSupportsAutoUpdate])
 
