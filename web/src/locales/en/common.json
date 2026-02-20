@@ -519,7 +519,7 @@
       "helmDisabledDesc": "Use 'helm upgrade' to update your cluster deployment",
       "updating": "Updating...",
       "startingUpdate": "Starting update — please wait...",
-      "updateComplete": "Updated successfully",
+      "updateComplete": "Update complete — restart successful",
       "updateFailed": "Update failed",
       "devMode": "Dev Mode",
       "binaryMode": "Binary",
