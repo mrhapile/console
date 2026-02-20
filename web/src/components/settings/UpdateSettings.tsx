@@ -100,7 +100,7 @@ export function UpdateSettings() {
   const [copiedCommand, setCopiedCommand] = useState<string | null>(null)
   const [channelDropdownOpen, setChannelDropdownOpen] = useState(false)
   const [oauthConfigured, setOauthConfigured] = useState<boolean | null>(null)
-  const [triggerState, setTriggerState] = useState<'idle' | 'loading' | 'error'>('idle')
+  const [triggerState, setTriggerState] = useState<'idle' | 'triggered' | 'error'>('idle')
   const [triggerError, setTriggerError] = useState<string | null>(null)
   const hasGithubToken = Boolean(localStorage.getItem(STORAGE_KEY_GITHUB_TOKEN))
 
@@ -132,6 +132,13 @@ export function UpdateSettings() {
   useEffect(() => {
     forceCheck()
   }, [forceCheck])
+
+  // Clear triggered state once WebSocket progress starts
+  useEffect(() => {
+    if (updateProgress && triggerState === 'triggered') {
+      setTriggerState('idle')
+    }
+  }, [updateProgress, triggerState])
 
   // Fetch OAuth status on mount
   useEffect(() => {
@@ -166,7 +173,8 @@ export function UpdateSettings() {
 
   const isDeveloperChannel = channel === 'developer'
   const isHelmInstall = installMethod === 'helm'
-  const isUpdating = updateProgress && !['idle', 'done', 'failed'].includes(updateProgress.status)
+  const isWsUpdating = updateProgress && !['idle', 'done', 'failed'].includes(updateProgress.status)
+  const isUpdating = isWsUpdating || triggerState === 'triggered'
 
   // SHAs match = up to date on developer channel
   const currentSHA = autoUpdateStatus?.currentSHA ?? commitHash
@@ -413,16 +421,18 @@ export function UpdateSettings() {
       )}
 
       {/* Update Progress Banner */}
-      {isUpdating && updateProgress && (
+      {isUpdating && (
         <div className="mb-4 p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
           <div className="flex items-center gap-3 mb-2">
             <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
-            <p className="text-sm font-medium text-blue-400">{updateProgress.message}</p>
+            <p className="text-sm font-medium text-blue-400">
+              {updateProgress?.message ?? t('settings.updates.startingUpdate')}
+            </p>
           </div>
           <div className="w-full bg-secondary rounded-full h-2">
             <div
               className="bg-blue-500 h-2 rounded-full transition-all duration-500"
-              style={{ width: `${updateProgress.progress}%` }}
+              style={{ width: `${updateProgress?.progress ?? 5}%` }}
             />
           </div>
         </div>
@@ -556,31 +566,22 @@ export function UpdateSettings() {
       )}
 
       {/* Update Now Button (when agent connected and update available) */}
-      {hasUpdate && agentConnected && !isHelmInstall && !isUpdating && (
+      {hasUpdate && agentConnected && !isHelmInstall && !isWsUpdating && triggerState !== 'triggered' && (
         <div className="mb-4">
           <button
             onClick={async () => {
-              setTriggerState('loading')
+              setTriggerState('triggered')
               setTriggerError(null)
               const result = await triggerUpdate()
-              if (result.success) {
-                // WebSocket will broadcast progress via useUpdateProgress
-                // Reset trigger state — progress banner takes over
-                setTriggerState('idle')
-              } else {
+              if (!result.success) {
                 setTriggerState('error')
                 setTriggerError(result.error ?? 'Unknown error')
               }
             }}
-            disabled={triggerState === 'loading'}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-green-500 text-white text-sm font-medium hover:bg-green-600 disabled:opacity-50 transition-colors"
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-green-500 text-white text-sm font-medium hover:bg-green-600 transition-colors"
           >
-            {triggerState === 'loading' ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Download className="w-4 h-4" />
-            )}
-            {triggerState === 'loading' ? t('settings.updates.updating') : t('settings.updates.updateNow')}
+            <Download className="w-4 h-4" />
+            {t('settings.updates.updateNow')}
           </button>
           {triggerState === 'error' && triggerError && (
             <div className="mt-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
