@@ -3,6 +3,8 @@ import type { UpdateProgress } from '../types/updates'
 import { LOCAL_AGENT_WS_URL } from '../lib/constants/network'
 
 const WS_RECONNECT_MS = 5000 // Reconnect interval after WebSocket disconnect
+const BACKEND_POLL_MS = 2000 // Poll interval when waiting for backend to come up
+const BACKEND_POLL_MAX = 30  // Max attempts (~60s) before giving up
 
 /**
  * Hook that listens for update_progress WebSocket broadcasts from kc-agent.
@@ -19,16 +21,38 @@ export function useUpdateProgress() {
   useEffect(() => {
     let reconnectTimer: ReturnType<typeof setTimeout>
 
+    // After kc-agent reconnects during a restart, the Go backend may still
+    // be building/starting. Poll /health before showing "done" so the
+    // "Refresh" link only appears when the backend is actually ready.
+    async function waitForBackend() {
+      setProgress({ status: 'restarting', message: 'Waiting for backend to come up...', progress: 90 })
+      for (let i = 0; i < BACKEND_POLL_MAX; i++) {
+        try {
+          const resp = await fetch('/health', { cache: 'no-store' })
+          if (resp.ok) {
+            setProgress({ status: 'done', message: 'Update complete — restart successful', progress: 100 })
+            return
+          }
+        } catch {
+          // Backend not ready yet
+        }
+        await new Promise(r => setTimeout(r, BACKEND_POLL_MS))
+      }
+      // Timed out — show done anyway (backend might be on a different port)
+      setProgress({ status: 'done', message: 'Update complete — restart successful', progress: 100 })
+    }
+
     function connect() {
       try {
         const ws = new WebSocket(LOCAL_AGENT_WS_URL)
         wsRef.current = ws
 
         ws.onopen = () => {
-          // If we reconnected while showing "restarting", the restart succeeded
+          // If we reconnected while showing "restarting", kc-agent is back —
+          // but backend may still be building. Wait for it.
           const cur = progressRef.current
           if (cur && cur.status === 'restarting') {
-            setProgress({ status: 'done', message: 'Update complete — restarted successfully', progress: 100 })
+            waitForBackend()
           }
         }
 
