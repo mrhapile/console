@@ -62,8 +62,8 @@ func TestOpenAIProvider_Basics(t *testing.T) {
 	if p.Name() != "openai" {
 		t.Errorf("Expected openai, got %s", p.Name())
 	}
-	if p.DisplayName() != "GPT-4 (OpenAI)" {
-		t.Errorf("Expected GPT-4 (OpenAI), got %s", p.DisplayName())
+	if p.DisplayName() != "ChatGPT" {
+		t.Errorf("Expected ChatGPT, got %s", p.DisplayName())
 	}
 	if !p.IsAvailable() {
 		t.Error("Provider should be available")

@@ -61,7 +61,9 @@ func TestListWorkloads(t *testing.T) {
 
 	injectDynamicClusterWithObjects(env, "test-cluster", scheme, []runtime.Object{deployment})
 
-	req, _ := http.NewRequest("GET", "/api/workloads?cluster=test-cluster", nil)
+	req, err := http.NewRequest("GET", "/api/workloads?cluster=test-cluster", nil)
+	require.NoError(t, err)
+	require.NotNil(t, req)
 	resp, err := env.App.Test(req, 5000)
 
 	require.NoError(t, err)
@@ -103,7 +105,9 @@ func TestGetWorkload(t *testing.T) {
 	injectDynamicClusterWithObjects(env, "test-cluster", scheme, []runtime.Object{deployment})
 
 	// 1. Success Case
-	req, _ := http.NewRequest("GET", "/api/workloads/test-cluster/default/my-app", nil)
+	req, err := http.NewRequest("GET", "/api/workloads/test-cluster/default/my-app", nil)
+	require.NoError(t, err)
+	require.NotNil(t, req)
 	resp, err := env.App.Test(req, 5000)
 	require.NoError(t, err)
 	require.NotNil(t, resp)
@@ -115,7 +119,9 @@ func TestGetWorkload(t *testing.T) {
 	assert.Equal(t, "test-cluster", workload["deployments"].([]interface{})[0].(map[string]interface{})["cluster"])
 
 	// 2. Not Found
-	reqNotFound, _ := http.NewRequest("GET", "/api/workloads/test-cluster/default/missing", nil)
+	reqNotFound, err := http.NewRequest("GET", "/api/workloads/test-cluster/default/missing", nil)
+	require.NoError(t, err)
+	require.NotNil(t, reqNotFound)
 	respNotFound, errNotFound := env.App.Test(reqNotFound, 5000)
 	if errNotFound != nil || respNotFound == nil {
 		t.Fatalf("app.Test failed: %v", errNotFound)
@@ -159,7 +165,9 @@ func TestDeployWorkload(t *testing.T) {
 
 	data, _ := json.Marshal(payload)
 
-	req, _ := http.NewRequest("POST", "/api/workloads/deploy", bytes.NewReader(data))
+	req, err := http.NewRequest("POST", "/api/workloads/deploy", bytes.NewReader(data))
+	require.NoError(t, err)
+	require.NotNil(t, req)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := env.App.Test(req, 5000)
@@ -203,7 +211,9 @@ func TestGetDeployStatus(t *testing.T) {
 
 	injectDynamicClusterWithObjects(env, "c1", scheme, []runtime.Object{deploy})
 
-	req, _ := http.NewRequest("GET", "/api/workloads/deploy-status/c1/default/status-app", nil)
+	req, err := http.NewRequest("GET", "/api/workloads/deploy-status/c1/default/status-app", nil)
+	require.NoError(t, err)
+	require.NotNil(t, req)
 	resp, err := env.App.Test(req, 5000)
 
 	require.NoError(t, err)
@@ -229,7 +239,9 @@ func TestScaleWorkload(t *testing.T) {
 	}
 
 	data, _ := json.Marshal(payload)
-	req, _ := http.NewRequest("POST", "/api/workloads/scale", bytes.NewReader(data))
+	req, err := http.NewRequest("POST", "/api/workloads/scale", bytes.NewReader(data))
+	require.NoError(t, err)
+	require.NotNil(t, req)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := env.App.Test(req, 5000)
@@ -247,7 +259,9 @@ func TestDeleteWorkload(t *testing.T) {
 	handler := NewWorkloadHandlers(env.K8sClient, env.Hub)
 	env.App.Delete("/api/workloads/:cluster/:namespace/:name", handler.DeleteWorkload)
 
-	req, _ := http.NewRequest("DELETE", "/api/workloads/c1/default/del-app", nil)
+	req, err := http.NewRequest("DELETE", "/api/workloads/c1/default/del-app", nil)
+	require.NoError(t, err)
+	require.NotNil(t, req)
 	resp, err := env.App.Test(req, 5000)
 
 	require.NoError(t, err)
@@ -271,7 +285,9 @@ func TestClusterGroupsCRUD(t *testing.T) {
 		"color":    "blue",
 	}
 	data, _ := json.Marshal(createPayload)
-	req, _ := http.NewRequest("POST", "/api/cluster-groups", bytes.NewReader(data))
+	req, err := http.NewRequest("POST", "/api/cluster-groups", bytes.NewReader(data))
+	require.NoError(t, err)
+	require.NotNil(t, req)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := env.App.Test(req, 5000)
@@ -279,7 +295,9 @@ func TestClusterGroupsCRUD(t *testing.T) {
 	require.NotNil(t, resp)
 	assert.Equal(t, 201, resp.StatusCode)
 
-	req, _ = http.NewRequest("GET", "/api/cluster-groups", nil)
+	req, err = http.NewRequest("GET", "/api/cluster-groups", nil)
+	require.NoError(t, err)
+	require.NotNil(t, req)
 	resp, err = env.App.Test(req)
 	require.NoError(t, err)
 	require.NotNil(t, resp)
@@ -298,7 +316,9 @@ func TestClusterGroupsCRUD(t *testing.T) {
 		"color":    "red",
 	}
 	data, _ = json.Marshal(updatePayload)
-	req, _ = http.NewRequest("PUT", "/api/cluster-groups/group1", bytes.NewReader(data))
+	req, err = http.NewRequest("PUT", "/api/cluster-groups/group1", bytes.NewReader(data))
+	require.NoError(t, err)
+	require.NotNil(t, req)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err = env.App.Test(req)
@@ -306,13 +326,17 @@ func TestClusterGroupsCRUD(t *testing.T) {
 	require.NotNil(t, resp)
 	assert.Equal(t, 200, resp.StatusCode)
 
-	req, _ = http.NewRequest("DELETE", "/api/cluster-groups/group1", nil)
+	req, err = http.NewRequest("DELETE", "/api/cluster-groups/group1", nil)
+	require.NoError(t, err)
+	require.NotNil(t, req)
 	resp, err = env.App.Test(req)
 	require.NoError(t, err)
 	require.NotNil(t, resp)
 	assert.Equal(t, 200, resp.StatusCode)
 
-	req, _ = http.NewRequest("GET", "/api/cluster-groups", nil)
+	req, err = http.NewRequest("GET", "/api/cluster-groups", nil)
+	require.NoError(t, err)
+	require.NotNil(t, req)
 	resp, err = env.App.Test(req)
 	require.NoError(t, err)
 	require.NotNil(t, resp)
@@ -369,7 +393,9 @@ func TestEvaluateClusterQuery(t *testing.T) {
 	}
 
 	data, _ := json.Marshal(query)
-	req, _ := http.NewRequest("POST", "/api/cluster-groups/evaluate", bytes.NewReader(data))
+	req, err := http.NewRequest("POST", "/api/cluster-groups/evaluate", bytes.NewReader(data))
+	require.NoError(t, err)
+	require.NotNil(t, req)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := env.App.Test(req, 5000)
@@ -391,11 +417,11 @@ type MockAIProvider struct {
 	Response string
 }
 
-func (m *MockAIProvider) Name() string        { return "mock-ai" }
-func (m *MockAIProvider) DisplayName() string { return "Mock AI" }
-func (m *MockAIProvider) Description() string { return "Mock AI Provider" }
-func (m *MockAIProvider) Provider() string    { return "mock" }
-func (m *MockAIProvider) IsAvailable() bool   { return true }
+func (m *MockAIProvider) Name() string                           { return "mock-ai" }
+func (m *MockAIProvider) DisplayName() string                    { return "Mock AI" }
+func (m *MockAIProvider) Description() string                    { return "Mock AI Provider" }
+func (m *MockAIProvider) Provider() string                       { return "mock" }
+func (m *MockAIProvider) IsAvailable() bool                      { return true }
 func (m *MockAIProvider) Capabilities() agent.ProviderCapability { return agent.CapabilityChat }
 func (m *MockAIProvider) Chat(ctx context.Context, req *agent.ChatRequest) (*agent.ChatResponse, error) {
 	return &agent.ChatResponse{
@@ -425,7 +451,9 @@ func TestGenerateClusterQuery(t *testing.T) {
 	payload := map[string]string{"prompt": "Find powerful clusters in west"}
 	data, _ := json.Marshal(payload)
 
-	req, _ := http.NewRequest("POST", "/api/cluster-groups/generate", bytes.NewReader(data))
+	req, err := http.NewRequest("POST", "/api/cluster-groups/generate", bytes.NewReader(data))
+	require.NoError(t, err)
+	require.NotNil(t, req)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := env.App.Test(req, 5000)
@@ -472,7 +500,9 @@ func TestResolveDependencies(t *testing.T) {
 
 	injectDynamicClusterWithObjects(env, "c1", scheme, []runtime.Object{deploy, svc})
 
-	req, _ := http.NewRequest("GET", "/api/workloads/resolve-deps/c1/default/app", nil)
+	req, err := http.NewRequest("GET", "/api/workloads/resolve-deps/c1/default/app", nil)
+	require.NoError(t, err)
+	require.NotNil(t, req)
 	resp, err := env.App.Test(req, 5000)
 	require.NoError(t, err)
 	assert.Equal(t, 200, resp.StatusCode)
@@ -516,7 +546,9 @@ func TestMonitorWorkload(t *testing.T) {
 
 	injectDynamicClusterWithObjects(env, "c1", scheme, []runtime.Object{deploy})
 
-	req, _ := http.NewRequest("GET", "/api/workloads/monitor/c1/default/monitored-app", nil)
+	req, err := http.NewRequest("GET", "/api/workloads/monitor/c1/default/monitored-app", nil)
+	require.NoError(t, err)
+	require.NotNil(t, req)
 	resp, err := env.App.Test(req, 5000)
 	require.NoError(t, err)
 	assert.Equal(t, 200, resp.StatusCode)
@@ -563,7 +595,9 @@ func TestGetDeployLogs(t *testing.T) {
 		// finds matching pods, and returns without crashing.
 		injectDynamicClusterWithObjects(env, "c1", scheme, []runtime.Object{pod, deploy}, pod)
 
-		req, _ := http.NewRequest("GET", "/api/workloads/logs/c1/default/log-app", nil)
+		req, err := http.NewRequest("GET", "/api/workloads/logs/c1/default/log-app", nil)
+		require.NoError(t, err)
+		require.NotNil(t, req)
 		resp, err := env.App.Test(req, 5000)
 		require.NoError(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
@@ -576,7 +610,9 @@ func TestGetDeployLogs(t *testing.T) {
 		// We verify the handler does not crash and returns a well-formed response.
 		injectDynamicClusterWithObjects(env, "c1", scheme, []runtime.Object{pod}, pod)
 
-		req, _ := http.NewRequest("GET", "/api/workloads/logs/c1/default/missing-app", nil)
+		req, err := http.NewRequest("GET", "/api/workloads/logs/c1/default/missing-app", nil)
+		require.NoError(t, err)
+		require.NotNil(t, req)
 		resp, err := env.App.Test(req, 5000)
 		require.NoError(t, err)
 		assert.Equal(t, 200, resp.StatusCode)
@@ -589,7 +625,9 @@ func TestGetDeployLogs(t *testing.T) {
 
 	t.Run("MissingCluster_Returns500", func(t *testing.T) {
 		// When the cluster context does not exist, GetClient fails and handler returns 500.
-		req, _ := http.NewRequest("GET", "/api/workloads/logs/nonexistent-cluster/default/app", nil)
+		req, err := http.NewRequest("GET", "/api/workloads/logs/nonexistent-cluster/default/app", nil)
+		require.NoError(t, err)
+		require.NotNil(t, req)
 		resp, err := env.App.Test(req, 5000)
 		require.NoError(t, err)
 		assert.Equal(t, 500, resp.StatusCode)
