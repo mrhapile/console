@@ -485,6 +485,7 @@ func (m *ServerMockProvider) DisplayName() string { return m.name }
 func (m *ServerMockProvider) Description() string { return m.name }
 func (m *ServerMockProvider) Provider() string    { return "mock" }
 func (m *ServerMockProvider) IsAvailable() bool   { return true }
+func (m *ServerMockProvider) Capabilities() ProviderCapability { return CapabilityChat }
 func (m *ServerMockProvider) Chat(ctx context.Context, req *ChatRequest) (*ChatResponse, error) {
 	return &ChatResponse{
 		Content: "Mock response: " + req.Prompt,
@@ -2341,6 +2342,7 @@ func (m *MockToolCapableProvider) DisplayName() string { return m.name }
 func (m *MockToolCapableProvider) Description() string { return "Mock provider" }
 func (m *MockToolCapableProvider) Provider() string    { return "mock" }
 func (m *MockToolCapableProvider) IsAvailable() bool   { return m.available }
+func (m *MockToolCapableProvider) Capabilities() ProviderCapability { return CapabilityChat }
 func (m *MockToolCapableProvider) Chat(ctx context.Context, req *ChatRequest) (*ChatResponse, error) {
 	return &ChatResponse{Content: "mock"}, nil
 }

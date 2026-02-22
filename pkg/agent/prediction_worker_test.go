@@ -20,6 +20,7 @@ func (m *WorkerMockProvider) DisplayName() string { return m.name }
 func (m *WorkerMockProvider) Description() string { return m.name }
 func (m *WorkerMockProvider) Provider() string    { return "mock" }
 func (m *WorkerMockProvider) IsAvailable() bool   { return true }
+func (m *WorkerMockProvider) Capabilities() ProviderCapability { return CapabilityChat }
 func (m *WorkerMockProvider) Chat(ctx context.Context, req *ChatRequest) (*ChatResponse, error) {
 	// Return a JSON that looks like predictions
 	result := struct {

@@ -18,6 +18,7 @@ func (m *MockProvider) DisplayName() string { return m.name }
 func (m *MockProvider) Description() string { return m.name }
 func (m *MockProvider) Provider() string    { return "mock" }
 func (m *MockProvider) IsAvailable() bool   { return m.available }
+func (m *MockProvider) Capabilities() ProviderCapability { return CapabilityChat }
 func (m *MockProvider) Chat(ctx context.Context, req *ChatRequest) (*ChatResponse, error) {
 	return nil, nil
 }
