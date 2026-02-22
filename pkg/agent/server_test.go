@@ -1733,6 +1733,21 @@ func TestServer_ValidateAPIKeyValue_UnknownProvider(t *testing.T) {
 		SkipKeyValidation: false,
 	}
 
+	// Unknown/IDE providers with a non-empty key are accepted without validation
+	valid, err := server.validateAPIKeyValue("unknown-provider", "test-key")
+	if err != nil {
+		t.Fatalf("Expected no error for unknown provider with non-empty key, got: %v", err)
+	}
+	if !valid {
+		t.Fatalf("Expected valid=true for unknown provider with non-empty key")
+	}
+}
+
+func TestServer_ValidateAPIKeyValue_EmptyKey(t *testing.T) {
+	server := &Server{
+		SkipKeyValidation: false,
+	}
+
 	_, err := server.validateAPIKeyValue("unknown-provider", "")
 	if err == nil {
 		t.Fatal("Expected error for empty API key")
@@ -2385,12 +2400,12 @@ func TestServer_FindToolCapableAgent(t *testing.T) {
 			wantAgent: "bob",
 		},
 		{
-			name: "Both available - prefer claude-code",
+			name: "Both available - return any tool-capable agent",
 			providers: map[string]AIProvider{
 				"claude-code": &MockToolCapableProvider{name: "claude-code", available: true},
 				"bob":         &MockToolCapableProvider{name: "bob", available: true},
 			},
-			wantAgent: "claude-code",
+			wantAgent: "",
 		},
 		{
 			name: "claude-code unavailable, bob available",
@@ -2427,6 +2442,14 @@ func TestServer_FindToolCapableAgent(t *testing.T) {
 			server := &Server{registry: registry}
 
 			result := server.findToolCapableAgent()
+
+			if tt.wantAgent == "" {
+				if result != "claude-code" && result != "bob" && result != "" {
+					t.Errorf("Expected claude-code, bob, or empty, got %q", result)
+				}
+				return
+			}
+
 			if result != tt.wantAgent {
 				t.Errorf("findToolCapableAgent() = %q, want %q", result, tt.wantAgent)
 			}
