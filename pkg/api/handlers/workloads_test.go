@@ -396,6 +396,7 @@ func (m *MockAIProvider) DisplayName() string { return "Mock AI" }
 func (m *MockAIProvider) Description() string { return "Mock AI Provider" }
 func (m *MockAIProvider) Provider() string    { return "mock" }
 func (m *MockAIProvider) IsAvailable() bool   { return true }
+func (m *MockAIProvider) Capabilities() agent.ProviderCapability { return agent.CapabilityChat }
 func (m *MockAIProvider) Chat(ctx context.Context, req *agent.ChatRequest) (*agent.ChatResponse, error) {
 	return &agent.ChatResponse{
 		Content: m.Response,
