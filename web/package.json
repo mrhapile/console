@@ -35,7 +35,8 @@
     "test:e2e:all-compliance": "playwright test --config e2e/compliance/compliance.config.ts",
     "test:e2e:coverage": "./scripts/run-e2e-coverage.sh",
     "coverage:report": "node scripts/coverage-report.mjs",
-    "coverage:clean": "rimraf .nyc_output coverage"
+    "coverage:clean": "rimraf .nyc_output coverage",
+    "test:card-registry": "node ../scripts/card-registry-integrity-test.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
