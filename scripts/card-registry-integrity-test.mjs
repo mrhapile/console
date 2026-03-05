@@ -19,8 +19,6 @@ import { createRequire } from 'module'
 import path from 'path'
 const { resolve, dirname, join, relative, basename } = path
 
-// ... below the require logic, we still need to fix the imports
-
 import { existsSync, readFileSync } from 'fs'
 import { fileURLToPath } from 'url'
 
