@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-03-03T03:47:31Z",
+  "last_updated": "2026-03-05T03:47:00Z",
   "rolling_window_days": 30,
   "categories": {
     "other": {
-      "merged": 34,
+      "merged": 38,
       "closed": 18,
-      "acceptance_rate": 0.65,
+      "acceptance_rate": 0.68,
       "status": "normal",
-      "last_evaluated": "2026-03-03T03:47:31Z"
+      "last_evaluated": "2026-03-05T03:47:00Z"
     },
     "security": {
       "merged": 9,
@@ -211,10 +211,19 @@
       "categories_boosted": [
         "consistency"
       ]
+    },
+    {
+      "date": "2026-03-05",
+      "total_merged": 83,
+      "total_closed": 44,
+      "categories_blocked": [],
+      "categories_boosted": [
+        "consistency"
+      ]
     }
   ],
   "rotation_weights": {
-    "other": 0.98,
+    "other": 1.02,
     "security": 0.96,
     "resilience": 1.03,
     "performance": 1.5,
