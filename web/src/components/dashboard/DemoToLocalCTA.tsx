@@ -9,7 +9,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { Terminal, Copy, Check, X, Rocket } from 'lucide-react'
 import { SetupInstructionsDialog } from '../setup/SetupInstructionsDialog'
-import { isNetlifyDeployment } from '../../lib/demoMode'
+import { isNetlifyDeployment, getDemoMode } from '../../lib/demoMode'
+import { useLocalAgent } from '../../hooks/useLocalAgent'
 import { safeGetItem, safeSetItem } from '../../lib/utils/localStorage'
 import {
   STORAGE_KEY_DEMO_CTA_DISMISSED,
@@ -17,7 +18,8 @@ import {
 } from '../../lib/constants/storage'
 import { emitDemoToLocalShown, emitDemoToLocalActioned } from '../../lib/analytics'
 
-const INSTALL_COMMAND = 'curl -sSL https://raw.githubusercontent.com/kubestellar/console/main/start.sh | bash'
+const NETLIFY_INSTALL_COMMAND = 'curl -sSL https://raw.githubusercontent.com/kubestellar/console/main/start.sh | bash'
+const AGENT_INSTALL_COMMAND = 'brew tap kubestellar/tap && brew install --head kc-agent && kc-agent'
 
 /** How many seconds the "Copied!" confirmation shows */
 const COPY_FEEDBACK_MS = 2000
@@ -32,15 +34,23 @@ export function DemoToLocalCTA() {
   const [copied, setCopied] = useState(false)
   const [showSetupDialog, setShowSetupDialog] = useState(false)
   const emittedRef = useRef(false)
+  const { status: agentStatus } = useLocalAgent()
+
+  // Show on Netlify (demo site) or on localhost when agent is disconnected and in demo mode
+  const isLocalNoAgent = !isNetlifyDeployment && agentStatus === 'disconnected' && getDemoMode()
+  const shouldShow = (isNetlifyDeployment || isLocalNoAgent) && !dismissed && !hintsSuppressed
 
   useEffect(() => {
-    if (!dismissed && !hintsSuppressed && isNetlifyDeployment && !emittedRef.current) {
+    if (shouldShow && isNetlifyDeployment && !emittedRef.current) {
       emittedRef.current = true
       emitDemoToLocalShown()
     }
-  }, [dismissed, hintsSuppressed])
+  }, [shouldShow])
 
-  if (!isNetlifyDeployment || dismissed || hintsSuppressed) return null
+  if (!shouldShow) return null
+
+  // Context-aware command and copy
+  const installCommand = isNetlifyDeployment ? NETLIFY_INSTALL_COMMAND : AGENT_INSTALL_COMMAND
 
   const handleDismiss = () => {
     setDismissed(true)
@@ -49,7 +59,7 @@ export function DemoToLocalCTA() {
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(INSTALL_COMMAND)
+      await navigator.clipboard.writeText(installCommand)
       setCopied(true)
       emitDemoToLocalActioned('copy_command')
       setTimeout(() => setCopied(false), COPY_FEEDBACK_MS)
@@ -77,10 +87,12 @@ export function DemoToLocalCTA() {
           <Terminal className="w-4 h-4 text-blue-400" />
           <div>
             <h3 className="text-sm font-semibold text-foreground">
-              Install KubeStellar Console locally
+              {isLocalNoAgent ? 'Connect your clusters' : 'Install KubeStellar Console locally to connect your clusters'}
             </h3>
             <p className="text-xs text-muted-foreground mt-0.5">
-              You&apos;re viewing demo data — install locally to monitor your real clusters
+              {isLocalNoAgent
+                ? 'Install and run kc-agent to connect your real clusters'
+                : 'You\u0027re viewing demo data \u2014 install locally to monitor your real clusters'}
             </p>
           </div>
         </div>
@@ -99,7 +111,7 @@ export function DemoToLocalCTA() {
           data-install-command
           className="flex-1 px-3 py-2 text-xs font-mono bg-secondary/50 rounded-lg border border-border/50 text-foreground overflow-x-auto whitespace-nowrap"
         >
-          {INSTALL_COMMAND}
+          {installCommand}
         </code>
         <button
           onClick={handleCopy}
