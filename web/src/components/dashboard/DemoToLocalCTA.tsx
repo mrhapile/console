@@ -17,7 +17,7 @@ import {
 } from '../../lib/constants/storage'
 import { emitDemoToLocalShown, emitDemoToLocalActioned } from '../../lib/analytics'
 
-const INSTALL_COMMAND = 'brew tap kubestellar/tap && brew install --head kc-agent && kc-agent'
+const INSTALL_COMMAND = 'curl -sSL https://raw.githubusercontent.com/kubestellar/console/main/start.sh | bash'
 
 /** How many seconds the "Copied!" confirmation shows */
 const COPY_FEEDBACK_MS = 2000
