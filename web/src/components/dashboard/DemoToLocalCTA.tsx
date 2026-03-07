@@ -77,10 +77,10 @@ export function DemoToLocalCTA() {
           <Terminal className="w-4 h-4 text-blue-400" />
           <div>
             <h3 className="text-sm font-semibold text-foreground">
-              Connect your own clusters
+              Install KubeStellar Console locally
             </h3>
             <p className="text-xs text-muted-foreground mt-0.5">
-              You&apos;re viewing demo data — install kc-agent locally to see your real clusters
+              You&apos;re viewing demo data — install locally to monitor your real clusters
             </p>
           </div>
         </div>
