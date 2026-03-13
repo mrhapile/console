@@ -4,6 +4,7 @@ import { useCardLoadingState } from '../CardDataContext'
 import { useCardData, commonComparators, CardSearchInput, CardControlsRow, CardPaginationFooter } from '../../../lib/cards'
 import { Skeleton } from '../../ui/Skeleton'
 import { useTranslation } from 'react-i18next'
+import { useDemoMode } from '../../../hooks/useDemoMode'
 
 interface KagentiToolRegistryProps {
   config?: { cluster?: string }
@@ -13,6 +14,7 @@ type SortField = 'name' | 'cluster'
 
 export function KagentiToolRegistry({ config }: KagentiToolRegistryProps) {
   const { t: _t } = useTranslation()
+  const { isDemoMode } = useDemoMode()
   const {
     data: tools,
     isLoading,
@@ -24,6 +26,7 @@ export function KagentiToolRegistry({ config }: KagentiToolRegistryProps) {
     hasAnyData: tools.length > 0,
     isFailed: consecutiveFailures >= 3,
     consecutiveFailures,
+    isDemoData: isDemoMode,
   })
 
   const {
@@ -35,6 +38,8 @@ export function KagentiToolRegistry({ config }: KagentiToolRegistryProps) {
     goToPage,
     needsPagination,
     itemsPerPage,
+    containerRef,
+    containerStyle,
   } = useCardData(tools, {
     filter: {
       searchFields: ['name', 'namespace', 'toolPrefix', 'targetRef', 'cluster'],
@@ -77,7 +82,7 @@ export function KagentiToolRegistry({ config }: KagentiToolRegistryProps) {
         }
       />
 
-      <div className="space-y-1">
+      <div ref={containerRef} className="space-y-1" style={containerStyle}>
         {paginatedItems.map(tool => (
           <div
             key={`${tool.cluster}-${tool.namespace}-${tool.name}`}
@@ -98,9 +103,9 @@ export function KagentiToolRegistry({ config }: KagentiToolRegistryProps) {
               </span>
             )}
             {tool.hasCredential ? (
-              <Shield className="w-3 h-3 text-emerald-400" />
+              <Shield className="w-3 h-3 text-green-400" />
             ) : (
-              <ShieldOff className="w-3 h-3 text-zinc-500" />
+              <ShieldOff className="w-3 h-3 text-muted-foreground" />
             )}
           </div>
         ))}

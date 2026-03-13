@@ -40,7 +40,7 @@ const getPhaseStyle = (phase: string) => {
   if (lower === 'upgrading' || lower === 'replacing') {
     return { bg: 'bg-yellow-500/20', text: 'text-yellow-400', border: 'border-yellow-500/30', icon: RefreshCw }
   }
-  return { bg: 'bg-gray-500/20', text: 'text-gray-400', border: 'border-gray-500/30', icon: AlertTriangle }
+  return { bg: 'bg-secondary', text: 'text-muted-foreground', border: 'border-border', icon: AlertTriangle }
 }
 
 interface CSVInfo {
@@ -314,7 +314,7 @@ Please:
               <Layers className="w-4 h-4 text-purple-400" />
               <span className="text-muted-foreground">{t('drilldown.fields.namespace')}</span>
               <span className="font-mono text-purple-400 group-hover:text-purple-300 transition-colors">{namespace}</span>
-              <svg className="w-3 h-3 text-purple-400/50 group-hover:text-purple-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-3 h-3 text-purple-400/70 group-hover:text-purple-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </button>
@@ -325,7 +325,7 @@ Please:
               <Server className="w-4 h-4 text-blue-400" />
               <span className="text-muted-foreground">{t('drilldown.fields.cluster')}</span>
               <ClusterBadge cluster={cluster.split('/').pop() || cluster} size="sm" />
-              <svg className="w-3 h-3 text-blue-400/50 group-hover:text-blue-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-3 h-3 text-blue-400/70 group-hover:text-blue-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </button>
@@ -379,7 +379,7 @@ Please:
         {activeTab === 'overview' && (
           <div className="space-y-6">
             {/* Operator Info Card */}
-            <div className="p-4 rounded-lg bg-gradient-to-r from-purple-500/10 to-indigo-500/10 border border-purple-500/20">
+            <div className="p-4 rounded-lg bg-gradient-to-r from-purple-500/10 to-blue-500/10 border border-purple-500/20">
               <div className="flex items-start gap-3">
                 <Settings className="w-8 h-8 text-purple-400 mt-1" />
                 <div className="flex-1 min-w-0">

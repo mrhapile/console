@@ -41,7 +41,28 @@ export const STORAGE_KEY_CLUSTER_PROVIDER_OVERRIDES = 'kubestellar-cluster-provi
 export const STORAGE_KEY_MISSIONS_ACTIVE = 'kubestellar-missions-active'
 export const STORAGE_KEY_MISSIONS_HISTORY = 'kubestellar-missions-history'
 
+// ── Engagement / Nudges ───────────────────────────────────────────────
+export const STORAGE_KEY_NUDGE_DISMISSED = 'kc-nudge-dismissed'
+export const STORAGE_KEY_SMART_SUGGESTIONS_DISMISSED = 'kc-smart-suggestions-dismissed'
+export const STORAGE_KEY_DRAG_HINT_SHOWN = 'kc-drag-hint-shown'
+export const STORAGE_KEY_PWA_PROMPT_DISMISSED = 'kc-pwa-prompt-dismissed'
+export const STORAGE_KEY_SESSION_COUNT = 'kc-session-count'
+export const STORAGE_KEY_VISIT_COUNT = 'kc-visit-count'
+export const STORAGE_KEY_FEATURE_HINTS_DISMISSED = 'kc-feature-hints-dismissed'
+export const STORAGE_KEY_GETTING_STARTED_DISMISSED = 'kc-getting-started-dismissed'
+export const STORAGE_KEY_HINTS_SUPPRESSED = 'kc-hints-suppressed'
+export const STORAGE_KEY_POST_CONNECT_DISMISSED = 'kc-post-connect-dismissed'
+export const STORAGE_KEY_DEMO_CTA_DISMISSED = 'kc-demo-cta-dismissed'
+export const STORAGE_KEY_ADOPTER_NUDGE_DISMISSED = 'kc-adopter-nudge-dismissed'
+export const STORAGE_KEY_FIRST_AGENT_CONNECT = 'kc-first-agent-connect'
+
 // ── Component-specific cache ───────────────────────────────────────────
 export const STORAGE_KEY_OPA_CACHE = 'opa-statuses-cache'
 export const STORAGE_KEY_OPA_CACHE_TIME = 'opa-statuses-cache-time'
+export const STORAGE_KEY_KYVERNO_CACHE = 'kc-kyverno-cache'
+export const STORAGE_KEY_KYVERNO_CACHE_TIME = 'kc-kyverno-cache-time'
+export const STORAGE_KEY_KUBESCAPE_CACHE = 'kc-kubescape-cache'
+export const STORAGE_KEY_KUBESCAPE_CACHE_TIME = 'kc-kubescape-cache-time'
+export const STORAGE_KEY_TRIVY_CACHE = 'kc-trivy-cache'
+export const STORAGE_KEY_TRIVY_CACHE_TIME = 'kc-trivy-cache-time'
 export const STORAGE_KEY_KUBECTL_HISTORY = 'kubectl-history'

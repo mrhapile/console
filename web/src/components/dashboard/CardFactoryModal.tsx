@@ -20,6 +20,7 @@ import { InlineAIAssist } from './InlineAIAssist'
 import { CARD_T1_SYSTEM_PROMPT, CARD_T2_SYSTEM_PROMPT, CARD_INLINE_ASSIST_PROMPT, CODE_INLINE_ASSIST_PROMPT } from '../../lib/ai/prompts'
 import { generateSampleData, detectFieldFormat } from '../../lib/ai/sampleData'
 import { useAIMode } from '../../hooks/useAIMode'
+import { StatusBadge } from '../ui/StatusBadge'
 
 interface CardFactoryModalProps {
   isOpen: boolean
@@ -240,7 +241,7 @@ const T2_TEMPLATES: T2Template[] = [
         {clusters.map(c => (
           <div key={c.name} className={\`rounded-lg \${getColor(c.health)} p-3 flex flex-col items-center justify-center\`}>
             <span className={\`text-xl font-bold \${getTextColor(c.health)}\`}>{c.health}%</span>
-            <span className="text-[10px] text-muted-foreground mt-1">{c.name}</span>
+            <span className="text-2xs text-muted-foreground mt-1">{c.name}</span>
           </div>
         ))}
       </div>
@@ -316,7 +317,7 @@ const T2_TEMPLATES: T2Template[] = [
         {data.map(d => (
           <div key={d.label} className="flex items-center gap-1">
             <div className="w-2 h-2 rounded-full" style={{ background: d.color }} />
-            <span className="text-[10px] text-muted-foreground">{d.label}</span>
+            <span className="text-2xs text-muted-foreground">{d.label}</span>
           </div>
         ))}
       </div>
@@ -354,7 +355,7 @@ const T2_TEMPLATES: T2Template[] = [
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs text-foreground truncate">{e.msg}</p>
-              <p className="text-[10px] text-muted-foreground">{e.time}</p>
+              <p className="text-2xs text-muted-foreground">{e.time}</p>
             </div>
           </div>
         ))}
@@ -402,7 +403,7 @@ function FieldSuggestChips({
 
   return (
     <div className="flex items-center gap-1.5 flex-wrap">
-      <span className="text-[10px] text-muted-foreground/50">Fields:</span>
+      <span className="text-2xs text-muted-foreground/50">Fields:</span>
       {suggestedFields.map(field => {
         const sampleValues = (() => {
           try {
@@ -421,7 +422,7 @@ function FieldSuggestChips({
               format: detected.format,
               badgeColors: detected.badgeColors,
             })}
-            className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-400/70 hover:bg-purple-500/20 hover:text-purple-400 transition-colors"
+            className="text-2xs px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-400/70 hover:bg-purple-500/20 hover:text-purple-400 transition-colors"
           >
             + {field}
           </button>
@@ -1031,7 +1032,7 @@ export function CardFactoryModal({ isOpen, onClose, onCardCreated }: CardFactory
                 {/* Available APIs info */}
                 <div className="rounded-md bg-secondary/30 border border-border/50 p-3">
                   <p className="text-xs font-medium text-muted-foreground mb-1">{t('dashboard.cardFactory.availableInScope')}</p>
-                  <p className="text-[10px] text-muted-foreground leading-relaxed">
+                  <p className="text-2xs text-muted-foreground leading-relaxed">
                     React, useState, useEffect, useMemo, useCallback, useRef, useReducer,
                     cn, useCardData, commonComparators, Skeleton, Pagination,
                     and all lucide-react icons.
@@ -1094,7 +1095,7 @@ export function CardFactoryModal({ isOpen, onClose, onCardCreated }: CardFactory
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-foreground">{card.title}</span>
                         <span className={cn(
-                          'text-[10px] px-1.5 py-0.5 rounded',
+                          'text-2xs px-1.5 py-0.5 rounded',
                           card.tier === 'tier1' ? 'bg-blue-500/20 text-blue-400' : 'bg-purple-500/20 text-purple-400',
                         )}>
                           {card.tier === 'tier1' ? t('dashboard.cardFactory.declarativeBadge') : t('dashboard.cardFactory.customCodeBadge')}
@@ -1103,7 +1104,7 @@ export function CardFactoryModal({ isOpen, onClose, onCardCreated }: CardFactory
                       {card.description && (
                         <p className="text-xs text-muted-foreground mt-0.5">{card.description}</p>
                       )}
-                      <p className="text-[10px] text-muted-foreground/70 mt-1">
+                      <p className="text-2xs text-muted-foreground/70 mt-1">
                         ID: {card.id} · Created: {new Date(card.createdAt).toLocaleDateString()}
                       </p>
                     </div>
@@ -1230,9 +1231,9 @@ function T1Preview({ result }: { result: AiCardT1Result }) {
       <div className="flex items-center gap-2 mb-3">
         <Layers className="w-4 h-4 text-purple-400" />
         <span className="text-sm font-medium text-foreground">{result.title}</span>
-        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400">
+        <StatusBadge color="blue" size="xs">
           {result.layout}
-        </span>
+        </StatusBadge>
       </div>
       {result.description && (
         <p className="text-xs text-muted-foreground mb-3">{result.description}</p>
@@ -1251,9 +1252,9 @@ function T1Preview({ result }: { result: AiCardT1Result }) {
               {result.columns.map(col => {
                 const val = String(row[col.field] ?? '')
                 if (col.format === 'badge' && col.badgeColors) {
-                  const badgeClass = col.badgeColors[val] || 'bg-gray-500/20 text-gray-400 dark:bg-gray-900/30 dark:text-gray-400'
+                  const badgeClass = col.badgeColors[val] || 'bg-gray-500/20 text-muted-foreground dark:bg-gray-900/30 dark:text-muted-foreground'
                   return (
-                    <span key={col.field} className={cn('flex-1 truncate text-[10px] px-1 py-0.5 rounded', badgeClass)}>
+                    <span key={col.field} className={cn('flex-1 truncate text-2xs px-1 py-0.5 rounded', badgeClass)}>
                       {val}
                     </span>
                   )
@@ -1278,14 +1279,14 @@ function T2Preview({ result }: { result: AiCardT2Result }) {
       <div className="flex items-center gap-2 mb-3">
         <Code className="w-4 h-4 text-purple-400" />
         <span className="text-sm font-medium text-foreground">{result.title}</span>
-        <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400">
+        <StatusBadge color="purple" size="xs">
           Custom Code
-        </span>
+        </StatusBadge>
       </div>
       {result.description && (
         <p className="text-xs text-muted-foreground mb-2">{result.description}</p>
       )}
-      <pre className="text-[10px] px-3 py-2 rounded-md bg-secondary/50 border border-border text-foreground font-mono max-h-48 overflow-y-auto whitespace-pre-wrap">
+      <pre className="text-2xs px-3 py-2 rounded-md bg-secondary/50 border border-border text-foreground font-mono max-h-48 overflow-y-auto whitespace-pre-wrap">
         {result.sourceCode}
       </pre>
     </div>

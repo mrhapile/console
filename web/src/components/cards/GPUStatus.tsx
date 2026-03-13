@@ -1,10 +1,10 @@
 import { useState, useMemo } from 'react'
 import { Activity, ChevronRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { useGPUNodes } from '../../hooks/useMCP'
+import { useCachedGPUNodes } from '../../hooks/useCachedData'
 import { useDrillDownActions } from '../../hooks/useDrillDown'
-import { useDemoMode } from '../../hooks/useDemoMode'
 import { ClusterBadge } from '../ui/ClusterBadge'
+import { StatusBadge } from '../ui/StatusBadge'
 import { Skeleton } from '../ui/Skeleton'
 import { useCardData, commonComparators } from '../../lib/cards/cardHooks'
 import { CardSearchInput, CardControlsRow, CardPaginationFooter } from '../../lib/cards/CardComponents'
@@ -36,15 +36,15 @@ export function GPUStatus({ config }: GPUStatusProps) {
   const {
     nodes: rawNodes,
     isLoading: hookLoading,
-  } = useGPUNodes(cluster)
+    isDemoFallback,
+  } = useCachedGPUNodes(cluster)
   const { drillToCluster } = useDrillDownActions()
-  const { isDemoMode: demoMode } = useDemoMode()
 
   // Report loading state to CardWrapper for skeleton/refresh behavior
   const { showSkeleton, showEmptyState } = useCardLoadingState({
     isLoading: hookLoading,
     hasAnyData: rawNodes.length > 0,
-    isDemoData: demoMode,
+    isDemoData: isDemoFallback,
   })
 
   // Card-specific GPU type filter (not handled by useCardData)
@@ -112,6 +112,8 @@ export function GPUStatus({ config }: GPUStatusProps) {
       sortDirection,
       setSortDirection,
     },
+    containerRef,
+    containerStyle,
   } = useCardData<ClusterGPUStats, SortByOption>(clusterStatsList, {
     filter: {
       searchFields: ['clusterName'],
@@ -168,9 +170,9 @@ export function GPUStatus({ config }: GPUStatusProps) {
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <span className="text-xs px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400">
+          <StatusBadge color="purple">
             {t('gpuStatus.clusterCount', { count: totalItems })}
-          </span>
+          </StatusBadge>
         </div>
         <CardControlsRow
           clusterIndicator={{
@@ -222,7 +224,7 @@ export function GPUStatus({ config }: GPUStatusProps) {
       )}
 
       {/* Cluster GPU status */}
-      <div className="flex-1 space-y-3 overflow-y-auto">
+      <div ref={containerRef} className="flex-1 space-y-3 overflow-y-auto" style={containerStyle}>
         {displayStats.map((stats) => (
           <div
             key={stats.clusterName}

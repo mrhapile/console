@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { Cpu, Server, ChevronRight } from 'lucide-react'
-import { useGPUNodes } from '../../hooks/useMCP'
+import { useCachedGPUNodes } from '../../hooks/useCachedData'
 import { useDrillDownActions } from '../../hooks/useDrillDown'
 import { ClusterBadge } from '../ui/ClusterBadge'
 import { CardClusterFilter } from '../../lib/cards'
@@ -9,6 +9,7 @@ import { Pagination } from '../ui/Pagination'
 import { Skeleton } from '../ui/Skeleton'
 import { useCardData, commonComparators } from '../../lib/cards/cardHooks'
 import { CardSearchInput } from '../../lib/cards/CardComponents'
+import { StatusBadge } from '../ui/StatusBadge'
 import { useCardLoadingState } from './CardDataContext'
 import { useTranslation } from 'react-i18next'
 
@@ -25,7 +26,7 @@ const SORT_OPTIONS = [
   { value: 'gpuType' as const, label: 'GPU Type' },
 ]
 
-type GPUNode = ReturnType<typeof useGPUNodes>['nodes'][number]
+type GPUNode = ReturnType<typeof useCachedGPUNodes>['nodes'][number]
 
 const GPU_SORT_COMPARATORS: Record<SortByOption, (a: GPUNode, b: GPUNode) => number> = {
   utilization: (a, b) => (a.gpuAllocated / a.gpuCount) - (b.gpuAllocated / b.gpuCount),
@@ -41,7 +42,8 @@ export function GPUInventory({ config }: GPUInventoryProps) {
     nodes: rawNodes,
     isLoading: hookLoading,
     error,
-  } = useGPUNodes(cluster)
+    isDemoFallback,
+  } = useCachedGPUNodes(cluster)
   const { drillToGPUNode } = useDrillDownActions()
 
   // Only show skeleton when no cached data exists
@@ -53,6 +55,7 @@ export function GPUInventory({ config }: GPUInventoryProps) {
     hasAnyData: rawNodes.length > 0,
     isFailed: !!error && rawNodes.length === 0,
     consecutiveFailures: error ? 1 : 0,
+    isDemoData: isDemoFallback,
   })
 
   // Use unified card data hook for filtering, sorting, and pagination
@@ -67,6 +70,8 @@ export function GPUInventory({ config }: GPUInventoryProps) {
     setItemsPerPage,
     filters,
     sorting,
+    containerRef,
+    containerStyle,
   } = useCardData<GPUNode, SortByOption>(rawNodes, {
     filter: {
       searchFields: ['name', 'cluster', 'gpuType'] as (keyof GPUNode)[],
@@ -148,9 +153,9 @@ export function GPUInventory({ config }: GPUInventoryProps) {
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <span className="text-xs px-1.5 py-0.5 rounded bg-green-500/20 text-green-400">
+          <StatusBadge color="green">
             {t('gpuInventory.gpuCount', { count: stats.totalGPUs })}
-          </span>
+          </StatusBadge>
         </div>
         <div className="flex items-center gap-2">
           {/* Cluster count indicator */}
@@ -210,7 +215,7 @@ export function GPUInventory({ config }: GPUInventoryProps) {
       </div>
 
       {/* Node list */}
-      <div className="flex-1 space-y-2 overflow-y-auto">
+      <div ref={containerRef} className="flex-1 space-y-2 overflow-y-auto" style={containerStyle}>
         {nodes.map((node) => (
           <div
             key={`${node.cluster}-${node.name}`}

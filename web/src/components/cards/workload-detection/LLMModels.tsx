@@ -2,11 +2,12 @@ import { useMemo } from 'react'
 import { Layers, AlertCircle, RefreshCw } from 'lucide-react'
 import { Skeleton } from '../../ui/Skeleton'
 import { RefreshIndicator } from '../../ui/RefreshIndicator'
+import { StatusBadge } from '../../ui/StatusBadge'
 import { useCardData } from '../../../lib/cards/cardHooks'
 import { CardPaginationFooter, CardControlsRow, CardSearchInput } from '../../../lib/cards/CardComponents'
-import { useCachedLLMdModels } from '../../../hooks/useCachedData'
+import { useCachedLLMdModels, useCachedGPUNodes } from '../../../hooks/useCachedData'
 import { useLLMdClusters } from './shared'
-import { useClusters, useGPUNodes } from '../../../hooks/useMCP'
+import { useClusters } from '../../../hooks/useMCP'
 import type { LLMdModel } from '../../../hooks/useLLMd'
 import { useCardLoadingState } from '../CardDataContext'
 import { useTranslation } from 'react-i18next'
@@ -25,19 +26,20 @@ interface LLMModelsProps {
 }
 
 export function LLMModels({ config: _config }: LLMModelsProps) {
-  const { t } = useTranslation()
+  const { t } = useTranslation(['cards', 'common'])
   // Dynamically discover LLM-d clusters instead of using static list
   const { deduplicatedClusters } = useClusters()
-  const { nodes: gpuNodes } = useGPUNodes()
+  const { nodes: gpuNodes } = useCachedGPUNodes()
   const gpuClusterNames = useMemo(() => new Set(gpuNodes.map(n => n.cluster)), [gpuNodes])
   const llmdClusters = useLLMdClusters(deduplicatedClusters, gpuClusterNames)
 
-  const { models, isLoading, isRefreshing, lastRefresh } = useCachedLLMdModels(llmdClusters)
+  const { models, isLoading, isRefreshing, lastRefresh, isDemoFallback } = useCachedLLMdModels(llmdClusters)
 
   // Report loading state to CardWrapper for skeleton/refresh behavior
   useCardLoadingState({
     isLoading,
     hasAnyData: models.length > 0,
+    isDemoData: isDemoFallback,
   })
 
   const {
@@ -51,6 +53,8 @@ export function LLMModels({ config: _config }: LLMModelsProps) {
     setItemsPerPage,
     filters,
     sorting,
+    containerRef,
+    containerStyle,
   } = useCardData<LLMdModel, SortByOption>(models, {
     filter: {
       searchFields: ['name', 'namespace', 'cluster'] as (keyof LLMdModel)[],
@@ -73,15 +77,15 @@ export function LLMModels({ config: _config }: LLMModelsProps) {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'loaded':
-        return <span className="text-xs px-1.5 py-0.5 rounded bg-green-500/20 text-green-400">Loaded</span>
+        return <StatusBadge color="green">Loaded</StatusBadge>
       case 'downloading':
-        return <span className="text-xs px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 flex items-center gap-1"><RefreshCw className="w-2.5 h-2.5 animate-spin" /> Downloading</span>
+        return <StatusBadge color="blue" icon={<RefreshCw className="w-2.5 h-2.5 animate-spin" />}>Downloading</StatusBadge>
       case 'stopped':
-        return <span className="text-xs px-1.5 py-0.5 rounded bg-gray-500/20 text-gray-400">Stopped</span>
+        return <StatusBadge color="gray">Stopped</StatusBadge>
       case 'error':
-        return <span className="text-xs px-1.5 py-0.5 rounded bg-red-500/20 text-red-400">{t('common.error')}</span>
+        return <StatusBadge color="red">{t('common:common.error')}</StatusBadge>
       default:
-        return <span className="text-xs px-1.5 py-0.5 rounded bg-gray-500/20 text-gray-400">{status}</span>
+        return <StatusBadge color="gray">{status}</StatusBadge>
     }
   }
 
@@ -107,9 +111,9 @@ export function LLMModels({ config: _config }: LLMModelsProps) {
             showLabel={true}
             staleThresholdMinutes={5}
           />
-          <span className="text-xs px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400">
+          <StatusBadge color="cyan">
             {models.filter(m => m.status === 'loaded').length} loaded
-          </span>
+          </StatusBadge>
         </div>
         <CardControlsRow
           clusterIndicator={
@@ -156,7 +160,7 @@ export function LLMModels({ config: _config }: LLMModelsProps) {
       <div className="flex items-start gap-2 p-2 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-xs mb-4">
         <AlertCircle className="w-4 h-4 text-cyan-400 flex-shrink-0 mt-0.5" />
         <div>
-          <p className="text-cyan-400 font-medium">InferencePool Detection</p>
+          <p className="text-cyan-400 font-medium">{t('cards:llmModels.inferencePoolDetection')}</p>
           <p className="text-muted-foreground">
             Scans for InferencePool resources on llm-d clusters.
           </p>
@@ -164,11 +168,11 @@ export function LLMModels({ config: _config }: LLMModelsProps) {
       </div>
 
       {/* Model list */}
-      <div className="flex-1 overflow-y-auto">
+      <div ref={containerRef} className="flex-1 overflow-y-auto" style={containerStyle}>
         {paginatedItems.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-32 text-muted-foreground">
             <Layers className="w-8 h-8 mb-2 opacity-50" />
-            <p className="text-sm">No InferencePools found</p>
+            <p className="text-sm">{t('cards:llmModels.noInferencePools')}</p>
             <p className="text-xs">Scanning {llmdClusters.length} cluster{llmdClusters.length !== 1 ? 's' : ''}</p>
           </div>
         ) : (
@@ -176,9 +180,9 @@ export function LLMModels({ config: _config }: LLMModelsProps) {
             <thead>
               <tr className="text-xs text-muted-foreground border-b border-border/50">
                 <th className="text-left py-2">Model</th>
-                <th className="text-left py-2">{t('common.namespace')}</th>
-                <th className="text-left py-2">{t('common.cluster')}</th>
-                <th className="text-right py-2">{t('common.status')}</th>
+                <th className="text-left py-2">{t('common:common.namespace')}</th>
+                <th className="text-left py-2">{t('common:common.cluster')}</th>
+                <th className="text-right py-2">{t('common:common.status')}</th>
               </tr>
             </thead>
             <tbody>

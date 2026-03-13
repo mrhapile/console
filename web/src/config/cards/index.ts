@@ -65,6 +65,7 @@ import { hpaStatusConfig } from './hpa-status'
 import { iframeEmbedConfig } from './iframe-embed'
 import { ingressStatusConfig } from './ingress-status'
 import { jobStatusConfig } from './job-status'
+import { kubeBertConfig } from './kube-bert'
 import { kubeChessConfig } from './kube-chess'
 import { kubeCraftConfig } from './kube-craft'
 import { kubeDoomConfig } from './kube-doom'
@@ -99,6 +100,7 @@ import { networkOverviewConfig } from './network-overview'
 import { networkPolicyStatusConfig } from './network-policy-status'
 import { networkUtilsConfig } from './network-utils'
 import { nodeInvadersConfig } from './node-invaders'
+import { missileCommandConfig } from './missile-command'
 import { nodeStatusConfig } from './node-status'
 import { opaPoliciesConfig } from './opa-policies'
 import { opencostOverviewConfig } from './opencost-overview'
@@ -150,6 +152,17 @@ import { warningEventsConfig } from './warning-events'
 import { weatherConfig } from './weather'
 import { workloadDeploymentConfig } from './workload-deployment'
 import { workloadMonitorConfig } from './workload-monitor'
+import { crossClusterEventCorrelationConfig } from './cross-cluster-event-correlation'
+import { clusterDeltaDetectorConfig } from './cluster-delta-detector'
+import { cascadeImpactMapConfig } from './cascade-impact-map'
+import { configDriftHeatmapConfig } from './config-drift-heatmap'
+import { resourceImbalanceDetectorConfig } from './resource-imbalance-detector'
+import { restartCorrelationMatrixConfig } from './restart-correlation-matrix'
+import { deploymentRolloutTrackerConfig } from './deployment-rollout-tracker'
+import { fleetComplianceHeatmapConfig } from './fleet-compliance-heatmap'
+import { complianceDriftConfig } from './compliance-drift'
+import { crossClusterPolicyComparisonConfig } from './cross-cluster-policy-comparison'
+import { recommendedPoliciesConfig } from './recommended-policies'
 
 export const CARD_CONFIGS: CardConfigRegistry = {
   active_alerts: activeAlertsConfig,
@@ -213,6 +226,7 @@ export const CARD_CONFIGS: CardConfigRegistry = {
   iframe_embed: iframeEmbedConfig,
   ingress_status: ingressStatusConfig,
   job_status: jobStatusConfig,
+  kube_bert: kubeBertConfig,
   kube_chess: kubeChessConfig,
   kube_craft: kubeCraftConfig,
   kube_doom: kubeDoomConfig,
@@ -247,6 +261,7 @@ export const CARD_CONFIGS: CardConfigRegistry = {
   network_policy_status: networkPolicyStatusConfig,
   network_utils: networkUtilsConfig,
   node_invaders: nodeInvadersConfig,
+  missile_command: missileCommandConfig,
   node_status: nodeStatusConfig,
   opa_policies: opaPoliciesConfig,
   opencost_overview: opencostOverviewConfig,
@@ -298,6 +313,19 @@ export const CARD_CONFIGS: CardConfigRegistry = {
   weather: weatherConfig,
   workload_deployment: workloadDeploymentConfig,
   workload_monitor: workloadMonitorConfig,
+  // Multi-cluster insights cards
+  cross_cluster_event_correlation: crossClusterEventCorrelationConfig,
+  cluster_delta_detector: clusterDeltaDetectorConfig,
+  cascade_impact_map: cascadeImpactMapConfig,
+  config_drift_heatmap: configDriftHeatmapConfig,
+  resource_imbalance_detector: resourceImbalanceDetectorConfig,
+  restart_correlation_matrix: restartCorrelationMatrixConfig,
+  deployment_rollout_tracker: deploymentRolloutTrackerConfig,
+  // Cross-cluster compliance cards
+  fleet_compliance_heatmap: fleetComplianceHeatmapConfig,
+  compliance_drift: complianceDriftConfig,
+  cross_cluster_policy_comparison: crossClusterPolicyComparisonConfig,
+  recommended_policies: recommendedPoliciesConfig,
 }
 
 export function getCardConfig(cardType: string): UnifiedCardConfig | undefined {
@@ -374,6 +402,7 @@ export {
   iframeEmbedConfig,
   ingressStatusConfig,
   jobStatusConfig,
+  kubeBertConfig,
   kubeChessConfig,
   kubeCraftConfig,
   kubeDoomConfig,
@@ -407,6 +436,7 @@ export {
   networkPolicyStatusConfig,
   networkUtilsConfig,
   nodeInvadersConfig,
+  missileCommandConfig,
   nodeStatusConfig,
   opaPoliciesConfig,
   opencostOverviewConfig,
@@ -458,4 +488,14 @@ export {
   weatherConfig,
   workloadDeploymentConfig,
   workloadMonitorConfig,
+  crossClusterEventCorrelationConfig,
+  clusterDeltaDetectorConfig,
+  cascadeImpactMapConfig,
+  configDriftHeatmapConfig,
+  resourceImbalanceDetectorConfig,
+  restartCorrelationMatrixConfig,
+  deploymentRolloutTrackerConfig,
+  fleetComplianceHeatmapConfig,
+  complianceDriftConfig,
+  crossClusterPolicyComparisonConfig,
 }

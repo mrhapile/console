@@ -1,18 +1,21 @@
 import { useMemo } from 'react'
 import { Gauge } from '../charts'
 import { Cpu, MemoryStick, Server } from 'lucide-react'
-import { useClusters, useGPUNodes } from '../../hooks/useMCP'
+import { useClusters } from '../../hooks/useMCP'
+import { useCachedGPUNodes } from '../../hooks/useCachedData'
 import { useDrillDownActions } from '../../hooks/useDrillDown'
 import { useChartFilters, CardClusterFilter } from '../../lib/cards'
 import { useCardLoadingState } from './CardDataContext'
 import { Skeleton } from '../ui/Skeleton'
 import { useTranslation } from 'react-i18next'
+import { useDemoMode } from '../../hooks/useDemoMode'
 
 export function ResourceUsage() {
   const { t } = useTranslation(['cards', 'common'])
   const { isLoading: clustersLoading } = useClusters()
-  const { nodes: allGPUNodes } = useGPUNodes()
+  const { nodes: allGPUNodes, isDemoFallback } = useCachedGPUNodes()
   const { drillToResources } = useDrillDownActions()
+  const { isDemoMode } = useDemoMode()
 
   // Use chart filters hook for cluster filtering
   const {
@@ -72,6 +75,7 @@ export function ResourceUsage() {
   const { showSkeleton, showEmptyState } = useCardLoadingState({
     isLoading: clustersLoading,
     hasAnyData: clusters.length > 0,
+    isDemoData: isDemoMode || isDemoFallback,
   })
 
   if (showSkeleton) {

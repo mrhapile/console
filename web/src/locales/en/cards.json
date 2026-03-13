@@ -202,6 +202,7 @@
     "trivy_scan": "Trivy Scan",
     "kubescape_scan": "Kubescape Scan",
     "compliance_score": "Compliance Score",
+    "recommended_policies": "Recommended Policies",
     "vault_secrets": "Vault Secrets",
     "external_secrets": "External Secrets",
     "cert_manager": "Cert Manager",
@@ -274,7 +275,9 @@
     "flatcar_status": "Flatcar Container Linux",
     "contour_status": "Contour",
     "crio_status": "CRI-O",
-    "coredns_status": "CoreDNS"
+    "coredns_status": "CoreDNS",
+    "fluentd_status": "Fluentd",
+    "lima_status": "Lima"
   },
   "descriptions": {
     "cluster_health": "Overall health status of all connected Kubernetes clusters.",
@@ -358,13 +361,17 @@
     "hardware_health": "Detects hardware device disappearances (GPUs, NICs, NVMe, InfiniBand) that often require a power cycle to recover.",
     "security_issues": "Security vulnerabilities and misconfigurations detected.",
     "rbac_overview": "Overview of RBAC roles, bindings, and permissions.",
-    "policy_violations": "Active policy violations from OPA, Kyverno, or other engines.",
+    "policy_violations": "Active policy violations from OPA, Kyverno, or other engines. Click violations to investigate.",
     "opa_policies": "OPA Gatekeeper policies and constraint status.",
-    "kyverno_policies": "Kyverno policies and their enforcement status.",
+    "kyverno_policies": "Kyverno policies and their enforcement status. Click policies for details.",
     "falco_alerts": "Runtime security alerts from Falco.",
-    "trivy_scan": "Container image vulnerability scan results from Trivy.",
-    "kubescape_scan": "Security posture scan results from Kubescape.",
+    "trivy_scan": "Container image vulnerability scan results from Trivy. Click to see per-image vulnerability details.",
+    "kubescape_scan": "Security posture scan results from Kubescape. Click to see per-control pass/fail details.",
     "compliance_score": "Overall compliance score across security frameworks.",
+    "fleet_compliance_heatmap": "Cross-cluster compliance grid. Rows are clusters, columns are tools. Click any cell to drill into details.",
+    "compliance_drift": "Flags clusters deviating from fleet baseline using statistical analysis. Click entries to investigate.",
+    "cross_cluster_policy_comparison": "Compares Kyverno policy deployment across clusters. Highlights inconsistencies.",
+    "recommended_policies": "AI-powered policy gap analysis. Identifies missing compliance policies across your fleet and deploys them with one click.",
     "vault_secrets": "HashiCorp Vault secrets management status.",
     "external_secrets": "External Secrets Operator sync status.",
     "cert_manager": "TLS certificate status and renewal from cert-manager.",
@@ -438,7 +445,9 @@
     "console_offline_detection": "Monitor offline nodes, GPU issues, and AI-predicted failures.",
     "flatcar_status": "Flatcar node OS versions, update status, and version distribution.",
     "contour_status": "Contour ingress proxy status, HTTPProxy resources.",
-    "crio_status": "CRI-O container runtime metrics, image pulls, and pod sandbox status."
+    "crio_status": "CRI-O container runtime metrics, image pulls, and pod sandbox status.",
+    "fluentd_status": "Log pipeline status, buffer utilization, and output plugin health.",
+    "lima_status": "Lima virtual machine instances and resource usage."
   },
   "categories": {
     "core": "Core",
@@ -2664,5 +2673,70 @@
     "syncedMinutesAgo": "{{count}}m ago",
     "syncedHoursAgo": "{{count}}h ago",
     "syncedDaysAgo": "{{count}}d ago"
+  },
+  "fluentd": {
+    "healthy": "Healthy",
+    "degraded": "Degraded",
+    "notInstalled": "Fluentd not detected",
+    "notInstalledHint": "No Fluentd pods found. Deploy Fluentd as a DaemonSet to monitor log pipelines.",
+    "fetchError": "Failed to fetch Fluentd status",
+    "pods": "Pods",
+    "eventsPerSec": "Events/s",
+    "retries": "Retries",
+    "bufferUtilization": "Buffer utilization",
+    "outputPlugins": "Output plugins"
+  },
+  "lima": {
+    "healthy": "Healthy",
+    "degraded": "Degraded",
+    "notDetected": "Lima Not Detected",
+    "notDetectedHint": "No Lima-managed nodes detected on connected clusters. Node names or labels starting with \"lima-\" or \"lima.sh/instance\" are used for detection.",
+    "totalInstances": "Instances",
+    "totalCpu": "vCPU Total",
+    "totalMemory": "Memory Total",
+    "instances": "Virtual Machine Instances",
+    "status_running": "Running",
+    "status_stopped": "Stopped",
+    "status_broken": "Broken",
+    "openDocs": "Lima Docs",
+    "fetchError": "Failed to fetch Lima status",
+    "syncedJustNow": "just now",
+    "syncedMinutesAgo": "{{count}}m ago",
+    "syncedHoursAgo": "{{count}}h ago",
+    "syncedDaysAgo": "{{count}}d ago"
+  },
+  "fleetCompliance": {
+    "scanningClusters": "Scanning clusters...",
+    "noClusters": "No clusters available"
+  },
+  "crossClusterPolicy": {
+    "scanningKyverno": "Scanning clusters for Kyverno...",
+    "noKyvernoClusters": "No clusters with Kyverno detected"
+  },
+  "llmModels": {
+    "inferencePoolDetection": "InferencePool Detection",
+    "noInferencePools": "No InferencePools found"
+  },
+  "mlNotebooks": {
+    "notebookDetection": "Notebook Detection",
+    "notebookDetectionDescription": "Scans for JupyterHub and standalone notebook servers."
+  },
+  "configDrift": {
+    "noDriftDetected": "No config drift detected",
+    "consistentConfig": "Shared workloads have consistent configuration",
+    "inSync": "In sync",
+    "lowDrift": "Low drift"
+  },
+  "kagentiTopology": {
+    "noAgentsOrTools": "No agents or tools to visualize",
+    "mcpTool": "MCP Tool"
+  },
+  "kustomizationStatus": {
+    "noKustomizations": "No Kustomizations",
+    "failing": "Failing"
+  },
+  "kubecostOverview": {
+    "monthlyCost": "Monthly Cost",
+    "savingsRecommendations": "Savings Recommendations"
   }
 }

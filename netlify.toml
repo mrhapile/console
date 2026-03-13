@@ -12,6 +12,20 @@
   directory = "netlify/functions"
   node_bundler = "esbuild"
 
+# Edge Functions — inject SEO meta tags, serve robots.txt + sitemap.xml
+# These only run on Netlify, not on localhost or cluster deployments
+[[edge_functions]]
+  path = "/*"
+  function = "seo-meta"
+
+[[edge_functions]]
+  path = "/robots.txt"
+  function = "robots"
+
+[[edge_functions]]
+  path = "/sitemap.xml"
+  function = "sitemap"
+
 [build.environment]
   # Enable demo mode with mock data for Netlify previews
   VITE_DEMO_MODE = "true"
@@ -46,8 +60,26 @@
   to = "/.netlify/functions/missions-browse"
   status = 200
 
+# GA4 gtag.js proxy — Netlify Function serves gtag.js from same origin,
+# bypassing domain-based ad blockers. This is the Netlify equivalent of
+# the Go backend's GA4ScriptProxy. Route handled by gtag-proxy.mts via
+# Config.path, so no redirect needed here.
+
 # GA4 event collection — custom lightweight tracker sends directly to /api/m
 # (Netlify Function via Config.path, no gtag.js loaded)
+
+# Analytics dashboard API — proxy to Netlify Function
+# Serves live GA4 Data API data (GA4_SERVICE_ACCOUNT_JSON + GA4_PROPERTY_ID in Netlify dashboard)
+[[redirects]]
+  from = "/api/analytics-dashboard"
+  to = "/.netlify/functions/analytics-dashboard"
+  status = 200
+
+# Analytics dashboard page — serve static HTML
+[[redirects]]
+  from = "/analytics"
+  to = "/analytics.html"
+  status = 200
 
 # SPA routing - redirect all routes to index.html (only if file doesn't exist)
 [[redirects]]
@@ -63,11 +95,26 @@
     X-Frame-Options = "DENY"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
+    Strict-Transport-Security = "max-age=31536000; includeSubDomains"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+    X-XSS-Protection = "1; mode=block"
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://analytics.kubestellar.io; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://*.google-analytics.com https://*.googleapis.com https://api.github.com https://api.dicebear.com https://fonts.gstatic.com https://analytics.kubestellar.io wss:; frame-ancestors 'none'"
 
 [[headers]]
   for = "/assets/*"
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
+
+# HTML files must always revalidate to pick up new chunk references after deploys
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache"
 
 # Context-specific settings
 [context.production]

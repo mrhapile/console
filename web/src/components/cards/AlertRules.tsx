@@ -9,7 +9,9 @@ import {
 import { useAlertRules } from '../../hooks/useAlerts'
 import { formatCondition } from '../../types/alerts'
 import type { AlertRule, AlertSeverity } from '../../types/alerts'
+import { Button } from '../ui/Button'
 import { AlertRuleEditor } from '../alerts/AlertRuleEditor'
+import { StatusBadge } from '../ui/StatusBadge'
 import {
   useCardData,
   commonComparators,
@@ -19,6 +21,7 @@ import {
 } from '../../lib/cards'
 import { useCardLoadingState } from './CardDataContext'
 import { useTranslation } from 'react-i18next'
+import { useDemoMode } from '../../hooks/useDemoMode'
 
 type SortField = 'name' | 'severity' | 'enabled'
 type SortTranslationKey = 'alertRules.sortName' | 'alertRules.sortSeverity' | 'alertRules.sortStatus'
@@ -42,11 +45,13 @@ export function AlertRulesCard() {
   const { rules, createRule, updateRule, toggleRule, deleteRule } = useAlertRules()
   const [showEditor, setShowEditor] = useState(false)
   const [editingRule, setEditingRule] = useState<AlertRule | undefined>(undefined)
+  const { isDemoMode } = useDemoMode()
 
   // Report state to CardWrapper (local storage rules are always available)
   useCardLoadingState({
     isLoading: false,
     hasAnyData: true,
+    isDemoData: isDemoMode,
   })
 
   // Use shared card data hook for filtering, sorting, and pagination
@@ -69,6 +74,8 @@ export function AlertRulesCard() {
       sortDirection,
       setSortDirection,
     },
+    containerRef,
+    containerStyle,
   } = useCardData<AlertRule, SortField>(rules, {
     filter: {
       searchFields: ['name', 'severity'],
@@ -188,18 +195,20 @@ export function AlertRulesCard() {
       />
 
       {/* Rules List */}
-      <div className="flex-1 overflow-y-auto space-y-2">
+      <div ref={containerRef} className="flex-1 overflow-y-auto space-y-2" style={containerStyle}>
         {displayedRules.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-muted-foreground text-sm">
             <Bell className="w-8 h-8 mb-2" />
             <span>{t('alertRules.noRulesConfigured')}</span>
-            <button
+            <Button
+              variant="accent"
+              size="sm"
               onClick={handleCreateNew}
-              className="mt-2 px-3 py-1.5 text-xs rounded-lg bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 transition-colors flex items-center gap-1"
+              icon={<Plus className="w-3 h-3" />}
+              className="mt-2"
             >
-              <Plus className="w-3 h-3" />
               {t('alertRules.createRule')}
-            </button>
+            </Button>
           </div>
         ) : (
           displayedRules.map((rule: AlertRule) => (
@@ -223,9 +232,9 @@ export function AlertRulesCard() {
                       {rule.name}
                     </span>
                     {rule.aiDiagnose && (
-                      <span className="px-1 py-0.5 text-[10px] rounded bg-purple-500/20 text-purple-400">
+                      <StatusBadge color="purple" size="xs">
                         AI
-                      </span>
+                      </StatusBadge>
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5">
@@ -237,7 +246,7 @@ export function AlertRulesCard() {
                     {rule.channels.map((channel, idx) => (
                       <span
                         key={idx}
-                        className={`px-1.5 py-0.5 text-[10px] rounded ${
+                        className={`px-1.5 py-0.5 text-2xs rounded ${
                           channel.enabled
                             ? 'bg-secondary text-foreground'
                             : 'bg-secondary/50 text-muted-foreground'

@@ -4,9 +4,11 @@ import { STORAGE_KEY_KUBECTL_HISTORY } from '../../lib/constants'
 import { TRANSITION_DELAY_MS } from '../../lib/constants/network'
 import { useKubectl } from '../../hooks/useKubectl'
 import { useClusters } from '../../hooks/useMCP'
+import { Button } from '../ui/Button'
 import { cn } from '../../lib/cn'
 import { useCardLoadingState } from './CardDataContext'
 import { useTranslation } from 'react-i18next'
+import { useDemoMode } from '../../hooks/useDemoMode'
 
 interface CommandHistoryItem {
   id: string
@@ -28,12 +30,14 @@ export function Kubectl() {
   const { t } = useTranslation(['common', 'cards'])
   const { execute } = useKubectl()
   const { deduplicatedClusters: clusters, isLoading } = useClusters()
+  const { isDemoMode } = useDemoMode()
   const [selectedContext, setSelectedContext] = useState<string>('')
 
   // Report loading state to CardWrapper for skeleton/refresh behavior
   useCardLoadingState({
     isLoading,
     hasAnyData: clusters.length > 0,
+    isDemoData: isDemoMode,
   })
   const [command, setCommand] = useState('')
   const [aiPrompt, setAiPrompt] = useState('')
@@ -54,6 +58,13 @@ export function Kubectl() {
   const [showFormatMenu, setShowFormatMenu] = useState(false)
   const outputRef = useRef<HTMLDivElement>(null)
   const commandInputRef = useRef<HTMLInputElement>(null)
+  const formatMenuBlurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (formatMenuBlurTimeoutRef.current !== null) clearTimeout(formatMenuBlurTimeoutRef.current)
+    }
+  }, [])
 
   // Set default context when clusters are loaded
   useEffect(() => {
@@ -535,20 +546,23 @@ data:
             className="w-full px-3 py-2 text-sm bg-secondary rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-purple-500/50"
           />
           <div className="flex gap-2 mt-2">
-            <button
+            <Button
+              variant="accent"
+              size="sm"
               onClick={generateCommand}
               disabled={isExecuting || !aiPrompt.trim()}
-              className="px-3 py-1.5 text-xs rounded-lg bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {t('cards:kubectl.generateCommand')}
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="accent"
+              size="sm"
               onClick={generateYAML}
               disabled={isExecuting || !aiPrompt.trim()}
-              className="px-3 py-1.5 text-xs rounded-lg bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="bg-blue-500/20 hover:bg-blue-500/30 text-blue-300"
             >
               {t('cards:kubectl.generateYAML')}
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -615,22 +629,25 @@ data:
             </div>
           )}
           <div className="flex gap-2 mt-2">
-            <button
+            <Button
+              variant="accent"
+              size="sm"
               onClick={applyYAML}
               disabled={isExecuting || !yamlContent.trim() || !!yamlError}
-              className="px-3 py-1.5 text-xs rounded-lg bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="bg-blue-500/20 hover:bg-blue-500/30 text-blue-300"
             >
               {isExecuting ? t('cards:kubectl.applying') : isDryRun ? t('cards:kubectl.dryRunApply') : t('common:common.apply')}
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => {
                 setYamlContent('')
                 setYamlError(null)
               }}
-              className="px-3 py-1.5 text-xs rounded-lg hover:bg-secondary/50 text-muted-foreground"
             >
               {t('common:common.clear')}
-            </button>
+            </Button>
           </div>
 
           {/* Saved Manifests */}
@@ -656,7 +673,7 @@ data:
                   >
                     <div className="flex items-center justify-between">
                       <span>{manifest.name}</span>
-                      <span className="text-[10px]">{manifest.timestamp.toLocaleTimeString()}</span>
+                      <span className="text-2xs">{manifest.timestamp.toLocaleTimeString()}</span>
                     </div>
                   </button>
                 ))}
@@ -704,11 +721,11 @@ data:
                     )}
                     <span className="text-muted-foreground truncate">{item.command}</span>
                   </div>
-                  <span className="text-[10px] text-muted-foreground ml-2 flex-shrink-0">
+                  <span className="text-2xs text-muted-foreground ml-2 flex-shrink-0">
                     {item.timestamp.toLocaleTimeString()}
                   </span>
                 </div>
-                <div className="text-[10px] text-muted-foreground/60 mt-0.5 truncate">
+                <div className="text-2xs text-muted-foreground/60 mt-0.5 truncate">
                   {item.context}
                 </div>
               </button>
@@ -771,7 +788,10 @@ data:
             <div className="relative">
               <button
                 onClick={() => setShowFormatMenu(!showFormatMenu)}
-                onBlur={() => setTimeout(() => setShowFormatMenu(false), TRANSITION_DELAY_MS)}
+                onBlur={() => {
+                  if (formatMenuBlurTimeoutRef.current !== null) clearTimeout(formatMenuBlurTimeoutRef.current)
+                  formatMenuBlurTimeoutRef.current = setTimeout(() => setShowFormatMenu(false), TRANSITION_DELAY_MS)
+                }}
                 className="p-1 rounded text-muted-foreground hover:text-foreground"
                 title={`Output format: ${outputFormat}`}
               >
@@ -800,7 +820,7 @@ data:
             <button
               onClick={() => setIsDryRun(!isDryRun)}
               className={cn(
-                'px-2 py-1 text-[10px] rounded',
+                'px-2 py-1 text-2xs rounded',
                 isDryRun ? 'bg-yellow-500/20 text-yellow-400' : 'text-muted-foreground hover:bg-secondary'
               )}
               title="Toggle dry-run mode"
@@ -834,32 +854,32 @@ data:
         <span className="text-xs text-muted-foreground">{t('cards:kubectl.quickCommands')}:</span>
         <button
           onClick={() => setCommand('get pods --all-namespaces')}
-          className="px-2 py-1 text-[10px] rounded bg-secondary/50 hover:bg-secondary text-muted-foreground hover:text-foreground"
+          className="px-2 py-1 text-2xs rounded bg-secondary/50 hover:bg-secondary text-muted-foreground hover:text-foreground"
         >
           {t('cards:kubectl.listPods')}
         </button>
         <button
           onClick={() => setCommand('get deployments')}
-          className="px-2 py-1 text-[10px] rounded bg-secondary/50 hover:bg-secondary text-muted-foreground hover:text-foreground"
+          className="px-2 py-1 text-2xs rounded bg-secondary/50 hover:bg-secondary text-muted-foreground hover:text-foreground"
         >
           {t('common:common.deployments')}
         </button>
         <button
           onClick={() => setCommand('get services')}
-          className="px-2 py-1 text-[10px] rounded bg-secondary/50 hover:bg-secondary text-muted-foreground hover:text-foreground"
+          className="px-2 py-1 text-2xs rounded bg-secondary/50 hover:bg-secondary text-muted-foreground hover:text-foreground"
         >
           {t('common:common.services')}
         </button>
         <button
           onClick={() => setCommand('get nodes')}
-          className="px-2 py-1 text-[10px] rounded bg-secondary/50 hover:bg-secondary text-muted-foreground hover:text-foreground"
+          className="px-2 py-1 text-2xs rounded bg-secondary/50 hover:bg-secondary text-muted-foreground hover:text-foreground"
         >
           {t('common:common.nodes')}
         </button>
         <button
           onClick={copyOutput}
           disabled={output.length === 0}
-          className="px-2 py-1 text-[10px] rounded bg-secondary/50 hover:bg-secondary text-muted-foreground hover:text-foreground disabled:opacity-50"
+          className="px-2 py-1 text-2xs rounded bg-secondary/50 hover:bg-secondary text-muted-foreground hover:text-foreground disabled:opacity-50"
         >
           <Copy className="w-3 h-3 inline mr-1" />
           {t('cards:kubectl.copyOutput')}

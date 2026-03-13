@@ -1,25 +1,48 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback, lazy, Suspense } from 'react'
 import { useTranslation } from 'react-i18next'
 import { NavLink, useNavigate, useLocation } from 'react-router-dom'
-// NOTE: Wildcard import is required for dynamic icon resolution
-// Sidebar items are configured with icon names as strings (from sidebar config)
-// The renderIcon() function resolves these names dynamically via Icons[iconName]
-import * as Icons from 'lucide-react'
 import { Plus, ChevronLeft, ChevronRight, CheckCircle2, AlertTriangle, WifiOff, GripVertical, X, User } from 'lucide-react'
+import { iconRegistry } from '../../lib/icons'
 import { cn } from '../../lib/cn'
 import { SnoozedCards } from './SnoozedCards'
-import { useSidebarConfig, SidebarItem, PROTECTED_SIDEBAR_IDS } from '../../hooks/useSidebarConfig'
+import { useSidebarConfig, SidebarItem, PROTECTED_SIDEBAR_IDS, SIDEBAR_COLLAPSED_WIDTH_PX, SIDEBAR_DEFAULT_WIDTH_PX } from '../../hooks/useSidebarConfig'
 import { useMobile } from '../../hooks/useMobile'
-import { useClusters } from '../../hooks/useMCP'
+import { useClusters } from '../../hooks/mcp/clusters'
 import { useDashboardContextOptional } from '../../hooks/useDashboardContext'
 import type { SnoozedSwap } from '../../hooks/useSnoozedCards'
 import type { SnoozedRecommendation } from '../../hooks/useSnoozedRecommendations'
 import type { SnoozedMission } from '../../hooks/useSnoozedMissions'
 import { useActiveUsers } from '../../hooks/useActiveUsers'
 import { ROUTES } from '../../config/routes'
+import { DASHBOARD_CONFIGS } from '../../config/dashboards/index'
+import { emitSidebarNavigated, emitDashboardRenamed } from '../../lib/analytics'
+
+// Lazy-load SidebarCustomizer — it pulls in dnd-kit and heavy UI (~50 KB)
+const SidebarCustomizer = lazy(() =>
+  import('./SidebarCustomizer').then(m => ({ default: m.SidebarCustomizer }))
+)
+
+/** Sidebar resize limits in pixels */
+const SIDEBAR_MIN_WIDTH_PX = 180
+const SIDEBAR_MAX_WIDTH_PX = 480
+
+/** Map sidebar item href to dashboard config ID for card count display */
+const HREF_TO_DASHBOARD_ID: Record<string, string> = {
+  '/': 'main', '/compute': 'compute', '/security': 'security',
+  '/gitops': 'gitops', '/storage': 'storage', '/network': 'network',
+  '/events': 'events', '/workloads': 'workloads', '/operators': 'operators',
+  '/clusters': 'clusters', '/compliance': 'compliance', '/cost': 'cost',
+  '/gpu-reservations': 'gpu', '/nodes': 'nodes', '/deployments': 'deployments',
+  '/pods': 'pods', '/services': 'services', '/helm': 'helm',
+  '/alerts': 'alerts', '/ai-ml': 'ai-ml', '/ci-cd': 'ci-cd',
+  '/logs': 'logs', '/data-compliance': 'data-compliance', '/arcade': 'arcade',
+  '/deploy': 'deploy', '/ai-agents': 'ai-agents',
+  '/llm-d-benchmarks': 'llm-d-benchmarks', '/cluster-admin': 'cluster-admin',
+  '/insights': 'insights',
+}
 
 export function Sidebar() {
-  const { config, toggleCollapsed, reorderItems, updateItem, removeItem, closeMobileSidebar } = useSidebarConfig()
+  const { config, toggleCollapsed, reorderItems, updateItem, removeItem, closeMobileSidebar, setWidth } = useSidebarConfig()
   const { isMobile } = useMobile()
   const { deduplicatedClusters } = useClusters()
   const dashboardContext = useDashboardContextOptional()
@@ -37,6 +60,42 @@ export function Sidebar() {
 
   // On mobile, always show expanded view; on desktop, respect collapsed state
   const isCollapsed = !isMobile && config.collapsed
+
+  // Sidebar width (resizable)
+  const sidebarWidth = isCollapsed ? SIDEBAR_COLLAPSED_WIDTH_PX : (config.width ?? SIDEBAR_DEFAULT_WIDTH_PX)
+
+  // Resize handle state
+  const [isResizing, setIsResizing] = useState(false)
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    setIsResizing(true)
+    const startX = e.clientX
+    const startWidth = config.width ?? SIDEBAR_DEFAULT_WIDTH_PX
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const newWidth = Math.min(
+        SIDEBAR_MAX_WIDTH_PX,
+        Math.max(SIDEBAR_MIN_WIDTH_PX, startWidth + (moveEvent.clientX - startX))
+      )
+      setWidth(newWidth)
+    }
+
+    const handleMouseUp = () => {
+      setIsResizing(false)
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+  }, [config.width, setWidth])
+
+  // Sidebar customizer modal state
+  const [showCustomizer, setShowCustomizer] = useState(false)
 
   // Inline rename state for custom sidebar items
   const [editingItemId, setEditingItemId] = useState<string | null>(null)
@@ -88,6 +147,7 @@ export function Sidebar() {
     const trimmed = editingName.trim()
     if (trimmed) {
       updateItem(itemId, { name: trimmed })
+      emitDashboardRenamed()
     }
     setEditingItemId(null)
     setEditingName('')
@@ -189,7 +249,7 @@ export function Sidebar() {
   }
 
   const renderIcon = (iconName: string, className?: string) => {
-    const IconComponent = (Icons as unknown as Record<string, React.ComponentType<{ className?: string }>>)[iconName]
+    const IconComponent = iconRegistry[iconName] as React.ComponentType<{ className?: string }> | undefined
     return IconComponent ? <IconComponent className={className} /> : null
   }
 
@@ -240,6 +300,7 @@ export function Sidebar() {
           // Normal navigation mode
           <NavLink
             to={item.href}
+            onClick={() => emitSidebarNavigated(item.href)}
             onDoubleClick={(e) => handleDoubleClick(item, e)}
             className={({ isActive }) => cn(
               'flex items-center gap-3 rounded-lg text-sm font-medium transition-all duration-200',
@@ -248,16 +309,29 @@ export function Sidebar() {
                 : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50',
               isCollapsed ? 'justify-center p-3' : 'px-3 py-2'
             )}
-            title={isCollapsed ? item.name : (item.isCustom && item.href.startsWith('/custom-dashboard/') ? t('sidebar.doubleClickRename') : undefined)}
+            title={item.isCustom && item.href.startsWith('/custom-dashboard/') ? `${item.name} — ${t('sidebar.doubleClickRename')}` : item.name}
           >
             {renderIcon(item.icon, isCollapsed ? 'w-6 h-6' : 'w-5 h-5')}
-            {!isCollapsed && <span className="flex-1 truncate">{item.name}</span>}
+            {!isCollapsed && (() => {
+              const dashId = HREF_TO_DASHBOARD_ID[item.href]
+              const count = dashId ? DASHBOARD_CONFIGS[dashId]?.cards?.length : null
+              return (
+                <span className="flex-1 min-w-0">
+                  {item.name}
+                  {count != null && (
+                    <span className="text-[10px] text-muted-foreground/40 tabular-nums ml-1">{count}</span>
+                  )}
+                </span>
+              )
+            })()}
             {!isCollapsed && (
-              <span className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 ml-1">
+              <span className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-background/80 backdrop-blur-sm rounded px-0.5">
                 {!PROTECTED_SIDEBAR_IDS.includes(item.id) && (
                   <span
                     role="button"
+                    tabIndex={0}
                     onClick={(e) => { e.preventDefault(); e.stopPropagation(); removeItem(item.id) }}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); removeItem(item.id) } }}
                     className="p-0.5 rounded hover:bg-red-500/20 hover:text-red-400 text-muted-foreground/50 transition-colors"
                     title={t('sidebar.removeFromSidebar')}
                   >
@@ -282,23 +356,25 @@ export function Sidebar() {
       {/* Mobile backdrop */}
       {isMobile && config.isMobileOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-30 md:hidden"
+          className="fixed inset-0 bg-black/60 backdrop-blur-2xl z-30 md:hidden"
           onClick={closeMobileSidebar}
         />
       )}
 
-      <aside 
-        data-testid="sidebar" 
-        data-tour="sidebar" 
+      <aside
+        data-testid="sidebar"
+        data-tour="sidebar"
         className={cn(
-          'fixed left-0 top-16 bottom-0 glass border-r border-border/50 overflow-y-auto scroll-enhanced transition-all duration-300 z-40',
+          'fixed left-0 top-16 bottom-0 glass border-r border-border/50 overflow-y-auto scroll-enhanced z-40',
+          !isResizing && 'transition-all duration-300',
           // Desktop: respect collapsed state
-          !isMobile && (config.collapsed ? 'w-20 p-3' : 'w-64 p-4'),
-          // Mobile: always w-64 when open, slide off-screen when closed
-          isMobile && 'w-64 p-4',
+          !isMobile && (config.collapsed ? 'p-3' : 'p-4'),
+          // Mobile: slide off-screen when closed
+          isMobile && 'p-4',
           isMobile && !config.isMobileOpen && '-translate-x-full',
           isMobile && config.isMobileOpen && 'translate-x-0'
-        )}>
+        )}
+        style={{ width: isMobile ? SIDEBAR_DEFAULT_WIDTH_PX : sidebarWidth }}>
         {/* Collapse toggle - hidden on mobile */}
         <button
           data-testid="sidebar-collapse-toggle"
@@ -313,6 +389,17 @@ export function Sidebar() {
         <nav data-testid="sidebar-primary-nav" className="space-y-1">
           {config.primaryNav.map(item => renderNavItem(item, 'primary'))}
         </nav>
+
+        {/* Add more dashboards */}
+        {!isCollapsed && (
+          <button
+            onClick={() => setShowCustomizer(true)}
+            className="w-full flex items-center gap-3 px-3 py-1.5 mt-1 text-xs text-muted-foreground/60 hover:text-muted-foreground hover:bg-secondary/30 rounded-lg transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>{t('sidebar.addMore', 'Add more...')}</span>
+          </button>
+        )}
 
         {/* Divider */}
         <div className="my-6 border-t border-border/50" />
@@ -396,7 +483,7 @@ export function Sidebar() {
               title={t('sidebar.activeViewers', { count: viewerCount })}
             >
               <User className={cn('w-3 h-3', viewersError && 'text-red-400')} />
-              <span className="text-[10px] tabular-nums">
+              <span className="text-2xs tabular-nums">
                 {viewersError ? '!' : viewerCount}
               </span>
             </div>
@@ -404,6 +491,24 @@ export function Sidebar() {
         )}
       </aside>
 
+      {/* Resize handle - drag to adjust sidebar width */}
+      {!isCollapsed && !isMobile && (
+        <div
+          onMouseDown={handleResizeStart}
+          className={cn(
+            "fixed top-16 bottom-0 cursor-col-resize z-50 hover:bg-purple-500/30 transition-colors",
+            isResizing && "bg-purple-500/50"
+          )}
+          style={{ left: sidebarWidth - 3, width: 6 }}
+        />
+      )}
+
+      {/* Sidebar customizer modal */}
+      {showCustomizer && (
+        <Suspense fallback={null}>
+          <SidebarCustomizer isOpen={showCustomizer} onClose={() => setShowCustomizer(false)} />
+        </Suspense>
+      )}
     </>
   )
 }

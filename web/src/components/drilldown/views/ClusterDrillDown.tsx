@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ChevronRight, ChevronDown, Server, Box, Layers, Database, Network, HardDrive, Search, AlertTriangle, XCircle } from 'lucide-react'
+import { StatusBadge } from '../../ui/StatusBadge'
 import { useClusterHealth, usePodIssues, useDeploymentIssues, useGPUNodes, useNodes, useNamespaces, useDeployments, useServices, usePVCs, useEvents } from '../../../hooks/useMCP'
 import { useDrillDownActions } from '../../../hooks/useDrillDown'
 import { StatusIndicator } from '../../charts/StatusIndicator'
@@ -372,7 +373,7 @@ export function ClusterDrillDown({ data }: Props) {
                         )}
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                        <span className="text-xs px-2 py-1 rounded bg-red-500/20 text-red-400">{issue.status}</span>
+                        <StatusBadge color="red" size="xs">{issue.status}</StatusBadge>
                         <ChevronRight className="w-4 h-4 text-muted-foreground" />
                       </div>
                     </div>
@@ -402,9 +403,9 @@ export function ClusterDrillDown({ data }: Props) {
                         )}
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                        <span className="text-xs px-2 py-1 rounded bg-orange-500/20 text-orange-400">
+                        <StatusBadge color="orange" size="xs">
                           {issue.readyReplicas}/{issue.replicas} ready
-                        </span>
+                        </StatusBadge>
                         <ChevronRight className="w-4 h-4 text-muted-foreground" />
                       </div>
                     </div>
@@ -485,9 +486,9 @@ export function ClusterDrillDown({ data }: Props) {
             <Layers className="w-5 h-5 text-purple-400" />
             Resource Tree
             {issueCounts.total > 0 && (
-              <span className="ml-2 px-2 py-0.5 text-xs rounded-full bg-red-500/20 text-red-400">
+              <StatusBadge color="red" size="xs" rounded="full" className="ml-2">
                 {issueCounts.total} issues
-              </span>
+              </StatusBadge>
             )}
           </button>
         </div>
@@ -530,7 +531,7 @@ export function ClusterDrillDown({ data }: Props) {
                     <lens.icon className="w-3.5 h-3.5" />
                     {lens.label}
                     {lens.count !== undefined && lens.count > 0 && (
-                      <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] ${
+                      <span className={`ml-1 px-1.5 py-0.5 rounded-full text-2xs ${
                         lens.id === 'issues' ? 'bg-red-500/20 text-red-400' : 'bg-secondary text-muted-foreground'
                       }`}>
                         {lens.count}
@@ -575,9 +576,9 @@ export function ClusterDrillDown({ data }: Props) {
                           <span className="text-sm font-medium text-foreground">{t('common.nodes')}</span>
                           <span className="text-xs text-muted-foreground">({filteredNodes.length})</span>
                           {issueCounts.nodes > 0 && (
-                            <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-red-500/20 text-red-400">
+                            <StatusBadge color="red" size="xs" rounded="full" className="ml-1">
                               {issueCounts.nodes} not ready
-                            </span>
+                            </StatusBadge>
                           )}
                         </div>
 
@@ -641,9 +642,9 @@ export function ClusterDrillDown({ data }: Props) {
                                     {expandedSections.has(nsKey) ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
                                     <span className="text-sm text-foreground">{ns}</span>
                                     {totalIssues > 0 && (
-                                      <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-red-500/20 text-red-400">
+                                      <StatusBadge color="red" size="xs" rounded="full" className="ml-1">
                                         {totalIssues}
-                                      </span>
+                                      </StatusBadge>
                                     )}
                                   </div>
 
@@ -658,7 +659,7 @@ export function ClusterDrillDown({ data }: Props) {
                                         >
                                           <Box className="w-3 h-3 text-green-400" />
                                           <span className="text-xs text-foreground">{dep.name}</span>
-                                          <span className={`text-[10px] ${dep.readyReplicas === dep.replicas ? 'text-green-400' : 'text-yellow-400'}`}>
+                                          <span className={`text-2xs ${dep.readyReplicas === dep.replicas ? 'text-green-400' : 'text-yellow-400'}`}>
                                             {dep.readyReplicas}/{dep.replicas}
                                           </span>
                                           <ChevronRight className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 ml-auto" />
@@ -674,7 +675,7 @@ export function ClusterDrillDown({ data }: Props) {
                                         >
                                           <Network className="w-3 h-3 text-blue-400" />
                                           <span className="text-xs text-foreground">{svc.name}</span>
-                                          <span className="text-[10px] text-muted-foreground">{svc.type}</span>
+                                          <span className="text-2xs text-muted-foreground">{svc.type}</span>
                                           <ChevronRight className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 ml-auto" />
                                         </div>
                                       ))}
@@ -711,9 +712,9 @@ export function ClusterDrillDown({ data }: Props) {
                           {expandedSections.has('deployment-issues') ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                           <AlertTriangle className="w-4 h-4 text-orange-400" />
                           <span className="text-sm font-medium text-foreground">Deployment Issues</span>
-                          <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-orange-500/20 text-orange-400">
+                          <StatusBadge color="orange" size="xs" rounded="full">
                             {issueCounts.deployments}
-                          </span>
+                          </StatusBadge>
                         </div>
 
                         {expandedSections.has('deployment-issues') && (
@@ -746,9 +747,9 @@ export function ClusterDrillDown({ data }: Props) {
                           {expandedSections.has('pod-issues') ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                           <AlertTriangle className="w-4 h-4 text-red-400" />
                           <span className="text-sm font-medium text-foreground">Pod Issues</span>
-                          <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-red-500/20 text-red-400">
+                          <StatusBadge color="red" size="xs" rounded="full">
                             {issueCounts.pods}
-                          </span>
+                          </StatusBadge>
                         </div>
 
                         {expandedSections.has('pod-issues') && (
@@ -784,18 +785,18 @@ export function ClusterDrillDown({ data }: Props) {
                           className="flex items-center gap-2 p-2 rounded-lg hover:bg-secondary/50 cursor-pointer"
                         >
                           {expandedSections.has('storage') ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                          <HardDrive className="w-4 h-4 text-emerald-400" />
+                          <HardDrive className="w-4 h-4 text-green-400" />
                           <span className="text-sm font-medium text-foreground">{t('common.pvcs')}</span>
                           <span className="text-xs text-muted-foreground">({filteredPVCs.length})</span>
                           {issueCounts.pvcs > 0 && (
-                            <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-yellow-500/20 text-yellow-400">
+                            <StatusBadge color="yellow" size="xs" rounded="full" className="ml-1">
                               {issueCounts.pvcs} pending
-                            </span>
+                            </StatusBadge>
                           )}
                         </div>
 
                         {expandedSections.has('storage') && (
-                          <div className="ml-6 border-l-2 border-emerald-500/30 pl-4 mt-1 space-y-1">
+                          <div className="ml-6 border-l-2 border-green-500/30 pl-4 mt-1 space-y-1">
                             {filteredPVCs.slice(0, 10).map((pvc, i) => (
                               <div
                                 key={i}
@@ -846,7 +847,7 @@ export function ClusterDrillDown({ data }: Props) {
                                 <Network className="w-3 h-3 text-blue-400" />
                                 <span className="text-sm text-foreground">{svc.name}</span>
                                 <span className="text-xs text-muted-foreground">{svc.namespace}</span>
-                                <span className="text-xs px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400">{svc.type}</span>
+                                <StatusBadge color="blue" size="xs">{svc.type}</StatusBadge>
                                 <ChevronRight className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 ml-auto" />
                               </div>
                             ))}

@@ -34,20 +34,19 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { useSidebarConfig, SidebarItem } from '../../hooks/useSidebarConfig'
+import { useSidebarConfig, SidebarItem, DISCOVERABLE_DASHBOARDS } from '../../hooks/useSidebarConfig'
 import { useDashboards, Dashboard } from '../../hooks/useDashboards'
 import { DASHBOARD_TEMPLATES, TEMPLATE_CATEGORIES, DashboardTemplate } from '../dashboard/templates'
 import { CreateDashboardModal } from '../dashboard/CreateDashboardModal'
+import { StatusBadge } from '../ui/StatusBadge'
+import { Button } from '../ui/Button'
 import { cn } from '../../lib/cn'
 import { formatCardTitle } from '../../lib/formatCardTitle'
 import { STORAGE_KEY_NAV_HISTORY } from '../../lib/constants'
 import { NAV_AFTER_ANIMATION_MS } from '../../lib/constants/network'
 import { suggestDashboardIcon, suggestIconSync } from '../../lib/iconSuggester'
 import { BaseModal } from '../../lib/modals'
-// NOTE: Wildcard import is required for dynamic icon resolution
-// Sidebar customizer allows users to add/edit items with configurable icons
-// The renderIcon() function resolves icon names dynamically via Icons[iconName]
-import * as Icons from 'lucide-react'
+import { iconRegistry } from '../../lib/icons'
 
 // Sortable sidebar item component
 interface SortableItemProps {
@@ -181,6 +180,7 @@ export function SidebarCustomizer({ isOpen, onClose }: SidebarCustomizerProps) {
     toggleClusterStatus,
     resetToDefault,
     generateFromBehavior,
+    restoreDashboard,
   } = useSidebarConfig()
 
   // DnD sensors for both mouse and keyboard
@@ -354,7 +354,7 @@ export function SidebarCustomizer({ isOpen, onClose }: SidebarCustomizerProps) {
   }
 
   const renderIcon = (iconName: string, className?: string) => {
-    const IconComponent = (Icons as unknown as Record<string, React.ComponentType<{ className?: string }>>)[iconName]
+    const IconComponent = iconRegistry[iconName] as React.ComponentType<{ className?: string }> | undefined
     return IconComponent ? <IconComponent className={className} /> : null
   }
 
@@ -393,13 +393,13 @@ export function SidebarCustomizer({ isOpen, onClose }: SidebarCustomizerProps) {
       <BaseModal.Content className="max-h-[60vh]">
           {/* Quick Actions */}
           <div className="flex flex-wrap gap-2 mb-6">
-            <button
+            <Button
+              variant="accent"
               onClick={() => setShowAddForm(!showAddForm)}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-purple-500/20 text-purple-400 hover:bg-purple-500/30"
+              icon={<Plus className="w-4 h-4" />}
             >
-              <Plus className="w-4 h-4" />
               {t('sidebar.customizer.addItem')}
-            </button>
+            </Button>
             <button
               onClick={() => setIsCreateDashboardOpen(true)}
               className="flex items-center gap-2 px-3 py-2 rounded-lg bg-green-500/20 text-green-400 hover:bg-green-500/30"
@@ -407,25 +407,25 @@ export function SidebarCustomizer({ isOpen, onClose }: SidebarCustomizerProps) {
               <FolderPlus className="w-4 h-4" />
               {t('sidebar.customizer.newDashboard')}
             </button>
-            <button
+            <Button
+              variant="ghost"
               onClick={resetToDefault}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-secondary/50 text-muted-foreground hover:text-foreground"
+              icon={<RotateCcw className="w-4 h-4" />}
             >
-              <RotateCcw className="w-4 h-4" />
               {t('sidebar.customizer.reset')}
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="ghost"
               onClick={handleGenerateFromBehavior}
               disabled={isGenerating}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-secondary/50 text-muted-foreground hover:text-foreground disabled:opacity-50"
-            >
-              {isGenerating ? (
+              icon={isGenerating ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
                 <Sparkles className="w-4 h-4" />
               )}
+            >
               {isGenerating ? t('sidebar.customizer.analyzing') : t('sidebar.customizer.generateFromBehavior')}
-            </button>
+            </Button>
           </div>
 
           {/* Generation Result */}
@@ -519,7 +519,7 @@ export function SidebarCustomizer({ isOpen, onClose }: SidebarCustomizerProps) {
                                 setSelectedKnownRoutes(newSelected)
                               }}
                               className={cn(
-                                'text-[10px] px-1.5 py-0.5 rounded transition-colors',
+                                'text-2xs px-1.5 py-0.5 rounded transition-colors',
                                 allCategorySelected
                                   ? 'bg-purple-500/30 text-purple-300 hover:bg-purple-500/40'
                                   : 'bg-secondary text-muted-foreground hover:text-foreground hover:bg-secondary/80'
@@ -569,7 +569,7 @@ export function SidebarCustomizer({ isOpen, onClose }: SidebarCustomizerProps) {
                                     {route.name}
                                   </span>
                                   {isAlreadyAdded && (
-                                    <span className="text-xs px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 flex-shrink-0 ml-auto">{t('sidebar.customizer.added')}</span>
+                                    <StatusBadge color="green" className="flex-shrink-0 ml-auto">{t('sidebar.customizer.added')}</StatusBadge>
                                   )}
                                 </div>
                               </button>
@@ -598,6 +598,40 @@ export function SidebarCustomizer({ isOpen, onClose }: SidebarCustomizerProps) {
               )}
             </div>
           )}
+
+          {/* Recommended Dashboards — discoverable dashboards not yet in the sidebar */}
+          {(() => {
+            const existingHrefs = new Set([
+              ...config.primaryNav.map(item => item.href),
+              ...config.secondaryNav.map(item => item.href),
+            ])
+            const available = DISCOVERABLE_DASHBOARDS.filter(d => !existingHrefs.has(d.href))
+            if (available.length === 0) return null
+            return (
+              <div className="mb-4 rounded-xl border border-blue-500/20 bg-blue-500/5 p-3">
+                <h4 className="text-xs font-medium text-blue-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  Recommended Dashboards
+                </h4>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Add topic-specific dashboards to your sidebar
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {available.map(dashboard => (
+                    <button
+                      key={dashboard.id}
+                      onClick={() => restoreDashboard(dashboard)}
+                      className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm bg-secondary/50 border border-border/50 hover:border-blue-500/30 hover:bg-secondary text-foreground transition-all"
+                    >
+                      {renderIcon(dashboard.icon, 'w-3.5 h-3.5 text-muted-foreground')}
+                      <span className="font-medium text-xs">{dashboard.name}</span>
+                      <Plus className="w-3 h-3 text-blue-400" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )
+          })()}
 
           {/* Primary Navigation */}
           <div className="mb-4">
@@ -668,9 +702,7 @@ export function SidebarCustomizer({ isOpen, onClose }: SidebarCustomizerProps) {
                         <LayoutDashboard className="w-3.5 h-3.5 text-muted-foreground" />
                         {dashboard.name}
                         {dashboard.is_default && (
-                          <span className="text-xs px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400">
-                            {t('sidebar.customizer.default')}
-                          </span>
+                          <StatusBadge color="purple">{t('sidebar.customizer.default')}</StatusBadge>
                         )}
                       </div>
                       {dashboard.cards && dashboard.cards.length > 0 ? (
@@ -745,11 +777,11 @@ export function SidebarCustomizer({ isOpen, onClose }: SidebarCustomizerProps) {
                               <div className="text-xs text-muted-foreground truncate">{template.description}</div>
                             </div>
                             {isInSidebar ? (
-                              <span className="text-xs px-2 py-0.5 rounded bg-green-500/20 text-green-400 whitespace-nowrap">
-                                {t('sidebar.customizer.added')}
-                              </span>
+                              <StatusBadge color="green">{t('sidebar.customizer.added')}</StatusBadge>
                             ) : (
-                              <button
+                              <Button
+                                variant="accent"
+                                size="sm"
                                 onClick={() => {
                                   addItem({
                                     name: template.name,
@@ -758,10 +790,10 @@ export function SidebarCustomizer({ isOpen, onClose }: SidebarCustomizerProps) {
                                     type: 'link',
                                   }, 'primary')
                                 }}
-                                className="text-xs px-2 py-0.5 rounded bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 whitespace-nowrap"
+                                className="whitespace-nowrap rounded"
                               >
                                 {t('sidebar.customizer.add')}
-                              </button>
+                              </Button>
                             )}
                           </div>
                         )

@@ -5,6 +5,7 @@ import { useDrillDownActions } from '../../../hooks/useDrillDown'
 import { ClusterBadge } from '../../ui/ClusterBadge'
 import { FileText, Code, Info, Tag, Zap, Loader2, Copy, Check, Layers, Server, Box } from 'lucide-react'
 import { cn } from '../../../lib/cn'
+import { StatusBadge } from '../../ui/StatusBadge'
 import { UI_FEEDBACK_TIMEOUT_MS } from '../../../lib/constants/network'
 import { StatusIndicator } from '../../charts/StatusIndicator'
 import { Gauge } from '../../charts/Gauge'
@@ -192,7 +193,7 @@ export function ReplicaSetDrillDown({ data }: Props) {
             <Layers className="w-4 h-4 text-purple-400" />
             <span className="text-muted-foreground">{t('drilldown.fields.namespace')}</span>
             <span className="font-mono text-purple-400 group-hover:text-purple-300 transition-colors">{namespace}</span>
-            <svg className="w-3 h-3 text-purple-400/50 group-hover:text-purple-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-3 h-3 text-purple-400/70 group-hover:text-purple-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
           </button>
@@ -203,7 +204,7 @@ export function ReplicaSetDrillDown({ data }: Props) {
             <Server className="w-4 h-4 text-blue-400" />
             <span className="text-muted-foreground">{t('drilldown.fields.cluster')}</span>
             <ClusterBadge cluster={cluster.split('/').pop() || cluster} size="sm" />
-            <svg className="w-3 h-3 text-blue-400/50 group-hover:text-blue-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-3 h-3 text-blue-400/70 group-hover:text-blue-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
           </button>
@@ -288,9 +289,9 @@ export function ReplicaSetDrillDown({ data }: Props) {
                 </h3>
                 <div className="flex flex-wrap gap-2">
                   {Object.entries(labels).slice(0, 8).map(([key, value]) => (
-                    <span key={key} className="text-xs px-2 py-1 rounded bg-blue-500/10 text-blue-400 font-mono">
+                    <StatusBadge key={key} color="blue" size="xs" className="font-mono">
                       {key}={value}
-                    </span>
+                    </StatusBadge>
                   ))}
                   {Object.keys(labels).length > 8 && (
                     <span className="text-xs text-muted-foreground">+{Object.keys(labels).length - 8} more</span>

@@ -3,6 +3,7 @@ import { Bot, Wrench } from 'lucide-react'
 import { useKagentiAgents, useKagentiTools, type KagentiAgent, type KagentiTool } from '../../../hooks/mcp/kagenti'
 import { useCardLoadingState } from '../CardDataContext'
 import { useTranslation } from 'react-i18next'
+import { useDemoMode } from '../../../hooks/useDemoMode'
 
 const FRAMEWORK_COLORS: Record<string, string> = {
   langgraph: '#60a5fa',
@@ -27,7 +28,8 @@ interface TopoEdge {
 }
 
 export function KagentiTopology({ config }: { config?: Record<string, unknown> }) {
-  const { t: _t } = useTranslation()
+  const { t } = useTranslation('cards')
+  const { isDemoMode } = useDemoMode()
   const cluster = config?.cluster as string | undefined
   const { data: agents, isLoading: agentsLoading } = useKagentiAgents({ cluster })
   const { data: tools, isLoading: toolsLoading } = useKagentiTools({ cluster })
@@ -35,6 +37,7 @@ export function KagentiTopology({ config }: { config?: Record<string, unknown> }
   useCardLoadingState({
     isLoading: agentsLoading || toolsLoading,
     hasAnyData: agents.length > 0 || tools.length > 0,
+    isDemoData: isDemoMode,
   })
 
   const { nodes, edges } = useMemo(() => {
@@ -102,7 +105,7 @@ export function KagentiTopology({ config }: { config?: Record<string, unknown> }
   if (nodes.length === 0) {
     return (
       <div className="h-full flex flex-col min-h-card items-center justify-center text-muted-foreground text-xs">
-        No agents or tools to visualize
+        {t('kagentiTopology.noAgentsOrTools')}
       </div>
     )
   }
@@ -119,7 +122,7 @@ export function KagentiTopology({ config }: { config?: Record<string, unknown> }
         </div>
         <div className="flex items-center gap-1">
           <div className="w-2.5 h-2.5 rounded bg-muted-foreground/50" />
-          <span>MCP Tool</span>
+          <span>{t('kagentiTopology.mcpTool')}</span>
         </div>
         <div className="flex items-center gap-1">
           <div className="w-6 h-0 border-t border-dashed border-muted-foreground/50" />
@@ -163,7 +166,7 @@ export function KagentiTopology({ config }: { config?: Record<string, unknown> }
                 <>
                   <rect x={node.x - 12} y={node.y - 12} width={24} height={24} rx={4} fill={node.color} opacity={0.15} />
                   <rect x={node.x - 9} y={node.y - 9} width={18} height={18} rx={3} fill="none" stroke={node.color} strokeWidth={1.5} />
-                  <Wrench x={node.x - 5} y={node.y - 5} width={10} height={10} className="text-gray-400" />
+                  <Wrench x={node.x - 5} y={node.y - 5} width={10} height={10} className="text-muted-foreground" />
                 </>
               )}
               <text

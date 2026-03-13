@@ -4,6 +4,7 @@
 
 import { useState } from 'react'
 import { Coins, Trophy, Gift, Github, Bug, Lightbulb, Star, ChevronRight, GitPullRequest, GitMerge, RefreshCw, ExternalLink, AlertCircle } from 'lucide-react'
+import { StatusBadge } from '../ui/StatusBadge'
 import { useRewards, REWARD_ACTIONS, ACHIEVEMENTS } from '../../hooks/useRewards'
 import { GitHubInviteModal, GitHubInviteButton } from './GitHubInvite'
 import { LinkedInShareCard } from './LinkedInShare'
@@ -29,7 +30,7 @@ export function RewardsPanel() {
   return (
     <div className="space-y-6">
       {/* Coin Balance */}
-      <div className="p-6 rounded-xl bg-gradient-to-br from-yellow-500/10 via-amber-500/5 to-orange-500/10 border border-yellow-500/20">
+      <div className="p-6 rounded-xl bg-gradient-to-br from-yellow-500/10 via-yellow-500/5 to-orange-500/10 border border-yellow-500/20">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm text-muted-foreground mb-1">Your Balance</p>
@@ -86,9 +87,7 @@ export function RewardsPanel() {
               <div className="flex-1">
                 <div className="flex items-center justify-between mb-1">
                   <h4 className="font-medium text-foreground">Report Bugs</h4>
-                  <span className="px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-400 text-xs">
-                    +{REWARD_ACTIONS.bug_report.coins} each
-                  </span>
+                  <StatusBadge color="yellow">+{REWARD_ACTIONS.bug_report.coins} each</StatusBadge>
                 </div>
                 <p className="text-sm text-muted-foreground">
                   Found a bug? Report it on GitHub to earn coins!
@@ -109,9 +108,7 @@ export function RewardsPanel() {
               <div className="flex-1">
                 <div className="flex items-center justify-between mb-1">
                   <h4 className="font-medium text-foreground">Suggest Features</h4>
-                  <span className="px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-400 text-xs">
-                    +{REWARD_ACTIONS.feature_suggestion.coins} each
-                  </span>
+                  <StatusBadge color="yellow">+{REWARD_ACTIONS.feature_suggestion.coins} each</StatusBadge>
                 </div>
                 <p className="text-sm text-muted-foreground">
                   Have an idea? Submit feature requests to earn coins!
@@ -151,34 +148,29 @@ export function RewardsPanel() {
             </div>
             <div className="flex flex-wrap gap-2">
               {githubRewards.breakdown.prs_merged > 0 && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400 text-xs">
-                  <GitMerge className="w-3 h-3" />
+                <StatusBadge color="purple" rounded="full" icon={<GitMerge className="w-3 h-3" />}>
                   {githubRewards.breakdown.prs_merged} Merged
-                </span>
+                </StatusBadge>
               )}
               {githubRewards.breakdown.prs_opened > 0 && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-500/20 text-green-400 text-xs">
-                  <GitPullRequest className="w-3 h-3" />
+                <StatusBadge color="green" rounded="full" icon={<GitPullRequest className="w-3 h-3" />}>
                   {githubRewards.breakdown.prs_opened} PRs
-                </span>
+                </StatusBadge>
               )}
               {githubRewards.breakdown.bug_issues > 0 && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 text-xs">
-                  <Bug className="w-3 h-3" />
+                <StatusBadge color="red" rounded="full" icon={<Bug className="w-3 h-3" />}>
                   {githubRewards.breakdown.bug_issues} Bugs
-                </span>
+                </StatusBadge>
               )}
               {githubRewards.breakdown.feature_issues > 0 && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 text-xs">
-                  <Lightbulb className="w-3 h-3" />
+                <StatusBadge color="yellow" rounded="full" icon={<Lightbulb className="w-3 h-3" />}>
                   {githubRewards.breakdown.feature_issues} Features
-                </span>
+                </StatusBadge>
               )}
               {githubRewards.breakdown.other_issues > 0 && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-500/20 text-gray-400 text-xs">
-                  <AlertCircle className="w-3 h-3" />
+                <StatusBadge color="purple" rounded="full" className="!bg-gray-500/20 !text-muted-foreground" icon={<AlertCircle className="w-3 h-3" />}>
                   {githubRewards.breakdown.other_issues} Issues
-                </span>
+                </StatusBadge>
               )}
             </div>
           </div>
@@ -225,7 +217,7 @@ export function RewardsPanel() {
       {/* Achievements */}
       <div>
         <h3 className="flex items-center gap-2 text-lg font-semibold text-foreground mb-4">
-          <Trophy className="w-5 h-5 text-amber-400" />
+          <Trophy className="w-5 h-5 text-yellow-400" />
           Achievements
         </h3>
 
@@ -237,14 +229,14 @@ export function RewardsPanel() {
                 key={achievement.id}
                 className={`p-3 rounded-lg border text-center transition-all ${
                   isEarned
-                    ? 'bg-amber-500/10 border-amber-500/30'
+                    ? 'bg-yellow-500/10 border-yellow-500/30'
                     : 'bg-secondary/30 border-border opacity-50'
                 }`}
               >
                 <div className={`w-10 h-10 rounded-full mx-auto mb-2 flex items-center justify-center ${
-                  isEarned ? 'bg-amber-500/20' : 'bg-secondary'
+                  isEarned ? 'bg-yellow-500/20' : 'bg-secondary'
                 }`}>
-                  <Star className={`w-5 h-5 ${isEarned ? 'text-amber-400' : 'text-muted-foreground'}`} />
+                  <Star className={`w-5 h-5 ${isEarned ? 'text-yellow-400' : 'text-muted-foreground'}`} />
                 </div>
                 <p className={`text-sm font-medium ${isEarned ? 'text-foreground' : 'text-muted-foreground'}`}>
                   {achievement.name}
@@ -305,8 +297,8 @@ function ContributionIcon({ type }: { type: string }) {
     case 'issue_bug':
       return <Bug className="w-4 h-4 text-red-400 flex-shrink-0" />
     case 'issue_feature':
-      return <Lightbulb className="w-4 h-4 text-amber-400 flex-shrink-0" />
+      return <Lightbulb className="w-4 h-4 text-yellow-400 flex-shrink-0" />
     default:
-      return <AlertCircle className="w-4 h-4 text-gray-400 flex-shrink-0" />
+      return <AlertCircle className="w-4 h-4 text-muted-foreground flex-shrink-0" />
   }
 }

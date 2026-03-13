@@ -3,8 +3,10 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { Play, RotateCcw, Pause, Trophy, Flag, Timer, Gauge } from 'lucide-react'
 
 import { useCardExpanded } from './CardWrapper'
+import { StatusBadge } from '../ui/StatusBadge'
 import { useReportCardDataState } from './CardDataContext'
 import { useTranslation } from 'react-i18next'
+import { emitGameStarted, emitGameEnded } from '../../lib/analytics'
 
 // Game constants
 const CANVAS_WIDTH = 400
@@ -63,7 +65,7 @@ const KART_NAMES = ['Pod Racer', 'Node Runner', 'Cluster Cruiser', 'Service Spri
 
 export function KubeKart() {
   const { t: _t } = useTranslation()
-  useReportCardDataState({ hasData: true, isFailed: false, consecutiveFailures: 0 })
+  useReportCardDataState({ hasData: true, isFailed: false, consecutiveFailures: 0, isDemoData: false })
   const { isExpanded } = useCardExpanded()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [gameState, setGameState] = useState<'idle' | 'countdown' | 'playing' | 'paused' | 'finished'>('idle')
@@ -273,6 +275,10 @@ export function KubeKart() {
           localStorage.setItem('kubeKartBestTime', finalTime.toString())
         }
         setGameState('finished')
+        setPosition(pos => {
+          emitGameEnded('kube_kart', pos === 1 ? 'win' : 'loss', Math.round(finalTime * 100))
+          return pos
+        })
         return
       }
     }
@@ -525,6 +531,7 @@ export function KubeKart() {
     setPosition(4)
     setCountdown(3)
     setGameState('countdown')
+    emitGameStarted('kube_kart')
   }
 
   const togglePause = () => {
@@ -584,9 +591,9 @@ export function KubeKart() {
               <h3 className="text-2xl font-bold text-blue-400 mb-2">Kube Kart</h3>
               <p className="text-sm text-muted-foreground mb-4">Arrow keys or WASD to drive</p>
               <div className="flex gap-2 mb-4 text-xs">
-                <span className="px-2 py-1 rounded bg-cyan-500/30 text-cyan-400">Boost</span>
-                <span className="px-2 py-1 rounded bg-purple-500/30 text-purple-400">Shield</span>
-                <span className="px-2 py-1 rounded bg-orange-500/30 text-orange-400">Slow Others</span>
+                <StatusBadge color="cyan" size="md">Boost</StatusBadge>
+                <StatusBadge color="purple" size="md">Shield</StatusBadge>
+                <StatusBadge color="orange" size="md">Slow Others</StatusBadge>
               </div>
               <button
                 onClick={startGame}

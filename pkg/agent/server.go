@@ -33,6 +33,8 @@ const (
 	metricsHistoryTick    = 10 * time.Minute
 	agentFileMode         = 0600
 	defaultHealthCheckURL = "http://127.0.0.1:8080/health"
+	maxQueryLimit         = 1000     // Upper bound for client-supplied limit query parameter
+	maxRequestBodyBytes   = 1 << 20 // 1MB upper bound for request body reads
 )
 
 // Version is set by ldflags during build
@@ -84,6 +86,9 @@ type Server struct {
 	// Prediction system
 	predictionWorker *PredictionWorker
 	metricsHistory   *MetricsHistory
+
+	// Insight enrichment
+	insightWorker *InsightWorker
 
 	// Hardware device tracking
 	deviceTracker *DeviceTracker
@@ -181,6 +186,9 @@ func NewServer(cfg Config) (*Server, error) {
 	// Initialize prediction system
 	server.predictionWorker = NewPredictionWorker(k8sClient, server.registry, server.BroadcastToClients, server.addTokenUsage)
 	server.metricsHistory = NewMetricsHistory(k8sClient, "")
+
+	// Initialize insight enrichment
+	server.insightWorker = NewInsightWorker(server.registry, server.BroadcastToClients)
 
 	// Initialize local cluster manager with broadcast callback for progress updates
 	server.localClusters = NewLocalClusterManager(server.BroadcastToClients)
@@ -309,6 +317,10 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/predictions/analyze", s.handlePredictionsAnalyze)
 	mux.HandleFunc("/predictions/feedback", s.handlePredictionsFeedback)
 	mux.HandleFunc("/predictions/stats", s.handlePredictionsStats)
+
+	// Insight enrichment endpoints
+	mux.HandleFunc("/insights/enrich", s.handleInsightsEnrich)
+	mux.HandleFunc("/insights/ai", s.handleInsightsAI)
 
 	// Device tracking endpoints
 	mux.HandleFunc("/devices/alerts", s.handleDeviceAlerts)
@@ -444,13 +456,24 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	clusters, _ := s.kubectl.ListContexts()
 	hasClaude := s.checkClaudeAvailable()
 
+	// Build lightweight provider summaries for telemetry
+	var providerSummaries []protocol.ProviderSummary
+	for _, p := range s.registry.ListAvailable() {
+		providerSummaries = append(providerSummaries, protocol.ProviderSummary{
+			Name:         p.Name,
+			DisplayName:  p.DisplayName,
+			Capabilities: p.Capabilities,
+		})
+	}
+
 	payload := protocol.HealthPayload{
-		Status:        "ok",
-		Version:       Version,
-		Clusters:      len(clusters),
-		HasClaude:     hasClaude,
-		Claude:        s.getClaudeInfo(),
-		InstallMethod: detectAgentInstallMethod(),
+		Status:             "ok",
+		Version:            Version,
+		Clusters:           len(clusters),
+		HasClaude:          hasClaude,
+		Claude:             s.getClaudeInfo(),
+		InstallMethod:      detectAgentInstallMethod(),
+		AvailableProviders: providerSummaries,
 	}
 
 	json.NewEncoder(w).Encode(payload)
@@ -540,7 +563,8 @@ func (s *Server) handleGPUNodesHTTP(w http.ResponseWriter, r *http.Request) {
 	if cluster != "" {
 		nodes, err := s.k8sClient.GetGPUNodes(ctx, cluster)
 		if err != nil {
-			json.NewEncoder(w).Encode(map[string]interface{}{"nodes": []interface{}{}, "error": err.Error()})
+			log.Printf("error fetching nodes: %v", err)
+			json.NewEncoder(w).Encode(map[string]interface{}{"nodes": []interface{}{}, "error": "internal server error"})
 			return
 		}
 		allNodes = nodes
@@ -548,7 +572,8 @@ func (s *Server) handleGPUNodesHTTP(w http.ResponseWriter, r *http.Request) {
 		// Query all clusters
 		clusters, err := s.k8sClient.ListClusters(ctx)
 		if err != nil {
-			json.NewEncoder(w).Encode(map[string]interface{}{"nodes": []interface{}{}, "error": err.Error()})
+			log.Printf("error fetching nodes: %v", err)
+			json.NewEncoder(w).Encode(map[string]interface{}{"nodes": []interface{}{}, "error": "internal server error"})
 			return
 		}
 
@@ -558,6 +583,11 @@ func (s *Server) handleGPUNodesHTTP(w http.ResponseWriter, r *http.Request) {
 			wg.Add(1)
 			go func(clusterName string) {
 				defer wg.Done()
+				defer func() {
+					if r := recover(); r != nil {
+						log.Printf("[GPUNodes] recovered from panic for cluster %s: %v", clusterName, r)
+					}
+				}()
 				clusterCtx, clusterCancel := context.WithTimeout(ctx, agentDefaultTimeout)
 				defer clusterCancel()
 				nodes, err := s.k8sClient.GetGPUNodes(clusterCtx, clusterName)
@@ -604,7 +634,8 @@ func (s *Server) handleNodesHTTP(w http.ResponseWriter, r *http.Request) {
 		// Query specific cluster
 		nodes, err := s.k8sClient.GetNodes(ctx, cluster)
 		if err != nil {
-			json.NewEncoder(w).Encode(map[string]interface{}{"nodes": []interface{}{}, "error": err.Error()})
+			log.Printf("error fetching nodes: %v", err)
+			json.NewEncoder(w).Encode(map[string]interface{}{"nodes": []interface{}{}, "error": "internal server error"})
 			return
 		}
 		allNodes = nodes
@@ -612,7 +643,8 @@ func (s *Server) handleNodesHTTP(w http.ResponseWriter, r *http.Request) {
 		// Query all clusters
 		clusters, err := s.k8sClient.ListClusters(ctx)
 		if err != nil {
-			json.NewEncoder(w).Encode(map[string]interface{}{"nodes": []interface{}{}, "error": err.Error()})
+			log.Printf("error fetching nodes: %v", err)
+			json.NewEncoder(w).Encode(map[string]interface{}{"nodes": []interface{}{}, "error": "internal server error"})
 			return
 		}
 
@@ -623,6 +655,11 @@ func (s *Server) handleNodesHTTP(w http.ResponseWriter, r *http.Request) {
 			wg.Add(1)
 			go func(clusterName string) {
 				defer wg.Done()
+				defer func() {
+					if r := recover(); r != nil {
+						log.Printf("[Nodes] recovered from panic for cluster %s: %v", clusterName, r)
+					}
+				}()
 				clusterCtx, clusterCancel := context.WithTimeout(ctx, agentDefaultTimeout)
 				defer clusterCancel()
 				nodes, err := s.k8sClient.GetNodes(clusterCtx, clusterName)
@@ -664,6 +701,9 @@ func (s *Server) handleEventsHTTP(w http.ResponseWriter, r *http.Request) {
 	limit := 50
 	if limitStr != "" {
 		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+			if l > maxQueryLimit {
+				l = maxQueryLimit
+			}
 			limit = l
 		}
 	}
@@ -679,7 +719,8 @@ func (s *Server) handleEventsHTTP(w http.ResponseWriter, r *http.Request) {
 	// Get events from the cluster
 	events, err := s.k8sClient.GetEvents(ctx, cluster, namespace, limit)
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{"events": []interface{}{}, "error": err.Error()})
+		log.Printf("error fetching events: %v", err)
+		json.NewEncoder(w).Encode(map[string]interface{}{"events": []interface{}{}, "error": "internal server error"})
 		return
 	}
 
@@ -723,7 +764,8 @@ func (s *Server) handleNamespacesHTTP(w http.ResponseWriter, r *http.Request) {
 
 	namespaces, err := s.k8sClient.ListNamespacesWithDetails(ctx, cluster)
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{"namespaces": []interface{}{}, "error": err.Error()})
+		log.Printf("error fetching namespaces: %v", err)
+		json.NewEncoder(w).Encode(map[string]interface{}{"namespaces": []interface{}{}, "error": "internal server error"})
 		return
 	}
 
@@ -762,7 +804,8 @@ func (s *Server) handleDeploymentsHTTP(w http.ResponseWriter, r *http.Request) {
 
 	deployments, err := s.k8sClient.GetDeployments(ctx, cluster, namespace)
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{"deployments": []interface{}{}, "error": err.Error()})
+		log.Printf("error fetching deployments: %v", err)
+		json.NewEncoder(w).Encode(map[string]interface{}{"deployments": []interface{}{}, "error": "internal server error"})
 		return
 	}
 
@@ -791,7 +834,8 @@ func (s *Server) handleReplicaSetsHTTP(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	replicasets, err := s.k8sClient.GetReplicaSets(ctx, cluster, namespace)
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{"replicasets": []interface{}{}, "error": err.Error()})
+		log.Printf("error fetching replicasets: %v", err)
+		json.NewEncoder(w).Encode(map[string]interface{}{"replicasets": []interface{}{}, "error": "internal server error"})
 		return
 	}
 	json.NewEncoder(w).Encode(map[string]interface{}{"replicasets": replicasets, "source": "agent"})
@@ -819,7 +863,8 @@ func (s *Server) handleStatefulSetsHTTP(w http.ResponseWriter, r *http.Request) 
 	defer cancel()
 	statefulsets, err := s.k8sClient.GetStatefulSets(ctx, cluster, namespace)
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{"statefulsets": []interface{}{}, "error": err.Error()})
+		log.Printf("error fetching statefulsets: %v", err)
+		json.NewEncoder(w).Encode(map[string]interface{}{"statefulsets": []interface{}{}, "error": "internal server error"})
 		return
 	}
 	json.NewEncoder(w).Encode(map[string]interface{}{"statefulsets": statefulsets, "source": "agent"})
@@ -847,7 +892,8 @@ func (s *Server) handleDaemonSetsHTTP(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	daemonsets, err := s.k8sClient.GetDaemonSets(ctx, cluster, namespace)
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{"daemonsets": []interface{}{}, "error": err.Error()})
+		log.Printf("error fetching daemonsets: %v", err)
+		json.NewEncoder(w).Encode(map[string]interface{}{"daemonsets": []interface{}{}, "error": "internal server error"})
 		return
 	}
 	json.NewEncoder(w).Encode(map[string]interface{}{"daemonsets": daemonsets, "source": "agent"})
@@ -875,7 +921,8 @@ func (s *Server) handleCronJobsHTTP(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	cronjobs, err := s.k8sClient.GetCronJobs(ctx, cluster, namespace)
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{"cronjobs": []interface{}{}, "error": err.Error()})
+		log.Printf("error fetching cronjobs: %v", err)
+		json.NewEncoder(w).Encode(map[string]interface{}{"cronjobs": []interface{}{}, "error": "internal server error"})
 		return
 	}
 	json.NewEncoder(w).Encode(map[string]interface{}{"cronjobs": cronjobs, "source": "agent"})
@@ -903,7 +950,8 @@ func (s *Server) handleIngressesHTTP(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	ingresses, err := s.k8sClient.GetIngresses(ctx, cluster, namespace)
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{"ingresses": []interface{}{}, "error": err.Error()})
+		log.Printf("error fetching ingresses: %v", err)
+		json.NewEncoder(w).Encode(map[string]interface{}{"ingresses": []interface{}{}, "error": "internal server error"})
 		return
 	}
 	json.NewEncoder(w).Encode(map[string]interface{}{"ingresses": ingresses, "source": "agent"})
@@ -931,7 +979,8 @@ func (s *Server) handleNetworkPoliciesHTTP(w http.ResponseWriter, r *http.Reques
 	defer cancel()
 	policies, err := s.k8sClient.GetNetworkPolicies(ctx, cluster, namespace)
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{"networkpolicies": []interface{}{}, "error": err.Error()})
+		log.Printf("error fetching networkpolicies: %v", err)
+		json.NewEncoder(w).Encode(map[string]interface{}{"networkpolicies": []interface{}{}, "error": "internal server error"})
 		return
 	}
 	json.NewEncoder(w).Encode(map[string]interface{}{"networkpolicies": policies, "source": "agent"})
@@ -959,7 +1008,8 @@ func (s *Server) handleServicesHTTP(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	services, err := s.k8sClient.GetServices(ctx, cluster, namespace)
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{"services": []interface{}{}, "error": err.Error()})
+		log.Printf("error fetching services: %v", err)
+		json.NewEncoder(w).Encode(map[string]interface{}{"services": []interface{}{}, "error": "internal server error"})
 		return
 	}
 	json.NewEncoder(w).Encode(map[string]interface{}{"services": services, "source": "agent"})
@@ -987,7 +1037,8 @@ func (s *Server) handleConfigMapsHTTP(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	configmaps, err := s.k8sClient.GetConfigMaps(ctx, cluster, namespace)
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{"configmaps": []interface{}{}, "error": err.Error()})
+		log.Printf("error fetching configmaps: %v", err)
+		json.NewEncoder(w).Encode(map[string]interface{}{"configmaps": []interface{}{}, "error": "internal server error"})
 		return
 	}
 	json.NewEncoder(w).Encode(map[string]interface{}{"configmaps": configmaps, "source": "agent"})
@@ -1001,6 +1052,13 @@ func (s *Server) handleSecretsHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
+
+	// SECURITY: Validate token for secrets endpoint
+	if !s.validateToken(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	if s.k8sClient == nil {
 		json.NewEncoder(w).Encode(map[string]interface{}{"secrets": []interface{}{}, "error": "k8s client not initialized"})
 		return
@@ -1015,7 +1073,8 @@ func (s *Server) handleSecretsHTTP(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	secrets, err := s.k8sClient.GetSecrets(ctx, cluster, namespace)
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{"secrets": []interface{}{}, "error": err.Error()})
+		log.Printf("error fetching secrets: %v", err)
+		json.NewEncoder(w).Encode(map[string]interface{}{"secrets": []interface{}{}, "error": "internal server error"})
 		return
 	}
 	json.NewEncoder(w).Encode(map[string]interface{}{"secrets": secrets, "source": "agent"})
@@ -1043,7 +1102,8 @@ func (s *Server) handleServiceAccountsHTTP(w http.ResponseWriter, r *http.Reques
 	defer cancel()
 	serviceaccounts, err := s.k8sClient.GetServiceAccounts(ctx, cluster, namespace)
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{"serviceaccounts": []interface{}{}, "error": err.Error()})
+		log.Printf("error fetching serviceaccounts: %v", err)
+		json.NewEncoder(w).Encode(map[string]interface{}{"serviceaccounts": []interface{}{}, "error": "internal server error"})
 		return
 	}
 	json.NewEncoder(w).Encode(map[string]interface{}{"serviceaccounts": serviceaccounts, "source": "agent"})
@@ -1071,7 +1131,8 @@ func (s *Server) handleJobsHTTP(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	jobs, err := s.k8sClient.GetJobs(ctx, cluster, namespace)
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{"jobs": []interface{}{}, "error": err.Error()})
+		log.Printf("error fetching jobs: %v", err)
+		json.NewEncoder(w).Encode(map[string]interface{}{"jobs": []interface{}{}, "error": "internal server error"})
 		return
 	}
 	json.NewEncoder(w).Encode(map[string]interface{}{"jobs": jobs, "source": "agent"})
@@ -1099,7 +1160,8 @@ func (s *Server) handleHPAsHTTP(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	hpas, err := s.k8sClient.GetHPAs(ctx, cluster, namespace)
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{"hpas": []interface{}{}, "error": err.Error()})
+		log.Printf("error fetching hpas: %v", err)
+		json.NewEncoder(w).Encode(map[string]interface{}{"hpas": []interface{}{}, "error": "internal server error"})
 		return
 	}
 	json.NewEncoder(w).Encode(map[string]interface{}{"hpas": hpas, "source": "agent"})
@@ -1127,7 +1189,8 @@ func (s *Server) handlePVCsHTTP(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	pvcs, err := s.k8sClient.GetPVCs(ctx, cluster, namespace)
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{"pvcs": []interface{}{}, "error": err.Error()})
+		log.Printf("error fetching pvcs: %v", err)
+		json.NewEncoder(w).Encode(map[string]interface{}{"pvcs": []interface{}{}, "error": "internal server error"})
 		return
 	}
 	json.NewEncoder(w).Encode(map[string]interface{}{"pvcs": pvcs, "source": "agent"})
@@ -1165,7 +1228,8 @@ func (s *Server) handlePodsHTTP(w http.ResponseWriter, r *http.Request) {
 
 	pods, err := s.k8sClient.GetPods(ctx, cluster, namespace)
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{"pods": []interface{}{}, "error": err.Error()})
+		log.Printf("error fetching pods: %v", err)
+		json.NewEncoder(w).Encode(map[string]interface{}{"pods": []interface{}{}, "error": "internal server error"})
 		return
 	}
 
@@ -1206,7 +1270,8 @@ func (s *Server) handleClusterHealthHTTP(w http.ResponseWriter, r *http.Request)
 
 	health, err := s.k8sClient.GetClusterHealth(ctx, cluster)
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": err.Error()})
+		log.Printf("request error: %v", err)
+		json.NewEncoder(w).Encode(map[string]interface{}{"error": "internal server error"})
 		return
 	}
 
@@ -1261,7 +1326,7 @@ func (s *Server) handleRestartBackend(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success": false,
-			"message": err.Error(),
+			"message": "operation failed",
 		})
 		return
 	}
@@ -1324,6 +1389,11 @@ func (s *Server) startBackendProcess() error {
 
 	// Reap process in background to avoid zombies
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("[Backend] recovered from panic in process reaper: %v", r)
+			}
+		}()
 		cmd.Wait()
 		s.backendMux.Lock()
 		if s.backendCmd == cmd {
@@ -1520,8 +1590,9 @@ func (s *Server) handleRenameContextHTTP(w http.ResponseWriter, r *http.Request)
 	}
 
 	if err := s.kubectl.RenameContext(req.OldName, req.NewName); err != nil {
+		log.Printf("rename context error: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(protocol.ErrorPayload{Code: "rename_failed", Message: err.Error()})
+		json.NewEncoder(w).Encode(protocol.ErrorPayload{Code: "rename_failed", Message: "failed to rename context"})
 		return
 	}
 
@@ -1589,8 +1660,9 @@ func (s *Server) handleKubeconfigPreviewHTTP(w http.ResponseWriter, r *http.Requ
 
 	entries, err := s.kubectl.PreviewKubeconfig(req.Kubeconfig)
 	if err != nil {
+		log.Printf("kubeconfig preview error: %v", err)
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(protocol.ErrorPayload{Code: "preview_failed", Message: err.Error()})
+		json.NewEncoder(w).Encode(protocol.ErrorPayload{Code: "preview_failed", Message: "invalid kubeconfig"})
 		return
 	}
 
@@ -1639,8 +1711,9 @@ func (s *Server) handleKubeconfigImportHTTP(w http.ResponseWriter, r *http.Reque
 
 	added, skipped, err := s.kubectl.ImportKubeconfig(req.Kubeconfig)
 	if err != nil {
+		log.Printf("kubeconfig import error: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(kubeconfigImportResponse{Success: false, Error: err.Error()})
+		json.NewEncoder(w).Encode(kubeconfigImportResponse{Success: false, Error: "failed to import kubeconfig"})
 		return
 	}
 
@@ -1689,8 +1762,9 @@ func (s *Server) handleKubeconfigAddHTTP(w http.ResponseWriter, r *http.Request)
 	}
 
 	if err := s.kubectl.AddCluster(req); err != nil {
+		log.Printf("add cluster error: %v", err)
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(kubeconfigAddResponse{Success: false, Error: err.Error()})
+		json.NewEncoder(w).Encode(kubeconfigAddResponse{Success: false, Error: "failed to add cluster"})
 		return
 	}
 
@@ -1734,8 +1808,9 @@ func (s *Server) handleKubeconfigTestHTTP(w http.ResponseWriter, r *http.Request
 
 	result, err := s.kubectl.TestClusterConnection(req)
 	if err != nil {
+		log.Printf("test connection error: %v", err)
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(TestConnectionResult{Reachable: false, Error: err.Error()})
+		json.NewEncoder(w).Encode(TestConnectionResult{Reachable: false, Error: "connection test failed"})
 		return
 	}
 
@@ -1804,6 +1879,11 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 				forceAgent = "claude"
 			}
 			go func(m protocol.Message, fa string) {
+				defer func() {
+					if r := recover(); r != nil {
+						log.Printf("[Chat] recovered from panic in streaming handler: %v", r)
+					}
+				}()
 				s.handleChatMessageStreaming(conn, m, fa, &writeMu, &closed)
 			}(msg, forceAgent)
 		} else if msg.Type == protocol.TypeCancelChat {
@@ -1813,6 +1893,11 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			// Handle kubectl messages concurrently so one slow cluster
 			// doesn't block the entire WebSocket message loop.
 			go func(m protocol.Message) {
+				defer func() {
+					if r := recover(); r != nil {
+						log.Printf("[Kubectl] recovered from panic in message handler: %v", r)
+					}
+				}()
 				response := s.handleMessage(m)
 				if closed.Load() {
 					return
@@ -2102,7 +2187,8 @@ func (s *Server) handleChatMessageStreaming(conn *websocket.Conn, msg protocol.M
 				log.Printf("[Chat] Session %s cancelled", req.SessionID)
 				return
 			}
-			safeWrite(ctx, s.errorResponse(msg.ID, "execution_error", fmt.Sprintf("Failed to execute %s: %s", agentName, err.Error())))
+			log.Printf("[Chat] streaming execution error for %s: %v", agentName, err)
+			safeWrite(ctx, s.errorResponse(msg.ID, "execution_error", fmt.Sprintf("Failed to execute %s", agentName)))
 			return
 		}
 
@@ -2118,7 +2204,8 @@ func (s *Server) handleChatMessageStreaming(conn *websocket.Conn, msg protocol.M
 				log.Printf("[Chat] Session %s cancelled", req.SessionID)
 				return
 			}
-			safeWrite(ctx, s.errorResponse(msg.ID, "execution_error", fmt.Sprintf("Failed to execute %s: %s", agentName, err.Error())))
+			log.Printf("[Chat] execution error for %s: %v", agentName, err)
+			safeWrite(ctx, s.errorResponse(msg.ID, "execution_error", fmt.Sprintf("Failed to execute %s", agentName)))
 			return
 		}
 	}
@@ -2170,11 +2257,18 @@ func (s *Server) handleChatMessageStreaming(conn *websocket.Conn, msg protocol.M
 
 // handleCancelChat cancels an in-progress chat session by calling its context cancel function
 func (s *Server) handleCancelChat(conn *websocket.Conn, msg protocol.Message, writeMu *sync.Mutex) {
-	payloadBytes, _ := json.Marshal(msg.Payload)
+	payloadBytes, err := json.Marshal(msg.Payload)
+	if err != nil {
+		log.Printf("[Chat] Failed to marshal cancel chat payload: %v", err)
+		return
+	}
 	var req struct {
 		SessionID string `json:"sessionId"`
 	}
-	json.Unmarshal(payloadBytes, &req)
+	if err := json.Unmarshal(payloadBytes, &req); err != nil {
+		log.Printf("[Chat] Failed to unmarshal cancel chat request: %v", err)
+		return
+	}
 
 	s.activeChatCtxsMu.Lock()
 	cancelFn, ok := s.activeChatCtxs[req.SessionID]
@@ -2308,7 +2402,8 @@ func (s *Server) handleChatMessage(msg protocol.Message, forceAgent string) prot
 
 	resp, err := provider.Chat(context.Background(), chatReq)
 	if err != nil {
-		return s.errorResponse(msg.ID, "execution_error", fmt.Sprintf("Failed to execute %s: %s", agentName, err.Error()))
+		log.Printf("[Chat] execution error for %s: %v", agentName, err)
+		return s.errorResponse(msg.ID, "execution_error", fmt.Sprintf("Failed to execute %s", agentName))
 	}
 
 	if resp == nil {
@@ -2396,7 +2491,8 @@ func (s *Server) handleSelectAgentMessage(msg protocol.Message) protocol.Message
 	// For now, update the default agent
 	previousAgent := s.registry.GetDefaultName()
 	if err := s.registry.SetDefault(req.Agent); err != nil {
-		return s.errorResponse(msg.ID, "invalid_agent", err.Error())
+		log.Printf("set default agent error: %v", err)
+		return s.errorResponse(msg.ID, "invalid_agent", "invalid agent selection")
 	}
 
 	log.Printf("Agent selected: %s (was: %s)", req.Agent, previousAgent)
@@ -2858,6 +2954,12 @@ func (s *Server) handleSettingsKeys(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// SECURITY: Validate token for settings keys endpoint
+	if !s.validateToken(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	switch r.Method {
 	case "GET":
 		s.handleGetKeysStatus(w, r)
@@ -2882,6 +2984,12 @@ func (s *Server) handleSettingsKeyByProvider(w http.ResponseWriter, r *http.Requ
 
 	if r.Method == "OPTIONS" {
 		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	// SECURITY: Validate token for settings key deletion endpoint
+	if !s.validateToken(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
@@ -2912,8 +3020,9 @@ func (s *Server) handleSettingsKeyByProvider(w http.ResponseWriter, r *http.Requ
 	}
 
 	if err := cm.RemoveAPIKey(provider); err != nil {
+		log.Printf("delete API key error: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(protocol.ErrorPayload{Code: "delete_failed", Message: err.Error()})
+		json.NewEncoder(w).Encode(protocol.ErrorPayload{Code: "delete_failed", Message: "failed to delete API key"})
 		return
 	}
 
@@ -2943,6 +3052,12 @@ func (s *Server) handleSettingsAll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// SECURITY: Validate token for settings endpoint
+	if !s.validateToken(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	sm := settings.GetSettingsManager()
 
 	switch r.Method {
@@ -2957,7 +3072,7 @@ func (s *Server) handleSettingsAll(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(all)
 
 	case "PUT":
-		body, err := io.ReadAll(r.Body)
+		body, err := io.ReadAll(io.LimitReader(r.Body, maxRequestBodyBytes))
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(protocol.ErrorPayload{Code: "read_error", Message: "Failed to read request body"})
@@ -3002,6 +3117,13 @@ func (s *Server) handleSettingsExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// SECURITY: Validate token for settings export endpoint
+	if !s.validateToken(r) {
+		w.Header().Set("Content-Type", "application/json")
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	if r.Method != "POST" {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -3040,13 +3162,19 @@ func (s *Server) handleSettingsImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// SECURITY: Validate token for settings import endpoint
+	if !s.validateToken(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	if r.Method != "PUT" && r.Method != "POST" {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		json.NewEncoder(w).Encode(protocol.ErrorPayload{Code: "method_not_allowed", Message: "PUT or POST required"})
 		return
 	}
 
-	body, err := io.ReadAll(r.Body)
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxRequestBodyBytes))
 	if err != nil || len(body) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(protocol.ErrorPayload{Code: "empty_body", Message: "Empty request body"})
@@ -3058,7 +3186,7 @@ func (s *Server) handleSettingsImport(w http.ResponseWriter, r *http.Request) {
 	if err := sm.ImportEncrypted(body); err != nil {
 		log.Printf("[settings] Import error: %v", err)
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(protocol.ErrorPayload{Code: "import_failed", Message: err.Error()})
+		json.NewEncoder(w).Encode(protocol.ErrorPayload{Code: "import_failed", Message: "failed to import settings"})
 		return
 	}
 
@@ -3118,7 +3246,8 @@ func (s *Server) handleGetKeysStatus(w http.ResponseWriter, r *http.Request) {
 			// Cache the validity for IsAvailable() checks
 			cm.SetKeyValidity(p.name, valid)
 			if err != nil {
-				status.Error = err.Error()
+				log.Printf("API key validation error for %s: %v", p.name, err)
+				status.Error = "validation failed"
 			}
 		}
 
@@ -3156,11 +3285,10 @@ func (s *Server) handleSetKey(w http.ResponseWriter, r *http.Request) {
 	valid, validationErr := s.validateAPIKeyValue(req.Provider, req.APIKey)
 	if !valid {
 		w.WriteHeader(http.StatusBadRequest)
-		errMsg := "Invalid API key"
 		if validationErr != nil {
-			errMsg = validationErr.Error()
+			log.Printf("API key validation error: %v", validationErr)
 		}
-		json.NewEncoder(w).Encode(protocol.ErrorPayload{Code: "invalid_key", Message: errMsg})
+		json.NewEncoder(w).Encode(protocol.ErrorPayload{Code: "invalid_key", Message: "Invalid API key"})
 		return
 	}
 
@@ -3168,8 +3296,9 @@ func (s *Server) handleSetKey(w http.ResponseWriter, r *http.Request) {
 
 	// Save the key
 	if err := cm.SetAPIKey(req.Provider, req.APIKey); err != nil {
+		log.Printf("save API key error: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(protocol.ErrorPayload{Code: "save_failed", Message: err.Error()})
+		json.NewEncoder(w).Encode(protocol.ErrorPayload{Code: "save_failed", Message: "failed to save API key"})
 		return
 	}
 
@@ -3293,7 +3422,10 @@ func validateClaudeKey(ctx context.Context, apiKey string) (bool, error) {
 	if resp.StatusCode == http.StatusUnauthorized {
 		return false, nil // Invalid key - no error so it gets cached
 	}
-	body, _ := io.ReadAll(resp.Body)
+	body, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		body = []byte("(failed to read response body)")
+	}
 	return false, fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(body))
 }
 
@@ -3317,7 +3449,10 @@ func validateOpenAIKey(ctx context.Context, apiKey string) (bool, error) {
 	if resp.StatusCode == http.StatusUnauthorized {
 		return false, fmt.Errorf("invalid API key")
 	}
-	body, _ := io.ReadAll(resp.Body)
+	body, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		body = []byte("(failed to read response body)")
+	}
 	return false, fmt.Errorf("API error: %s", string(body))
 }
 
@@ -3342,7 +3477,10 @@ func validateGeminiKey(ctx context.Context, apiKey string) (bool, error) {
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		return false, fmt.Errorf("invalid API key")
 	}
-	body, _ := io.ReadAll(resp.Body)
+	body, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		body = []byte("(failed to read response body)")
+	}
 	return false, fmt.Errorf("API error: %s", string(body))
 }
 
@@ -3407,6 +3545,11 @@ func (s *Server) handleProvidersHealth(w http.ResponseWriter, r *http.Request) {
 		wg.Add(1)
 		go func(providerID, url string) {
 			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("[ProviderHealth] recovered from panic checking %s: %v", providerID, r)
+				}
+			}()
 			status := checkStatuspageHealth(client, url)
 			mu.Lock()
 			results = append(results, ProviderHealthStatus{ID: providerID, Status: status})
@@ -3419,6 +3562,11 @@ func (s *Server) handleProvidersHealth(w http.ResponseWriter, r *http.Request) {
 		wg.Add(1)
 		go func(providerID, url string) {
 			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("[ProviderHealth] recovered from panic pinging %s: %v", providerID, r)
+				}
+			}()
 			status := checkPingHealth(client, url)
 			mu.Lock()
 			results = append(results, ProviderHealthStatus{ID: providerID, Status: status})
@@ -3556,7 +3704,8 @@ func (s *Server) handlePredictionsAnalyze(w http.ResponseWriter, r *http.Request
 	}
 
 	if err := s.predictionWorker.TriggerAnalysis(req.Providers); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("prediction analysis error: %v", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 
@@ -3815,8 +3964,35 @@ func (s *Server) sendNativeNotification(alerts []DeviceAlert) {
 		}
 	}
 
-	// Use osascript for macOS notifications (non-blocking)
+	// Build a deep link URL so clicking the notification opens the console
+	consoleURL := fmt.Sprintf("http://localhost:%d/?action=hardware-health", s.config.Port)
+
+	// Prefer terminal-notifier (supports click-to-open via -open flag).
+	// Fall back to osascript display notification (no click handler support).
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("[DeviceTracker] recovered from panic in notification: %v", r)
+			}
+		}()
+
+		if tnPath, err := exec.LookPath("terminal-notifier"); err == nil {
+			cmd := exec.Command(tnPath,
+				"-title", "KubeStellar Console",
+				"-subtitle", title,
+				"-message", message,
+				"-sound", "Glass",
+				"-open", consoleURL,
+				"-sender", "com.google.Chrome",
+			)
+			if err := cmd.Run(); err != nil {
+				log.Printf("[DeviceTracker] terminal-notifier failed: %v, falling back to osascript", err)
+			} else {
+				return
+			}
+		}
+
+		// Fallback: osascript (no click-to-open support on macOS)
 		script := fmt.Sprintf(`display notification "%s" with title "%s" sound name "Glass"`,
 			message, title)
 		cmd := exec.Command("osascript", "-e", script)
@@ -3930,20 +4106,25 @@ func (s *Server) handleLocalClusters(w http.ResponseWriter, r *http.Request) {
 
 		// Create cluster in background and return immediately
 		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("[LocalClusters] recovered from panic creating cluster %s: %v", req.Name, r)
+				}
+			}()
 			if err := s.localClusters.CreateCluster(req.Tool, req.Name); err != nil {
 				log.Printf("[LocalClusters] Failed to create cluster %s with %s: %v", req.Name, req.Tool, err)
 				s.BroadcastToClients("local_cluster_progress", map[string]interface{}{
 					"tool":     req.Tool,
 					"name":     req.Name,
 					"status":   "failed",
-					"message":  err.Error(),
+					"message":  "operation failed",
 					"progress": 0,
 				})
 				// Keep backwards-compat event
 				s.BroadcastToClients("local_cluster_error", map[string]string{
 					"tool":  req.Tool,
 					"name":  req.Name,
-					"error": err.Error(),
+					"error": "internal server error",
 				})
 			} else {
 				log.Printf("[LocalClusters] Created cluster %s with %s", req.Name, req.Tool)
@@ -3981,20 +4162,25 @@ func (s *Server) handleLocalClusters(w http.ResponseWriter, r *http.Request) {
 
 		// Delete cluster in background
 		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Printf("[LocalClusters] recovered from panic deleting cluster %s: %v", name, r)
+				}
+			}()
 			if err := s.localClusters.DeleteCluster(tool, name); err != nil {
 				log.Printf("[LocalClusters] Failed to delete cluster %s: %v", name, err)
 				s.BroadcastToClients("local_cluster_progress", map[string]interface{}{
 					"tool":     tool,
 					"name":     name,
 					"status":   "failed",
-					"message":  err.Error(),
+					"message":  "operation failed",
 					"progress": 0,
 				})
 				// Keep backwards-compat event
 				s.BroadcastToClients("local_cluster_error", map[string]string{
 					"tool":  tool,
 					"name":  name,
-					"error": err.Error(),
+					"error": "internal server error",
 				})
 			} else {
 				log.Printf("[LocalClusters] Deleted cluster %s", name)
@@ -4024,4 +4210,85 @@ func (s *Server) handleLocalClusters(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+// handleInsightsEnrich accepts heuristic insight summaries and returns AI enrichments
+func (s *Server) handleInsightsEnrich(w http.ResponseWriter, r *http.Request) {
+	origin := r.Header.Get("Origin")
+	if s.isAllowedOrigin(origin) {
+		w.Header().Set("Access-Control-Allow-Origin", origin)
+	}
+	w.Header().Set("Access-Control-Allow-Private-Network", "true")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Set("Content-Type", "application/json")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if s.insightWorker == nil {
+		json.NewEncoder(w).Encode(InsightEnrichmentResponse{
+			Enrichments: []AIInsightEnrichment{},
+			Timestamp:   time.Now().Format(time.RFC3339),
+		})
+		return
+	}
+
+	var req InsightEnrichmentRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	resp, err := s.insightWorker.Enrich(req)
+	if err != nil {
+		log.Printf("[insights] enrichment error: %v", err)
+		// Return empty enrichments on error, not HTTP error
+		json.NewEncoder(w).Encode(InsightEnrichmentResponse{
+			Enrichments: []AIInsightEnrichment{},
+			Timestamp:   time.Now().Format(time.RFC3339),
+		})
+		return
+	}
+
+	json.NewEncoder(w).Encode(resp)
+}
+
+// handleInsightsAI returns cached AI enrichments
+func (s *Server) handleInsightsAI(w http.ResponseWriter, r *http.Request) {
+	origin := r.Header.Get("Origin")
+	if s.isAllowedOrigin(origin) {
+		w.Header().Set("Access-Control-Allow-Origin", origin)
+	}
+	w.Header().Set("Access-Control-Allow-Private-Network", "true")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Set("Content-Type", "application/json")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if r.Method != "GET" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if s.insightWorker == nil {
+		json.NewEncoder(w).Encode(InsightEnrichmentResponse{
+			Enrichments: []AIInsightEnrichment{},
+			Timestamp:   time.Now().Format(time.RFC3339),
+		})
+		return
+	}
+
+	json.NewEncoder(w).Encode(s.insightWorker.GetEnrichments())
 }

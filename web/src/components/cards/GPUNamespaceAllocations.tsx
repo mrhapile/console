@@ -1,8 +1,9 @@
 import { useMemo } from 'react'
 import { Box, ChevronRight, Server } from 'lucide-react'
-import { useGPUNodes, useAllPods } from '../../hooks/useMCP'
+import { useCachedGPUNodes, useCachedAllPods } from '../../hooks/useCachedData'
 import { useDrillDownActions } from '../../hooks/useDrillDown'
 import { ClusterBadge } from '../ui/ClusterBadge'
+import { StatusBadge } from '../ui/StatusBadge'
 import { CardClusterFilter, CardSearchInput } from '../../lib/cards'
 import { CardControls } from '../ui/CardControls'
 import { Pagination } from '../ui/Pagination'
@@ -51,15 +52,19 @@ const NAMESPACE_SORT_COMPARATORS: Record<SortByOption, (a: NamespaceGPUAllocatio
 
 export function GPUNamespaceAllocations({ config: _config }: GPUNamespaceAllocationsProps) {
   const { t } = useTranslation(['cards', 'common'])
-  const { nodes: gpuNodes, isLoading: gpuLoading } = useGPUNodes()
-  const { pods: allPods, isLoading: podsLoading } = useAllPods()
+  const { nodes: gpuNodes, isLoading: gpuLoading, isDemoFallback: gpuNodesDemoFallback } = useCachedGPUNodes()
+  const { pods: allPods, isLoading: podsLoading, isDemoFallback: podsDemoFallback } = useCachedAllPods()
   const { drillToGPUNamespace } = useDrillDownActions()
+
+  // Combine all isDemoFallback values from cached hooks
+  const isDemoData = gpuNodesDemoFallback || podsDemoFallback
 
   const isLoading = (gpuLoading && gpuNodes.length === 0) || (podsLoading && allPods.length === 0)
 
   useCardLoadingState({
     isLoading: gpuLoading || podsLoading,
     hasAnyData: gpuNodes.length > 0 || allPods.length > 0,
+    isDemoData,
   })
 
   // Compute per-namespace GPU allocations
@@ -112,6 +117,8 @@ export function GPUNamespaceAllocations({ config: _config }: GPUNamespaceAllocat
     setItemsPerPage,
     filters,
     sorting,
+    containerRef,
+    containerStyle,
   } = useCardData<NamespaceGPUAllocation, SortByOption>(namespaceAllocations, {
     filter: {
       searchFields: ['namespace'] as (keyof NamespaceGPUAllocation)[],
@@ -165,9 +172,9 @@ export function GPUNamespaceAllocations({ config: _config }: GPUNamespaceAllocat
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <span className="text-xs px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400">
+          <StatusBadge color="purple">
             {t('gpuNamespaceAllocations.gpusAcrossNamespaces', { gpus: totalGPUs, count: namespaceAllocations.length })}
-          </span>
+          </StatusBadge>
         </div>
         <div className="flex items-center gap-2">
           {filters.localClusterFilter && filters.localClusterFilter.length > 0 && (
@@ -211,7 +218,7 @@ export function GPUNamespaceAllocations({ config: _config }: GPUNamespaceAllocat
       />
 
       {/* Namespace list */}
-      <div className="flex-1 space-y-2 overflow-y-auto">
+      <div ref={containerRef} className="flex-1 space-y-2 overflow-y-auto" style={containerStyle}>
         {displayItems.map((ns) => (
           <div
             key={ns.namespace}

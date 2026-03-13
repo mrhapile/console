@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Bell, X, Check, Clock, Bug, Sparkles, GitPullRequest, Eye } from 'lucide-react'
+import { StatusBadge } from '../ui/StatusBadge'
 import { useNotifications, type Notification, type NotificationType } from '../../hooks/useFeatureRequests'
 import { useTranslation } from 'react-i18next'
 
@@ -97,7 +98,7 @@ export function NotificationBadge() {
       >
         <Bell className="w-5 h-5" />
         {unreadCount > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] flex items-center justify-center text-[10px] font-bold text-white rounded-full bg-purple-500">
+          <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] flex items-center justify-center text-2xs font-bold text-white rounded-full bg-purple-500">
             {unreadCount > 99 ? '99+' : unreadCount}
           </span>
         )}
@@ -132,9 +133,7 @@ export function NotificationBadge() {
                 <Bell className="w-4 h-4 text-purple-400" />
                 <span className="font-medium text-foreground">Notifications</span>
                 {unreadCount > 0 && (
-                  <span className="px-1.5 py-0.5 text-xs rounded bg-purple-500/20 text-purple-400">
-                    {unreadCount} new
-                  </span>
+                  <StatusBadge color="purple">{unreadCount} new</StatusBadge>
                 )}
               </div>
               <div className="flex items-center gap-1">

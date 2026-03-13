@@ -1,5 +1,6 @@
-import { lazy, ComponentType } from 'react'
+import { lazy, createElement, ComponentType } from 'react'
 import { isDynamicCardRegistered } from '../../lib/dynamic-cards/dynamicCardRegistry'
+import { getCardConfig } from '../../config/cards'
 
 // Lazy load all card components for better code splitting
 const ClusterHealth = lazy(() => import('./ClusterHealth').then(m => ({ default: m.ClusterHealth })))
@@ -11,7 +12,7 @@ const ResourceUsage = lazy(() => import('./ResourceUsage').then(m => ({ default:
 const ClusterMetrics = lazy(() => import('./ClusterMetrics').then(m => ({ default: m.ClusterMetrics })))
 // Deploy dashboard cards — eagerly start loading the barrel at module parse time
 // so all 16 cards share one chunk download instead of 16 separate HTTP requests.
-const _deployBundle = import('./deploy-bundle')
+const _deployBundle = import('./deploy-bundle').catch((err) => { throw err })
 const DeploymentStatus = lazy(() => _deployBundle.then(m => ({ default: m.DeploymentStatus })))
 const DeploymentProgress = lazy(() => _deployBundle.then(m => ({ default: m.DeploymentProgress })))
 const DeploymentIssues = lazy(() => _deployBundle.then(m => ({ default: m.DeploymentIssues })))
@@ -72,6 +73,10 @@ const AlertRulesCard = lazy(() => import('./AlertRules').then(m => ({ default: m
 const OpenCostOverview = lazy(() => import('./OpenCostOverview').then(m => ({ default: m.OpenCostOverview })))
 const KubecostOverview = lazy(() => import('./KubecostOverview').then(m => ({ default: m.KubecostOverview })))
 const OPAPolicies = lazy(() => import('./OPAPolicies').then(m => ({ default: m.OPAPolicies })))
+const FleetComplianceHeatmap = lazy(() => import('./FleetComplianceHeatmap').then(m => ({ default: m.FleetComplianceHeatmap })))
+const ComplianceDrift = lazy(() => import('./ComplianceDrift').then(m => ({ default: m.ComplianceDrift })))
+const CrossClusterPolicyComparison = lazy(() => import('./CrossClusterPolicyComparison').then(m => ({ default: m.CrossClusterPolicyComparison })))
+const RecommendedPolicies = lazy(() => import('./RecommendedPolicies').then(m => ({ default: m.RecommendedPolicies })))
 const KyvernoPolicies = lazy(() => import('./KyvernoPolicies').then(m => ({ default: m.KyvernoPolicies })))
 // Eagerly import demo-only compliance cards — they're tiny (~255 lines total),
 // contain only hardcoded demo data, and lazy loading them causes blank cards
@@ -81,7 +86,7 @@ const VaultSecrets = lazy(() => import('./DataComplianceCards').then(m => ({ def
 const ExternalSecrets = lazy(() => import('./DataComplianceCards').then(m => ({ default: m.ExternalSecrets })))
 const CertManager = lazy(() => import('./DataComplianceCards').then(m => ({ default: m.CertManager })))
 // Workload detection cards — share one chunk via barrel import
-const _workloadDetectionBundle = import('./workload-detection')
+const _workloadDetectionBundle = import('./workload-detection').catch((err) => { throw err })
 const ProwJobs = lazy(() => _workloadDetectionBundle.then(m => ({ default: m.ProwJobs })))
 const ProwStatus = lazy(() => _workloadDetectionBundle.then(m => ({ default: m.ProwStatus })))
 const ProwHistory = lazy(() => _workloadDetectionBundle.then(m => ({ default: m.ProwHistory })))
@@ -107,12 +112,14 @@ const KubeMan = lazy(() => import('./KubeMan').then(m => ({ default: m.KubeMan }
 const KubeKong = lazy(() => import('./KubeKong').then(m => ({ default: m.KubeKong })))
 const PodPitfall = lazy(() => import('./PodPitfall').then(m => ({ default: m.PodPitfall })))
 const NodeInvaders = lazy(() => import('./NodeInvaders').then(m => ({ default: m.NodeInvaders })))
+const MissileCommand = lazy(() => import('./MissileCommand').then(m => ({ default: m.MissileCommand })))
 const PodCrosser = lazy(() => import('./PodCrosser').then(m => ({ default: m.PodCrosser })))
 const PodBrothers = lazy(() => import('./PodBrothers').then(m => ({ default: m.PodBrothers })))
 const KubeKart = lazy(() => import('./KubeKart').then(m => ({ default: m.KubeKart })))
 const KubePong = lazy(() => import('./KubePong').then(m => ({ default: m.KubePong })))
 const KubeSnake = lazy(() => import('./KubeSnake').then(m => ({ default: m.KubeSnake })))
 const KubeGalaga = lazy(() => import('./KubeGalaga').then(m => ({ default: m.KubeGalaga })))
+const KubeBert = lazy(() => import('./KubeBert').then(m => ({ default: m.KubeBert })))
 const KubeDoom = lazy(() => import('./KubeDoom').then(m => ({ default: m.KubeDoom })))
 const KubeCraft = lazy(() => import('./KubeCraft').then(m => ({ default: m.KubeCraft })))
 const IframeEmbed = lazy(() => import('./IframeEmbed').then(m => ({ default: m.IframeEmbed })))
@@ -130,7 +137,7 @@ const ClusterGroups = lazy(() => _deployBundle.then(m => ({ default: m.ClusterGr
 const Missions = lazy(() => _deployBundle.then(m => ({ default: m.Missions })))
 const ResourceMarshall = lazy(() => _deployBundle.then(m => ({ default: m.ResourceMarshall })))
 // Workload monitor cards — share one chunk via barrel import
-const _workloadMonitorBundle = import('./workload-monitor')
+const _workloadMonitorBundle = import('./workload-monitor').catch((err) => { throw err })
 const WorkloadMonitor = lazy(() => _workloadMonitorBundle.then(m => ({ default: m.WorkloadMonitor })))
 const DynamicCard = lazy(() => import('./DynamicCard').then(m => ({ default: m.DynamicCard })))
 const LLMdStackMonitor = lazy(() => _workloadMonitorBundle.then(m => ({ default: m.LLMdStackMonitor })))
@@ -139,7 +146,7 @@ const ProwCIMonitor = lazy(() => _workloadMonitorBundle.then(m => ({ default: m.
 // LLM-d stunning visualization cards — eagerly start loading the barrel at
 // module parse time so all 7 heavy chunks (194KB total source) are pre-warmed
 // before the AI/ML dashboard renders, shared across all lazy() references.
-const _llmdBundle = import('./llmd')
+const _llmdBundle = import('./llmd').catch((err) => { throw err })
 const LLMdFlow = lazy(() => _llmdBundle.then(m => ({ default: m.LLMdFlow })))
 const KVCacheMonitor = lazy(() => _llmdBundle.then(m => ({ default: m.KVCacheMonitor })))
 const EPPRouting = lazy(() => _llmdBundle.then(m => ({ default: m.EPPRouting })))
@@ -161,7 +168,7 @@ const ProviderHealth = lazy(() => import('./ProviderHealth').then(m => ({ defaul
 
 // Kagenti AI Agent Platform cards — share one chunk via barrel import
 const KagentiStatusCard = lazy(() => import('./KagentiStatusCard').then(m => ({ default: m.KagentiStatusCard })))
-const _kagentiBundle = import('./kagenti')
+const _kagentiBundle = import('./kagenti').catch((err) => { throw err })
 const KagentiAgentFleet = lazy(() => _kagentiBundle.then(m => ({ default: m.KagentiAgentFleet })))
 const KagentiBuildPipeline = lazy(() => _kagentiBundle.then(m => ({ default: m.KagentiBuildPipeline })))
 const KagentiToolRegistry = lazy(() => _kagentiBundle.then(m => ({ default: m.KagentiToolRegistry })))
@@ -172,19 +179,21 @@ const KagentiTopology = lazy(() => _kagentiBundle.then(m => ({ default: m.Kagent
 const CrossplaneManagedResources = lazy(() => import('./crossplane-status/CrossplaneManagedResources').then(m => ({ default: m.CrossplaneManagedResources })))
 // Cloud Native Buildpacks card
 const BuildpacksStatus = lazy(() => import('./buildpacks-status').then(m => ({ default: m.BuildpacksStatus })))
-// Flatcar Container Linux card
-const FlatcarStatus = lazy(() => import('./flatcar_status').then(m => ({ default: m.FlatcarStatus })))
-// Thanos global view metrics card
-const ThanosStatus = lazy(() => import('./thanos_status').then(m => ({ default: m.ThanosStatus })))
-// Contour ingress controller card
-const ContourStatus = lazy(() => import('./contour-status').then(m => ({ default: m.ContourStatus })))
-// CRI-O container runtime card
-const CrioStatus = lazy(() => import('./crio_status').then(m => ({ default: m.CrioStatus })))
 // CoreDNS card
 const CoreDNSStatus = lazy(() => import('./coredns_status').then(m => ({ default: m.CoreDNSStatus })))
 
+// Multi-cluster insights cards — share one chunk via barrel import
+const _insightsBundle = import('./insights').catch((err) => { throw err })
+const CrossClusterEventCorrelation = lazy(() => _insightsBundle.then(m => ({ default: m.CrossClusterEventCorrelation })))
+const ClusterDeltaDetector = lazy(() => _insightsBundle.then(m => ({ default: m.ClusterDeltaDetector })))
+const CascadeImpactMap = lazy(() => _insightsBundle.then(m => ({ default: m.CascadeImpactMap })))
+const ConfigDriftHeatmap = lazy(() => _insightsBundle.then(m => ({ default: m.ConfigDriftHeatmap })))
+const ResourceImbalanceDetector = lazy(() => _insightsBundle.then(m => ({ default: m.ResourceImbalanceDetector })))
+const RestartCorrelationMatrix = lazy(() => _insightsBundle.then(m => ({ default: m.RestartCorrelationMatrix })))
+const DeploymentRolloutTracker = lazy(() => _insightsBundle.then(m => ({ default: m.DeploymentRolloutTracker })))
+
 // Cluster admin cards — share one chunk via barrel import
-const _clusterAdminBundle = import('./cluster-admin-bundle')
+const _clusterAdminBundle = import('./cluster-admin-bundle').catch((err) => { throw err })
 const PredictiveHealth = lazy(() => _clusterAdminBundle.then(m => ({ default: m.PredictiveHealth })))
 const NodeDebug = lazy(() => _clusterAdminBundle.then(m => ({ default: m.NodeDebug })))
 const ControlPlaneHealth = lazy(() => _clusterAdminBundle.then(m => ({ default: m.ControlPlaneHealth })))
@@ -196,7 +205,6 @@ const RBACExplorer = lazy(() => _clusterAdminBundle.then(m => ({ default: m.RBAC
 const MaintenanceWindows = lazy(() => _clusterAdminBundle.then(m => ({ default: m.MaintenanceWindows })))
 const ClusterChangelog = lazy(() => _clusterAdminBundle.then(m => ({ default: m.ClusterChangelog })))
 const QuotaHeatmap = lazy(() => _clusterAdminBundle.then(m => ({ default: m.QuotaHeatmap })))
-const WasmCloudStatus = lazy(() => import('./wasmcloud_status').then(m => ({ default: m.WasmCloudStatus })))
 
 // Type for card component props
 export type CardComponentProps = { config?: Record<string, unknown> }
@@ -303,6 +311,11 @@ const RAW_CARD_COMPONENTS: Record<string, CardComponent> = {
   kubescape_scan: KubescapeScan,
   policy_violations: PolicyViolations,
   compliance_score: ComplianceScore,
+  // Cross-cluster compliance cards
+  fleet_compliance_heatmap: FleetComplianceHeatmap,
+  compliance_drift: ComplianceDrift,
+  cross_cluster_policy_comparison: CrossClusterPolicyComparison,
+  recommended_policies: RecommendedPolicies,
   // Data compliance tool cards
   vault_secrets: VaultSecrets,
   external_secrets: ExternalSecrets,
@@ -349,6 +362,7 @@ const RAW_CARD_COMPONENTS: Record<string, CardComponent> = {
   kube_kong: KubeKong,
   pod_pitfall: PodPitfall,
   node_invaders: NodeInvaders,
+  missile_command: MissileCommand,
   pod_crosser: PodCrosser,
   // Pod Brothers (Mario Bros) card
   pod_brothers: PodBrothers,
@@ -356,6 +370,7 @@ const RAW_CARD_COMPONENTS: Record<string, CardComponent> = {
   kube_pong: KubePong,
   kube_snake: KubeSnake,
   kube_galaga: KubeGalaga,
+  kube_bert: KubeBert,
   kube_doom: KubeDoom,
   kube_craft: KubeCraft,
   // Generic Iframe Embed card
@@ -420,14 +435,6 @@ const RAW_CARD_COMPONENTS: Record<string, CardComponent> = {
   quota_heatmap: QuotaHeatmap,
   // Cloud Native Buildpacks
   buildpacks_status: BuildpacksStatus,
-  // Flatcar Container Linux
-  flatcar_status: FlatcarStatus,
-  // Thanos global view metrics
-  thanos_status: ThanosStatus,
-  // Contour ingress controller
-  contour_status: ContourStatus,
-  // CRI-O container runtime
-  crio_status: CrioStatus,
   // CoreDNS
   coredns_status: CoreDNSStatus,
 
@@ -449,6 +456,15 @@ const RAW_CARD_COMPONENTS: Record<string, CardComponent> = {
   performance_timeline: PerformanceTimeline,
   resource_utilization: ResourceUtilization,
 
+  // Multi-cluster insights cards
+  cross_cluster_event_correlation: CrossClusterEventCorrelation,
+  cluster_delta_detector: ClusterDeltaDetector,
+  cascade_impact_map: CascadeImpactMap,
+  config_drift_heatmap: ConfigDriftHeatmap,
+  resource_imbalance_detector: ResourceImbalanceDetector,
+  restart_correlation_matrix: RestartCorrelationMatrix,
+  deployment_rollout_tracker: DeploymentRolloutTracker,
+
   // Dynamic Card (Card Factory meta-component)
   dynamic_card: DynamicCard,
 
@@ -465,11 +481,45 @@ const RAW_CARD_COMPONENTS: Record<string, CardComponent> = {
   error_count: PodIssues,
   security_overview: SecurityIssues,
   rbac_summary: NamespaceRBAC,
-  wasmcloud_status: WasmCloudStatus,
 }
 
-// Export cards directly — CardWrapper.tsx provides the Suspense boundary with a visible skeleton
-export const CARD_COMPONENTS: Record<string, CardComponent> = RAW_CARD_COMPONENTS
+// Lazy-load UnifiedCard — keeps it out of the main bundle for fast page load
+const LazyUnifiedCard = lazy(() =>
+  import('../../lib/unified/card/UnifiedCard').then(m => ({ default: m.UnifiedCard })),
+)
+
+/** Supported unified content types that the adapter can render */
+const _UNIFIED_CONTENT_TYPES = ['list', 'table', 'chart', 'status-grid']
+
+/** Build a lazy adapter component for a unified card type */
+function _makeUnifiedEntry(cardType: string): CardComponent | undefined {
+  const config = getCardConfig(cardType)
+  if (!config?.dataSource || !config?.content) return undefined
+  if (!_UNIFIED_CONTENT_TYPES.includes(config.content.type)) return undefined
+  const Adapter: CardComponent = () => createElement(LazyUnifiedCard, { config, className: 'h-full' })
+  Adapter.displayName = `Unified(${cardType})`
+  return Adapter
+}
+
+// Statically register unified-only cards (no legacy component) so they render
+// without a Proxy and participate in normal lazy-loading like every other card.
+const _UNIFIED_ONLY_TYPES = [
+  'node_status', 'statefulset_status', 'daemonset_status', 'job_status',
+  'cronjob_status', 'replicaset_status', 'hpa_status', 'configmap_status',
+  'secret_status', 'pv_status', 'ingress_status', 'network_policy_status',
+  'namespace_status', 'resource_quota_status', 'limit_range_status',
+  'service_account_status', 'role_status', 'role_binding_status',
+  'operator_subscription_status',
+] as const
+
+for (const cardType of _UNIFIED_ONLY_TYPES) {
+  const adapter = _makeUnifiedEntry(cardType)
+  if (adapter) {
+    RAW_CARD_COMPONENTS[cardType] = adapter
+  }
+}
+
+export const CARD_COMPONENTS = RAW_CARD_COMPONENTS
 
 /**
  * Cards that ALWAYS use demo/mock data (no live data source exists).
@@ -493,19 +543,14 @@ export const DEMO_DATA_CARDS = new Set([
   'service_imports',
   // Gateway API cards - demo until Gateway API is installed
   'gateway_status',
-  // Service Topology - demo visualization
-  'service_topology',
+  // Note: service_topology removed — now reports isDemoData via useTopology hook
   // Note: buildpacks_status removed — reports isDemoData via useBuildpackImages hook
-  'flatcar_status',
-  'thanos_status',
-  'contour_status',
 
   // Workload Deployment - uses real data when backend is running, falls back to demo internally
   // NOT in DEMO_DATA_CARDS because the static badge can't detect runtime data source
-  // ArgoCD cards - all use mock data
-  'argocd_applications',
-  'argocd_health',
-  // Note: argocd_sync_status removed — reports isDemoData via demoMode check
+  // Note: argocd_applications removed — now reports isDemoData via useArgoCDApplications hook
+  // Note: argocd_health removed — now reports isDemoData via useArgoCDHealth hook
+  // Note: argocd_sync_status removed — reports isDemoData via useArgoCDSyncStatus hook
   // GitOps cards - use mock data
   // Note: kustomization_status removed — reports isDemoData via demoMode check
   // Helm cards - all now use real data via helm CLI backend
@@ -513,14 +558,13 @@ export const DEMO_DATA_CARDS = new Set([
   // Cost management integrations - demo until connected
   'opencost_overview',
   'kubecost_overview',
-  // Policy management - kyverno is demo-only
-  'kyverno_policies',
+  // Note: kyverno_policies removed — now reports isDemoData via useKyverno hook
+  // Note: trivy_scan removed — now reports isDemoData via useTrivy hook
+  // Note: kubescape_scan removed — now reports isDemoData via useKubescape hook
+  // Note: policy_violations removed — now reports isDemoData via useKyverno hook
+  // Note: compliance_score removed — now reports isDemoData via useKubescape/useKyverno hooks
   // Security posture cards - demo until tools are detected
   'falco_alerts',
-  'trivy_scan',
-  'kubescape_scan',
-  'policy_violations',
-  'compliance_score',
   // Data compliance cards - demo until tools are detected
   // Note: cert_manager now uses real data via useCertManager hook
   'vault_secrets',
@@ -558,35 +602,8 @@ export const DEMO_DATA_CARDS = new Set([
  * Cards that should never show demo indicators (badge/yellow border).
  * Arcade/game cards don't have "demo data" — they're always just games.
  */
-export const DEMO_EXEMPT_CARDS = new Set([
-  // All arcade games - never show skeleton, always show game content
-  'sudoku_game',
-  'checkers',
-  'container_tetris',
-  'kube_kong',
-  'pod_crosser',
-  'kube_kart',
-  'kube_snake',
-  'kube_chess',
-  'kube_man',
-  'node_invaders',
-  'flappy_pod',
-  'pod_pitfall',
-  'pod_brothers',
-  'match_game',
-  'solitaire',
-  'game_2048',
-  'kubedle',
-  'pod_sweeper',
-  'kube_pong',
-  'kube_galaga',
-  'kube_craft',
-  'kube_doom',
-  'dynamic_card',
-  // Cluster admin cards - no demo/live concept
-  'maintenance_windows',
-  'node_debug',
-])
+// Re-export from cardMetadata for backward compatibility
+export { DEMO_EXEMPT_CARDS } from './cardMetadata'
 
 /**
  * Map of card type → chunk preload function.
@@ -665,6 +682,11 @@ const CARD_CHUNK_PRELOADERS: Record<string, () => Promise<unknown>> = {
   kubescape_scan: () => import('./ComplianceCards'),
   policy_violations: () => import('./ComplianceCards'),
   compliance_score: () => import('./ComplianceCards'),
+  // Cross-cluster compliance cards
+  fleet_compliance_heatmap: () => import('./FleetComplianceHeatmap'),
+  compliance_drift: () => import('./ComplianceDrift'),
+  cross_cluster_policy_comparison: () => import('./CrossClusterPolicyComparison'),
+  recommended_policies: () => import('./RecommendedPolicies'),
   vault_secrets: () => import('./DataComplianceCards'),
   external_secrets: () => import('./DataComplianceCards'),
   cert_manager: () => import('./DataComplianceCards'),
@@ -741,16 +763,6 @@ const CARD_CHUNK_PRELOADERS: Record<string, () => Promise<unknown>> = {
   crossplane_managed_resources: () => import('./crossplane-status'),
   // Cloud Native Buildpacks
   buildpacks_status: () => import('./buildpacks-status'),
-  //wasmcloud
-  wasmcloud_status: () => import('./wasmcloud_status'),
-  // Flatcar Container Linux
-  flatcar_status: () => import('./flatcar_status'),
-  // Thanos global view metrics
-  thanos_status: () => import('./thanos_status'),
-  // Contour ingress controller
-  contour_status: () => import('./contour-status'),
-  // CRI-O container runtime
-  crio_status: () => import('./crio_status'),
 }
 
 /**
@@ -846,6 +858,8 @@ export const LIVE_DATA_CARDS = new Set([
   'cluster_health_monitor',
   // GPU node health monitoring
   'gpu_node_health',
+  // Node status - live data from useNodes with demo fallback
+  'node_status',
   // Nightly E2E status card
   'nightly_e2e_status',
   // Cluster admin cards with live data
@@ -885,10 +899,6 @@ export const CARD_DEFAULT_WIDTHS: Record<string, number> = {
   upgrade_status: 4,
   crossplane_managed_resources: 4,
   buildpacks_status: 6,
-  flatcar_status: 6,
-  thanos_status: 6,
-  contour_status: 6,
-  crio_status: 6,
 
   // MCS cards
   service_exports: 6,
@@ -1000,6 +1010,11 @@ export const CARD_DEFAULT_WIDTHS: Record<string, number> = {
   kubescape_scan: 4,
   policy_violations: 6,
   compliance_score: 4,
+  // Cross-cluster compliance cards
+  fleet_compliance_heatmap: 6,
+  compliance_drift: 5,
+  cross_cluster_policy_comparison: 5,
+  recommended_policies: 6,
   vault_secrets: 4,
   external_secrets: 4,
   cert_manager: 4,
@@ -1017,6 +1032,7 @@ export const CARD_DEFAULT_WIDTHS: Record<string, number> = {
   console_ai_offline_detection: 6,
   hardware_health: 6,
   gpu_node_health: 6,
+  node_status: 6,
   user_management: 6,
   // Weather card
   weather: 6,
@@ -1046,6 +1062,7 @@ export const CARD_DEFAULT_WIDTHS: Record<string, number> = {
   kube_kong: 6,
   pod_pitfall: 6,
   node_invaders: 6,
+  missile_command: 6,
   pod_crosser: 6,
   pod_brothers: 6,
   kube_kart: 5,
@@ -1083,7 +1100,6 @@ export const CARD_DEFAULT_WIDTHS: Record<string, number> = {
   // Full width cards (12 columns) - complex visualizations
   cluster_comparison: 12,
   cluster_resource_tree: 12,
-  wasmcloud_status: 6,
 }
 
 // Default width for cards not in the map

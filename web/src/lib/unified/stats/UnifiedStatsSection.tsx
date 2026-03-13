@@ -7,6 +7,8 @@
 
 import { useState, useMemo, useCallback } from 'react'
 import { Activity, ChevronDown, ChevronRight, Settings, FlaskConical } from 'lucide-react'
+import { Button } from '../../../components/ui/Button'
+import { StatusBadge } from '../../../components/ui/StatusBadge'
 import type { UnifiedStatsSectionProps, UnifiedStatBlockConfig, StatBlockValue } from '../types'
 import { UnifiedStatBlock } from './UnifiedStatBlock'
 import { resolveStatValue } from './valueResolvers'
@@ -145,10 +147,9 @@ export function UnifiedStatsSection({
 
           {/* Demo indicator */}
           {isDemoData && (
-            <span className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
-              <FlaskConical className="w-2.5 h-2.5" />
+            <StatusBadge color="yellow" size="xs" variant="outline" rounded="full" icon={<FlaskConical className="w-2.5 h-2.5" />}>
               Demo
-            </span>
+            </StatusBadge>
           )}
 
           {/* Last updated */}
@@ -161,13 +162,13 @@ export function UnifiedStatsSection({
 
         {/* Configure button */}
         {config.showConfigButton !== false && isExpanded && (
-          <button
+          <Button
+            variant="ghost"
             onClick={() => setIsConfigOpen(true)}
-            className="p-1 text-muted-foreground hover:text-foreground hover:bg-secondary rounded transition-colors"
+            className="p-1 rounded-md"
             title="Configure stats"
-          >
-            <Settings className="w-4 h-4" />
-          </button>
+            icon={<Settings className="w-4 h-4" />}
+          />
         )}
       </div>
 
@@ -274,19 +275,20 @@ function StatsConfigModal({
 
         {/* Actions */}
         <div className="flex items-center justify-between">
-          <button
+          <Button
+            variant="ghost"
             onClick={handleReset}
-            className="text-sm text-muted-foreground hover:text-foreground"
           >
             Reset to default
-          </button>
+          </Button>
           <div className="flex gap-2">
-            <button
+            <Button
+              variant="secondary"
               onClick={onClose}
-              className="px-3 py-1.5 text-sm rounded bg-secondary hover:bg-secondary/80"
+              className="rounded-md"
             >
               Cancel
-            </button>
+            </Button>
             <button
               onClick={handleSave}
               className="px-3 py-1.5 text-sm rounded bg-primary text-primary-foreground hover:bg-primary/90"

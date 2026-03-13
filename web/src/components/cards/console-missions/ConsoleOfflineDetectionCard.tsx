@@ -2,7 +2,8 @@ import { useMemo, useState, useEffect, useRef } from 'react'
 import { AlertCircle, CheckCircle, Clock, ChevronRight, TrendingUp, TrendingDown, Minus, Cpu, HardDrive, RefreshCw, Info, Sparkles, ThumbsUp, ThumbsDown, Zap, Layers, List } from 'lucide-react'
 import { useCardDemoState } from '../CardDataContext'
 import { useMissions } from '../../../hooks/useMissions'
-import { useGPUNodes, usePodIssues, useClusters } from '../../../hooks/useMCP'
+import { useClusters } from '../../../hooks/useMCP'
+import { useCachedPodIssues, useCachedGPUNodes } from '../../../hooks/useCachedData'
 import { useGlobalFilters } from '../../../hooks/useGlobalFilters'
 import { useDrillDownActions } from '../../../hooks/useDrillDown'
 import { usePredictionSettings } from '../../../hooks/usePredictionSettings'
@@ -16,9 +17,11 @@ import { useCardLoadingState } from '../CardDataContext'
 import type { PredictedRisk, TrendDirection } from '../../../types/predictions'
 import { CardControlsRow, CardSearchInput, CardPaginationFooter, CardAIActions } from '../../../lib/cards/CardComponents'
 import { ClusterBadge } from '../../ui/ClusterBadge'
+import { StatusBadge } from '../../ui/StatusBadge'
 import { useTranslation } from 'react-i18next'
 import { LOCAL_AGENT_HTTP_URL, FETCH_DEFAULT_TIMEOUT_MS } from '../../../lib/constants'
 import { POLL_INTERVAL_MS } from '../../../lib/constants/network'
+import { useDemoMode } from '../../../hooks/useDemoMode'
 
 // ============================================================================
 // Unified Item Type for all card items
@@ -219,13 +222,14 @@ function generatePredictionId(type: string, name: string, cluster?: string): str
 export function ConsoleOfflineDetectionCard(_props: ConsoleMissionCardProps) {
   const { t } = useTranslation(['cards', 'common'])
   const { startMission, missions } = useMissions()
-  const { nodes: gpuNodes, isLoading } = useGPUNodes()
-  const { issues: podIssues } = usePodIssues()
+  const { nodes: gpuNodes, isLoading, isDemoFallback: gpuDemoFallback } = useCachedGPUNodes()
+  const { issues: podIssues, isDemoFallback: podsDemoFallback } = useCachedPodIssues()
   const { deduplicatedClusters: clusters } = useClusters()
   const { selectedClusters, isAllClustersSelected, customFilter } = useGlobalFilters()
   const { drillToCluster, drillToNode } = useDrillDownActions()
   const { showKeyPrompt, checkKeyAndRun, goToSettings, dismissPrompt } = useApiKeyCheck()
   const { shouldUseDemoData } = useCardDemoState({ requires: 'agent' })
+  const { isDemoMode } = useDemoMode()
 
   // Prediction hooks
   const { settings: predictionSettings } = usePredictionSettings()
@@ -245,6 +249,7 @@ export function ConsoleOfflineDetectionCard(_props: ConsoleMissionCardProps) {
   useCardLoadingState({
     isLoading: isLoading && nodesLoading,
     hasAnyData: gpuNodes.length > 0 || nodesCache.length > 0 || allNodes.length > 0,
+    isDemoData: isDemoMode || gpuDemoFallback || podsDemoFallback,
   })
 
   // Subscribe to cache updates and fetch nodes
@@ -865,7 +870,7 @@ Please:
           title={offlineNodes.length > 0 ? `${offlineNodes.length} offline node${offlineNodes.length !== 1 ? 's' : ''} - Click to view` : 'All nodes online'}
         >
           <div className="text-xl font-bold text-foreground">{offlineNodes.length}</div>
-          <div className={cn('text-[10px]', offlineNodes.length > 0 ? 'text-red-400' : 'text-green-400')}>
+          <div className={cn('text-2xs', offlineNodes.length > 0 ? 'text-red-400' : 'text-green-400')}>
             {t('cards:consoleOfflineDetection.offline')}
           </div>
         </div>
@@ -884,7 +889,7 @@ Please:
           title={gpuIssues.length > 0 ? `${gpuIssues.length} GPU issue${gpuIssues.length !== 1 ? 's' : ''} - Click to view` : 'All GPUs available'}
         >
           <div className="text-xl font-bold text-foreground">{gpuIssues.length}</div>
-          <div className={cn('text-[10px]', gpuIssues.length > 0 ? 'text-yellow-400' : 'text-green-400')}>
+          <div className={cn('text-2xs', gpuIssues.length > 0 ? 'text-yellow-400' : 'text-green-400')}>
             {t('cards:consoleOfflineDetection.gpuIssues')}
           </div>
         </div>
@@ -922,7 +927,7 @@ ${aiEnabled ? '\nClick to run AI analysis now' : ''}`}
             )}
           </div>
           <div className={cn(
-            'text-[10px] flex items-center gap-1',
+            'text-2xs flex items-center gap-1',
             totalPredicted > 0 ? 'text-blue-400' : 'text-green-400'
           )}>
             {t('cards:consoleOfflineDetection.predicted')}
@@ -1030,7 +1035,7 @@ ${aiEnabled ? '\nClick to run AI analysis now' : ''}`}
                         <div className="flex items-center gap-2">
                           <span className="font-medium text-foreground">{group.cause}</span>
                           <span
-                            className="px-1.5 py-0.5 text-[10px] font-bold rounded"
+                            className="px-1.5 py-0.5 text-2xs font-bold rounded"
                             style={{
                               backgroundColor: `rgba(${severityColor === 'red' ? '239,68,68' : severityColor === 'yellow' ? '234,179,8' : '59,130,246'}, 0.2)`,
                               color: `rgb(${severityColor === 'red' ? '248,113,113' : severityColor === 'yellow' ? '250,204,21' : '96,165,250'})`,
@@ -1039,7 +1044,7 @@ ${aiEnabled ? '\nClick to run AI analysis now' : ''}`}
                             {group.items.length} item{group.items.length !== 1 ? 's' : ''}
                           </span>
                           {group.items.length > 1 && (
-                            <span className="text-[10px] text-green-400 font-medium">
+                            <span className="text-2xs text-green-400 font-medium">
                               ✓ Fix once, solve {group.items.length}
                             </span>
                           )}
@@ -1049,7 +1054,7 @@ ${aiEnabled ? '\nClick to run AI analysis now' : ''}`}
                     </div>
                     <button
                       className={cn(
-                        'px-2 py-1 text-[10px] rounded font-medium transition-colors flex-shrink-0 ml-2',
+                        'px-2 py-1 text-2xs rounded font-medium transition-colors flex-shrink-0 ml-2',
                         'bg-purple-500/20 text-purple-400 hover:bg-purple-500/30'
                       )}
                       onClick={(e) => {
@@ -1145,9 +1150,9 @@ TASK:
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="font-medium text-foreground truncate">{node.name}</span>
-                    <span className="flex-shrink-0 px-1 py-0.5 text-[9px] font-medium bg-red-500/20 text-red-400 rounded">
+                    <StatusBadge color="red" size="xs" className="flex-shrink-0">
                       {rootCause?.cause || t('cards:consoleOfflineDetection.offline')}
-                    </span>
+                    </StatusBadge>
                     {node.cluster && (
                       <ClusterBadge cluster={node.cluster} size="sm" />
                     )}
@@ -1181,9 +1186,9 @@ TASK:
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="font-medium text-foreground truncate">{issue.nodeName}</span>
-                    <span className="flex-shrink-0 px-1 py-0.5 text-[9px] font-medium bg-yellow-500/20 text-yellow-400 rounded">
+                    <StatusBadge color="yellow" size="xs" className="flex-shrink-0">
                       GPU
-                    </span>
+                    </StatusBadge>
                     <ClusterBadge cluster={issue.cluster} size="sm" />
                   </div>
                   <div className="text-yellow-400 truncate mt-0.5">0 GPUs available</div>
@@ -1234,13 +1239,13 @@ TASK:
                         <span className="font-medium text-foreground truncate">{risk.name}</span>
                         {/* Source Badge */}
                         {risk.source === 'ai' ? (
-                          <span className="flex-shrink-0 px-1 py-0.5 text-[9px] font-medium bg-blue-500/20 text-blue-400 rounded">
+                          <StatusBadge color="blue" size="xs" className="flex-shrink-0">
                             AI
-                          </span>
+                          </StatusBadge>
                         ) : (
-                          <span className="flex-shrink-0 px-1 py-0.5 text-[9px] font-medium bg-blue-500/20 text-blue-400 rounded flex items-center gap-0.5">
+                          <StatusBadge color="blue" size="xs" className="flex-shrink-0">
                             <Zap className="w-2 h-2" />
-                          </span>
+                          </StatusBadge>
                         )}
                         {/* Confidence */}
                         {risk.confidence !== undefined && (
@@ -1250,9 +1255,9 @@ TASK:
                         {risk.trend && <TrendIcon trend={risk.trend} />}
                         {/* Namespace Badge */}
                         {risk.namespace && (
-                          <span className="flex-shrink-0 px-1 py-0.5 text-[9px] font-medium bg-slate-500/20 text-slate-400 rounded truncate max-w-[80px]" title={`namespace: ${risk.namespace}`}>
+                          <StatusBadge color="gray" size="xs" className="flex-shrink-0 truncate max-w-[80px]" title={`namespace: ${risk.namespace}`}>
                             {risk.namespace}
-                          </span>
+                          </StatusBadge>
                         )}
                         {/* Cluster Badge */}
                         {risk.cluster && (

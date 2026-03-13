@@ -5,106 +5,22 @@ import { LOCAL_AGENT_WS_URL } from '../../../lib/constants'
 import { useDrillDownActions, useDrillDown } from '../../../hooks/useDrillDown'
 import { useCanI } from '../../../hooks/usePermissions'
 import { ClusterBadge } from '../../ui/ClusterBadge'
-import { FileText, Terminal, Zap, Code, Info, Tag, ChevronDown, ChevronUp, Loader2, Copy, Check, Box, Layers, Server, AlertTriangle, Pencil, Trash2, Plus, Save, X, RefreshCw, Stethoscope, Wrench, Sparkles } from 'lucide-react'
+import { FileText, Terminal, Zap, Code, Info, Tag, ChevronDown, ChevronUp, Loader2, Copy, Check, Box, Layers, Server, AlertTriangle, Pencil, Trash2, Plus, Save, X, RefreshCw, Stethoscope, Wrench, Sparkles, TerminalSquare } from 'lucide-react'
+import { PodExecTerminal } from '../../terminal/PodExecTerminal'
 import { cn } from '../../../lib/cn'
+import { Button } from '../../ui/Button'
 import { ConsoleAIIcon } from '../../ui/ConsoleAIIcon'
 import { useTranslation } from 'react-i18next'
+import { StatusBadge } from '../../ui/StatusBadge'
 import { UI_FEEDBACK_TIMEOUT_MS } from '../../../lib/constants/network'
+import {
+  getIssueSeverity,
+  UNHEALTHY_STATUSES, RAPID_REOPEN_THRESHOLD_MS,
+  getPodCache, setPodCache, cleanupPodCache,
+} from './pod-drilldown'
+import type { TabType, RelatedResource, CachedData } from './pod-drilldown'
 
-// Helper to determine issue severity for styling
-const getIssueSeverity = (issue: string): 'critical' | 'warning' | 'info' => {
-  const lowerIssue = issue.toLowerCase()
-
-  if (lowerIssue.includes('crashloopbackoff') ||
-      lowerIssue.includes('oomkilled') ||
-      lowerIssue.includes('oom') ||
-      lowerIssue.includes('imagepullbackoff') ||
-      lowerIssue.includes('errimagepull') ||
-      lowerIssue.includes('failed') ||
-      lowerIssue.includes('error') ||
-      lowerIssue.includes('evicted')) {
-    return 'critical'
-  }
-  if (lowerIssue.includes('pending') || lowerIssue.includes('waiting')) {
-    return 'warning'
-  }
-  if (lowerIssue.includes('creating') || lowerIssue.includes('running')) {
-    return 'info'
-  }
-
-  return 'warning'
-}
-
-interface Props {
-  data: Record<string, unknown>
-}
-
-type TabType = 'overview' | 'labels' | 'related' | 'describe' | 'logs' | 'events' | 'yaml'
-
-interface RelatedResource {
-  kind: string
-  name: string
-  namespace?: string
-}
-
-// Cache structure stored in view data
-interface CachedData {
-  describeOutput?: string
-  logsOutput?: string
-  eventsOutput?: string
-  yamlOutput?: string
-  podStatusOutput?: string
-  aiAnalysis?: string
-  labels?: Record<string, string>
-  annotations?: Record<string, string>
-  configMaps?: string[]
-  secrets?: string[]
-  pvcs?: string[]
-  serviceAccount?: string
-  ownerChain?: RelatedResource[]
-  fetchedAt?: number
-}
-
-// ============================================================================
-// Module-level pod data cache - persists when dialog is closed/reopened
-// ============================================================================
-interface PodCacheEntry extends CachedData {
-  lastOpened: number
-  openCount: number
-}
-
-// Cache key format: cluster/namespace/podName
-const podDataCache = new Map<string, PodCacheEntry>()
-
-// Consider opening again within this window as "looking for something new" (triggers auto-refresh)
-const RAPID_REOPEN_THRESHOLD_MS = 10000 // 10 seconds
-
-function getPodCacheKey(cluster: string, namespace: string, pod: string): string {
-  return `${cluster}/${namespace}/${pod}`
-}
-
-function getPodCache(cluster: string, namespace: string, pod: string): PodCacheEntry | undefined {
-  return podDataCache.get(getPodCacheKey(cluster, namespace, pod))
-}
-
-function setPodCache(cluster: string, namespace: string, pod: string, data: Partial<PodCacheEntry>) {
-  const key = getPodCacheKey(cluster, namespace, pod)
-  const existing = podDataCache.get(key) || { lastOpened: Date.now(), openCount: 0 }
-  podDataCache.set(key, { ...existing, ...data })
-}
-
-// Clean up old cache entries (older than 5 minutes)
-function cleanupPodCache() {
-  const maxAge = 5 * 60 * 1000 // 5 minutes
-  const now = Date.now()
-  for (const [key, entry] of podDataCache.entries()) {
-    if (now - entry.lastOpened > maxAge) {
-      podDataCache.delete(key)
-    }
-  }
-}
-
-export function PodDrillDown({ data }: Props) {
+export function PodDrillDown({ data }: { data: Record<string, unknown> }) {
   const { t } = useTranslation()
   const cluster = data.cluster as string
   const namespace = data.namespace as string
@@ -190,14 +106,6 @@ export function PodDrillDown({ data }: Props) {
   const passedLabels = data.labels as Record<string, string> | undefined
   const passedAnnotations = data.annotations as Record<string, string> | undefined
 
-  // Unhealthy statuses that should be flagged as issues
-  const UNHEALTHY_STATUSES = [
-    'Evicted', 'Failed', 'Error', 'CrashLoopBackOff', 'ImagePullBackOff',
-    'ErrImagePull', 'CreateContainerConfigError', 'InvalidImageName',
-    'OOMKilled', 'Terminating', 'Unknown', 'ContainerStatusUnknown',
-    'Pending', 'Init:Error', 'Init:CrashLoopBackOff', 'PodInitializing'
-  ]
-
   // Compute all issues including status-based ones
   const issues = useMemo(() => {
     const allIssues = [...passedIssues]
@@ -272,37 +180,41 @@ export function PodDrillDown({ data }: Props) {
       }
 
       ws.onmessage = (event) => {
-        const msg = JSON.parse(event.data)
-        if (msg.id === requestId && msg.payload?.output) {
-          setDescribeOutput(msg.payload.output)
-          // Parse labels and annotations from describe output if not already set
-          if (!labels || !annotations) {
-            const output = msg.payload.output as string
-            const labelsMatch = output.match(/Labels:\s*([\s\S]*?)(?=Annotations:|$)/i)
-            const annotationsMatch = output.match(/Annotations:\s*([\s\S]*?)(?=Status:|Controlled By:|$)/i)
+        try {
+          const msg = JSON.parse(event.data)
+          if (msg.id === requestId && msg.payload?.output) {
+            setDescribeOutput(msg.payload.output)
+            // Parse labels and annotations from describe output if not already set
+            if (!labels || !annotations) {
+              const output = msg.payload.output as string
+              const labelsMatch = output.match(/Labels:\s*([\s\S]*?)(?=Annotations:|$)/i)
+              const annotationsMatch = output.match(/Annotations:\s*([\s\S]*?)(?=Status:|Controlled By:|$)/i)
 
-            if (labelsMatch && !labels) {
-              const parsed: Record<string, string> = {}
-              labelsMatch[1].trim().split('\n').forEach(line => {
-                const [key, ...valueParts] = line.trim().split('=')
-                if (key && key !== '<none>') parsed[key] = valueParts.join('=')
-              })
-              if (Object.keys(parsed).length > 0) setLabels(parsed)
-            }
+              if (labelsMatch && !labels) {
+                const parsed: Record<string, string> = {}
+                labelsMatch[1].trim().split('\n').forEach(line => {
+                  const [key, ...valueParts] = line.trim().split('=')
+                  if (key && key !== '<none>') parsed[key] = valueParts.join('=')
+                })
+                if (Object.keys(parsed).length > 0) setLabels(parsed)
+              }
 
-            if (annotationsMatch && !annotations) {
-              const parsed: Record<string, string> = {}
-              annotationsMatch[1].trim().split('\n').forEach(line => {
-                const colonIdx = line.indexOf(':')
-                if (colonIdx > 0) {
-                  const key = line.substring(0, colonIdx).trim()
-                  const value = line.substring(colonIdx + 1).trim()
-                  if (key && key !== '<none>') parsed[key] = value
-                }
-              })
-              if (Object.keys(parsed).length > 0) setAnnotations(parsed)
+              if (annotationsMatch && !annotations) {
+                const parsed: Record<string, string> = {}
+                annotationsMatch[1].trim().split('\n').forEach(line => {
+                  const colonIdx = line.indexOf(':')
+                  if (colonIdx > 0) {
+                    const key = line.substring(0, colonIdx).trim()
+                    const value = line.substring(colonIdx + 1).trim()
+                    if (key && key !== '<none>') parsed[key] = value
+                  }
+                })
+                if (Object.keys(parsed).length > 0) setAnnotations(parsed)
+              }
             }
           }
+        } catch (e) {
+          console.error('Failed to parse WebSocket message:', e)
         }
         ws.close()
         setDescribeLoading(false)
@@ -335,9 +247,13 @@ export function PodDrillDown({ data }: Props) {
       }
 
       ws.onmessage = (event) => {
-        const msg = JSON.parse(event.data)
-        if (msg.id === requestId && msg.payload?.output) {
-          setLogsOutput(msg.payload.output)
+        try {
+          const msg = JSON.parse(event.data)
+          if (msg.id === requestId && msg.payload?.output) {
+            setLogsOutput(msg.payload.output)
+          }
+        } catch (e) {
+          console.error('Failed to parse WebSocket message:', e)
         }
         ws.close()
         setLogsLoading(false)
@@ -370,9 +286,13 @@ export function PodDrillDown({ data }: Props) {
       }
 
       ws.onmessage = (event) => {
-        const msg = JSON.parse(event.data)
-        if (msg.id === requestId && msg.payload?.output) {
-          setEventsOutput(msg.payload.output)
+        try {
+          const msg = JSON.parse(event.data)
+          if (msg.id === requestId && msg.payload?.output) {
+            setEventsOutput(msg.payload.output)
+          }
+        } catch (e) {
+          console.error('Failed to parse WebSocket message:', e)
         }
         ws.close()
         setEventsLoading(false)
@@ -413,9 +333,13 @@ export function PodDrillDown({ data }: Props) {
             }))
           }
           ws.onmessage = (event) => {
-            const msg = JSON.parse(event.data)
-            if (msg.id === requestId && msg.payload?.output) {
-              output = msg.payload.output
+            try {
+              const msg = JSON.parse(event.data)
+              if (msg.id === requestId && msg.payload?.output) {
+                output = msg.payload.output
+              }
+            } catch (e) {
+              console.error('Failed to parse WebSocket message:', e)
             }
             clearTimeout(timeout)
             ws.close()
@@ -548,15 +472,19 @@ Be specific and reference actual values from the data. Keep response to 3-4 sent
       }
 
       ws.onmessage = (event) => {
-        const msg = JSON.parse(event.data)
-        if (msg.id === requestId) {
-          if (msg.payload?.content) {
-            setAiAnalysis(msg.payload.content)
-          } else if (msg.payload?.error || msg.payload?.message) {
-            setAiAnalysis(`Analysis unavailable: ${msg.payload.error || msg.payload.message}`)
-          } else {
-            setAiAnalysis('Analysis complete - no specific issues identified.')
+        try {
+          const msg = JSON.parse(event.data)
+          if (msg.id === requestId) {
+            if (msg.payload?.content) {
+              setAiAnalysis(msg.payload.content)
+            } else if (msg.payload?.error || msg.payload?.message) {
+              setAiAnalysis(`Analysis unavailable: ${msg.payload.error || msg.payload.message}`)
+            } else {
+              setAiAnalysis('Analysis complete - no specific issues identified.')
+            }
           }
+        } catch (e) {
+          console.error('Failed to parse WebSocket message:', e)
         }
         ws.close()
         setAiAnalysisLoading(false)
@@ -591,9 +519,13 @@ Be specific and reference actual values from the data. Keep response to 3-4 sent
       }
 
       ws.onmessage = (event) => {
-        const msg = JSON.parse(event.data)
-        if (msg.id === requestId && msg.payload?.output) {
-          setPodStatusOutput(msg.payload.output)
+        try {
+          const msg = JSON.parse(event.data)
+          if (msg.id === requestId && msg.payload?.output) {
+            setPodStatusOutput(msg.payload.output)
+          }
+        } catch (e) {
+          console.error('Failed to parse WebSocket message:', e)
         }
         ws.close()
         setPodStatusLoading(false)
@@ -626,9 +558,13 @@ Be specific and reference actual values from the data. Keep response to 3-4 sent
       }
 
       ws.onmessage = (event) => {
-        const msg = JSON.parse(event.data)
-        if (msg.id === requestId && msg.payload?.output) {
-          setYamlOutput(msg.payload.output)
+        try {
+          const msg = JSON.parse(event.data)
+          if (msg.id === requestId && msg.payload?.output) {
+            setYamlOutput(msg.payload.output)
+          }
+        } catch (e) {
+          console.error('Failed to parse WebSocket message:', e)
         }
         ws.close()
         setYamlLoading(false)
@@ -780,14 +716,18 @@ Please proceed step by step and ask for confirmation before making any changes.`
       }
 
       ws.onmessage = (event) => {
-        const msg = JSON.parse(event.data)
-        if (msg.id === requestId) {
-          if (msg.type === 'error' || msg.payload?.exitCode !== 0) {
-            setDeleteError(msg.payload?.error || 'Failed to delete pod')
-          } else {
-            // Success - close the drill down
-            closeDrillDown()
+        try {
+          const msg = JSON.parse(event.data)
+          if (msg.id === requestId) {
+            if (msg.type === 'error' || msg.payload?.exitCode !== 0) {
+              setDeleteError(msg.payload?.error || 'Failed to delete pod')
+            } else {
+              // Success - close the drill down
+              closeDrillDown()
+            }
           }
+        } catch (e) {
+          console.error('Failed to parse WebSocket message:', e)
         }
         ws.close()
         setDeletingPod(false)
@@ -835,15 +775,22 @@ Please proceed step by step and ask for confirmation before making any changes.`
             }))
           }
           ws.onmessage = (event) => {
-            const msg = JSON.parse(event.data)
-            if (msg.id === requestId) {
+            try {
+              const msg = JSON.parse(event.data)
+              if (msg.id === requestId) {
+                clearTimeout(timeout)
+                ws.close()
+                if (msg.payload?.exitCode === 0 || msg.payload?.output) {
+                  resolve({ success: true })
+                } else {
+                  resolve({ success: false, error: msg.payload?.error || 'Unknown error' })
+                }
+              }
+            } catch (e) {
+              console.error('Failed to parse WebSocket message:', e)
               clearTimeout(timeout)
               ws.close()
-              if (msg.payload?.exitCode === 0 || msg.payload?.output) {
-                resolve({ success: true })
-              } else {
-                resolve({ success: false, error: msg.payload?.error || 'Unknown error' })
-              }
+              resolve({ success: false, error: 'Failed to parse response' })
             }
           }
           ws.onerror = () => {
@@ -962,15 +909,22 @@ Please proceed step by step and ask for confirmation before making any changes.`
             }))
           }
           ws.onmessage = (event) => {
-            const msg = JSON.parse(event.data)
-            if (msg.id === requestId) {
+            try {
+              const msg = JSON.parse(event.data)
+              if (msg.id === requestId) {
+                clearTimeout(timeout)
+                ws.close()
+                if (msg.payload?.exitCode === 0 || msg.payload?.output) {
+                  resolve({ success: true })
+                } else {
+                  resolve({ success: false, error: msg.payload?.error || 'Unknown error' })
+                }
+              }
+            } catch (e) {
+              console.error('Failed to parse WebSocket message:', e)
               clearTimeout(timeout)
               ws.close()
-              if (msg.payload?.exitCode === 0 || msg.payload?.output) {
-                resolve({ success: true })
-              } else {
-                resolve({ success: false, error: msg.payload?.error || 'Unknown error' })
-              }
+              resolve({ success: false, error: 'Failed to parse response' })
             }
           }
           ws.onerror = () => {
@@ -1089,9 +1043,13 @@ Please proceed step by step and ask for confirmation before making any changes.`
             }))
           }
           ws.onmessage = (event) => {
-            const msg = JSON.parse(event.data)
-            if (msg.id === requestId && msg.payload?.output) {
-              output = msg.payload.output
+            try {
+              const msg = JSON.parse(event.data)
+              if (msg.id === requestId && msg.payload?.output) {
+                output = msg.payload.output
+              }
+            } catch (e) {
+              console.error('Failed to parse WebSocket message:', e)
             }
             clearTimeout(timeout)
             ws.close()
@@ -1204,9 +1162,41 @@ Please proceed step by step and ask for confirmation before making any changes.`
     { id: 'related', label: t('drilldown.tabs.related'), icon: Layers },
     { id: 'describe', label: t('drilldown.tabs.describe'), icon: FileText },
     { id: 'logs', label: t('drilldown.tabs.logs'), icon: Terminal },
+    { id: 'exec', label: 'Exec', icon: TerminalSquare },
     { id: 'events', label: t('drilldown.tabs.events'), icon: Zap },
     { id: 'yaml', label: t('drilldown.tabs.yaml'), icon: Code },
   ]
+
+  // Extract container names from YAML output for exec tab
+  const containerNames = useMemo(() => {
+    if (!yamlOutput) return []
+    const names: string[] = []
+    // In kubectl YAML, container objects live under "  containers:" or "  initContainers:"
+    // and have "    name: <value>" (4-space indent, no dash prefix).
+    // Env vars/volumes use "    - name:" (with dash) — we must NOT match those.
+    const lines = yamlOutput.split('\n')
+    let inContainerSection = false
+    for (const line of lines) {
+      if (/^ {2}(?:init)?containers:\s*$/.test(line)) {
+        inContainerSection = true
+        continue
+      }
+      // Exit section at next spec-level key (2-space indent, not a list item)
+      if (inContainerSection && /^ {2}[a-z]/.test(line)) {
+        inContainerSection = false
+      }
+      if (inContainerSection) {
+        const match = line.match(/^ {4}name:\s+(.+)$/)
+        if (match) {
+          const name = match[1].trim()
+          if (name && !names.includes(name)) {
+            names.push(name)
+          }
+        }
+      }
+    }
+    return names
+  }, [yamlOutput])
 
   const labelEntries = Object.entries(labels || {})
   const annotationEntries = Object.entries(annotations || {})
@@ -1226,7 +1216,7 @@ Please proceed step by step and ask for confirmation before making any changes.`
               <Layers className="w-4 h-4 text-purple-400" />
               <span className="text-muted-foreground">{t('drilldown.fields.namespace')}</span>
               <span className="font-mono text-purple-400 group-hover:text-purple-300 transition-colors">{namespace}</span>
-              <svg className="w-3 h-3 text-purple-400/50 group-hover:text-purple-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-3 h-3 text-purple-400/70 group-hover:text-purple-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </button>
@@ -1237,7 +1227,7 @@ Please proceed step by step and ask for confirmation before making any changes.`
               <Server className="w-4 h-4 text-blue-400" />
               <span className="text-muted-foreground">{t('drilldown.fields.cluster')}</span>
               <ClusterBadge cluster={cluster.split('/').pop() || cluster} size="sm" />
-              <svg className="w-3 h-3 text-blue-400/50 group-hover:text-blue-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-3 h-3 text-blue-400/70 group-hover:text-blue-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </button>
@@ -1357,7 +1347,7 @@ Please proceed step by step and ask for confirmation before making any changes.`
             <div>
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                  <Zap className="w-4 h-4 text-amber-400" />
+                  <Zap className="w-4 h-4 text-yellow-400" />
                   {t('drilldown.tabs.recentEvents')}
                 </h3>
                 <button
@@ -1514,13 +1504,14 @@ Please proceed step by step and ask for confirmation before making any changes.`
                         )}
                         {t('drilldown.actions.saveChanges')}
                       </button>
-                      <button
+                      <Button
+                        variant="secondary"
+                        size="sm"
                         onClick={cancelLabelEdit}
                         disabled={labelSaving}
-                        className="px-3 py-1.5 rounded-lg bg-secondary text-foreground text-sm hover:bg-secondary/80 disabled:opacity-50"
                       >
                         {t('common.cancel')}
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 ) : labelEntries.length > 0 ? (
@@ -1690,13 +1681,14 @@ Please proceed step by step and ask for confirmation before making any changes.`
                         )}
                         {t('drilldown.actions.saveChanges')}
                       </button>
-                      <button
+                      <Button
+                        variant="secondary"
+                        size="sm"
                         onClick={cancelAnnotationEdit}
                         disabled={annotationSaving}
-                        className="px-3 py-1.5 rounded-lg bg-secondary text-foreground text-sm hover:bg-secondary/80 disabled:opacity-50"
                       >
                         {t('common.cancel')}
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 ) : annotationEntries.length > 0 ? (
@@ -1835,7 +1827,7 @@ Please proceed step by step and ask for confirmation before making any changes.`
                       <Box className="w-4 h-4" />
                       <span className="text-xs text-cyan-300">{t('common.pod')}</span>
                       <span className="font-semibold">{podName}</span>
-                      <span className="text-xs px-1.5 py-0.5 rounded bg-cyan-500/30 text-cyan-300">current</span>
+                      <StatusBadge color="cyan">current</StatusBadge>
                     </div>
                   </div>
                 </div>
@@ -1880,7 +1872,7 @@ Please proceed step by step and ask for confirmation before making any changes.`
                     children.push({
                       type: 'PVCs',
                       items: pvcs,
-                      color: 'emerald',
+                      color: 'green',
                       icon: (
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
@@ -2006,7 +1998,7 @@ Please proceed step by step and ask for confirmation before making any changes.`
                       <Box className="w-4 h-4" />
                       <span className="text-xs text-cyan-300">{t('common.pod')}</span>
                       <span className="font-semibold">{podName}</span>
-                      <span className="text-xs px-1.5 py-0.5 rounded bg-cyan-500/30 text-cyan-300">current</span>
+                      <StatusBadge color="cyan">current</StatusBadge>
                     </div>
                     <p className="text-muted-foreground text-sm mt-3">{t('drilldown.empty.noRelatedResourcesDiscovered')}</p>
                   </div>
@@ -2016,13 +2008,14 @@ Please proceed step by step and ask for confirmation before making any changes.`
               {/* Refresh button */}
               {agentConnected && (
                 <div className="pt-4 border-t border-border mt-4">
-                  <button
+                  <Button
+                    variant="secondary"
+                    size="sm"
                     onClick={() => fetchRelatedResources(true)}
-                    className="px-3 py-1.5 rounded-lg bg-secondary text-foreground text-sm hover:bg-secondary/80 flex items-center gap-2"
+                    icon={<Loader2 className={cn('w-4 h-4', relatedLoading && 'animate-spin')} />}
                   >
-                    <Loader2 className={cn('w-4 h-4', relatedLoading && 'animate-spin')} />
                     Refresh
-                  </button>
+                  </Button>
                 </div>
               )}
 
@@ -2134,6 +2127,18 @@ Please proceed step by step and ask for confirmation before making any changes.`
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {activeTab === 'exec' && (
+        <div className="h-[500px] rounded-lg overflow-hidden border border-border">
+          <PodExecTerminal
+            cluster={cluster}
+            namespace={namespace}
+            pod={podName}
+            containers={containerNames}
+            defaultContainer={containerNames[0]}
+          />
         </div>
       )}
 
@@ -2250,13 +2255,13 @@ Please proceed step by step and ask for confirmation before making any changes.`
           {/* AI Analysis Results - visible on all tabs */}
           {(aiAnalysis || aiAnalysisLoading) && (
             <div className="p-4 pb-0">
-              <div className="rounded-lg bg-gradient-to-br from-purple-500/10 via-indigo-500/10 to-cyan-500/10 border border-purple-500/30 overflow-hidden">
+              <div className="rounded-lg bg-gradient-to-br from-purple-500/10 via-blue-500/10 to-cyan-500/10 border border-purple-500/30 overflow-hidden">
                 {aiAnalysisLoading ? (
                   <div className="p-4">
                     <div className="flex items-center gap-3 text-sm text-muted-foreground">
                       <div className="flex gap-1">
                         <span className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                        <span className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                        <span className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
                         <span className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                       </div>
                       <span className="font-mono text-xs">Analyzing pod status, events, logs, owner resources...</span>

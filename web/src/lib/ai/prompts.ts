@@ -72,7 +72,7 @@ Available in scope (DO NOT import these — they are globally available):
 - commonComparators (sorting utilities)
 - Skeleton (loading placeholder component)
 - Pagination (pagination component: <Pagination currentPage totalPages totalItems itemsPerPage onPageChange />)
-- All lucide-react icons (e.g. Server, Database, CheckCircle2, AlertTriangle, Activity, Cpu, etc.)
+- Common lucide-react icons (e.g. Server, Database, CheckCircle2, AlertTriangle, Activity, Cpu, etc.)
 
 RULES:
 - Export a default function component: export default function MyCard({ config }) { ... }
@@ -126,7 +126,7 @@ export const CODE_INLINE_ASSIST_PROMPT = `You are an assistant that generates TS
 
 The user will describe what they want. Generate a default-exported React component.
 
-Available in scope (DO NOT import): React, useState, useEffect, useMemo, useCallback, useRef, cn, useCardData, Skeleton, Pagination, all lucide-react icons.
+Available in scope (DO NOT import): React, useState, useEffect, useMemo, useCallback, useRef, cn, useCardData, Skeleton, Pagination, common lucide-react icons.
 
 Return a JSON object:
 {
@@ -154,7 +154,7 @@ The user will describe what stat blocks they want. Respond with a JSON object:
     {
       "label": "string",
       "icon": "PascalCase lucide icon name",
-      "color": "purple" | "blue" | "green" | "yellow" | "orange" | "red" | "cyan" | "gray" | "indigo",
+      "color": "purple" | "blue" | "green" | "yellow" | "orange" | "red" | "cyan" | "gray",
       "field": "camelCase field name",
       "format": "" | "number" | "percent" | "bytes",
       "tooltip": "string"
@@ -179,7 +179,7 @@ The user will describe the stat blocks they want. You must generate a valid JSON
       "id": "string - unique block ID (lowercase_underscores)",
       "label": "string - display label",
       "icon": "string - lucide-react icon name (PascalCase)",
-      "color": "purple" | "blue" | "green" | "yellow" | "orange" | "red" | "cyan" | "gray" | "indigo",
+      "color": "purple" | "blue" | "green" | "yellow" | "orange" | "red" | "cyan" | "gray",
       "field": "string - data field name (camelCase)",
       "format": "" | "number" | "percent" | "bytes" | "currency" | "duration",
       "tooltip": "string - tooltip text"
@@ -193,7 +193,7 @@ AlertTriangle, Activity, BarChart3, Layers, Box, Shield, Lock, Globe, Cloud,
 GitBranch, Terminal, Code, Wifi, WifiOff, Clock, Users, Gauge, TrendingUp,
 TrendingDown, ArrowUpRight, Flame, Heart, Eye, FileText, Settings, Package
 
-AVAILABLE COLORS: purple, blue, green, yellow, orange, red, cyan, gray, indigo
+AVAILABLE COLORS: purple, blue, green, yellow, orange, red, cyan, gray
 
 FORMAT OPTIONS:
 - "" (empty string): raw value, no formatting

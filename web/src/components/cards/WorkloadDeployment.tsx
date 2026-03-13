@@ -172,7 +172,7 @@ const StatusIcon = ({ status }: { status: WorkloadStatus }) => {
     case 'Failed':
       return <XCircle className="h-4 w-4 text-red-500" />
     default:
-      return <Gauge className="h-4 w-4 text-gray-400" />
+      return <Gauge className="h-4 w-4 text-muted-foreground" />
   }
 }
 
@@ -188,7 +188,7 @@ const TypeIcon = ({ type }: { type: WorkloadType }) => {
     case 'CronJob':
       return <Server className="h-4 w-4 text-green-500" />
     default:
-      return <Box className="h-4 w-4 text-gray-400" />
+      return <Box className="h-4 w-4 text-muted-foreground" />
   }
 }
 
@@ -197,7 +197,7 @@ const statusColors: Record<WorkloadStatus, string> = {
   Degraded: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
   Pending: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
   Failed: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
-  Unknown: 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400',
+  Unknown: 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-muted-foreground',
 }
 
 // Draggable workload item component
@@ -243,13 +243,13 @@ function DraggableWorkloadItem({ workload, isSelected, onSelect }: DraggableWork
         'p-3 transition-colors cursor-grab active:cursor-grabbing',
         isDragging
           ? 'bg-blue-100 dark:bg-blue-900/40 shadow-lg rounded-lg opacity-90'
-          : 'hover:bg-gray-50 dark:hover:bg-gray-800/50',
+          : 'hover:bg-gray-50 dark:hover:bg-secondary/50',
         isSelected && !isDragging && 'bg-blue-50 dark:bg-blue-900/20'
       )}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-start gap-2 min-w-0">
-          <GripVertical className="h-4 w-4 text-gray-400 shrink-0 mt-0.5" />
+          <GripVertical className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
           <TypeIcon type={workload.type} />
           <div 
             className="min-w-0" 
@@ -260,30 +260,30 @@ function DraggableWorkloadItem({ workload, isSelected, onSelect }: DraggableWork
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect() } }}
           >
             <div className="flex items-center gap-2 cursor-pointer">
-              <span className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">
+              <span className="font-medium text-sm text-gray-900 dark:text-foreground truncate">
                 {workload.name}
               </span>
               <span className={`text-xs px-1.5 py-0.5 rounded ${statusColors[workload.status]}`}>
                 {workload.status}
               </span>
             </div>
-            <div className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1 mt-0.5">
+            <div className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
               <span className="truncate">{workload.namespace}</span>
-              <span className="text-gray-300 dark:text-gray-600">|</span>
+              <span className="text-muted-foreground">|</span>
               <span>{workload.type}</span>
             </div>
           </div>
         </div>
         <div className="flex items-center gap-1.5 text-xs shrink-0">
           <StatusIcon status={workload.status} />
-          <span className="text-gray-600 dark:text-gray-400">
+          <span className="text-muted-foreground">
             {workload.readyReplicas}/{workload.replicas}
           </span>
         </div>
       </div>
 
       {/* Image */}
-      <div className="mt-1.5 ml-10 text-xs text-gray-500 dark:text-gray-400 truncate font-mono">
+      <div className="mt-1.5 ml-10 text-xs text-muted-foreground truncate font-mono">
         {workload.image}
       </div>
 
@@ -292,11 +292,11 @@ function DraggableWorkloadItem({ workload, isSelected, onSelect }: DraggableWork
         {workload.deployments.map((d) => (
           <div
             key={d.cluster}
-            className="flex items-center gap-1 text-xs bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded"
+            className="flex items-center gap-1 text-xs bg-gray-100 dark:bg-muted px-1.5 py-0.5 rounded"
           >
             <StatusIcon status={d.status} />
             <ClusterBadge cluster={d.cluster} size="sm" />
-            <span className="text-gray-500 dark:text-gray-400">
+            <span className="text-muted-foreground">
               {d.readyReplicas}/{d.replicas}
             </span>
           </div>
@@ -305,9 +305,9 @@ function DraggableWorkloadItem({ workload, isSelected, onSelect }: DraggableWork
 
       {/* Expanded details */}
       {isSelected && !isDragging && (
-        <div className="mt-3 pt-3 ml-10 border-t border-gray-200 dark:border-gray-600 space-y-2">
+        <div className="mt-3 pt-3 ml-10 border-t border-gray-200 dark:border-border space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-gray-500 dark:text-gray-400">Target Clusters</span>
+            <span className="text-xs text-muted-foreground">Target Clusters</span>
             <div className="flex gap-1">
               {workload.targetClusters.map((c) => (
                 <ClusterBadge key={c} cluster={c} size="sm" />
@@ -315,12 +315,12 @@ function DraggableWorkloadItem({ workload, isSelected, onSelect }: DraggableWork
             </div>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-xs text-gray-500 dark:text-gray-400">{t('common.labels')}</span>
+            <span className="text-xs text-muted-foreground">{t('common.labels')}</span>
             <div className="flex gap-1 flex-wrap justify-end">
               {Object.entries(workload.labels).map(([k, v]) => (
                 <span
                   key={k}
-                  className="text-xs bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded font-mono"
+                  className="text-xs bg-gray-100 dark:bg-muted px-1.5 py-0.5 rounded font-mono"
                 >
                   {k}={v}
                 </span>
@@ -337,7 +337,7 @@ function DraggableWorkloadItem({ workload, isSelected, onSelect }: DraggableWork
               Deploy to Cluster
             </button>
           </div>
-          <p className="text-xs text-gray-400 italic">
+          <p className="text-xs text-muted-foreground italic">
             Tip: Drag workload to deploy to additional clusters
           </p>
         </div>
@@ -550,6 +550,8 @@ export function WorkloadDeployment(_props: WorkloadDeploymentProps) {
       sortDirection,
       setSortDirection,
     },
+    containerRef,
+    containerStyle,
   } = useCardData<Workload, SortByOption>(preFiltered, {
     filter: {
       searchFields: ['name', 'namespace', 'image'] as (keyof Workload)[],
@@ -636,40 +638,40 @@ export function WorkloadDeployment(_props: WorkloadDeploymentProps) {
       </div>
 
       {/* Stats bar */}
-      <div className="grid grid-cols-6 gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
+      <div className="grid grid-cols-6 gap-2 px-3 py-2 bg-gray-50 dark:bg-secondary/50 border-b border-gray-200 dark:border-border">
         <div className="text-center">
-          <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">{stats.totalWorkloads}</div>
-          <div className="text-xs text-gray-500">{t('common.total')}</div>
+          <div className="text-lg font-semibold text-gray-900 dark:text-foreground">{stats.totalWorkloads}</div>
+          <div className="text-xs text-muted-foreground">{t('common.total')}</div>
         </div>
         <div className="text-center">
           <div className="text-lg font-semibold text-purple-500">{stats.uniqueWorkloads}</div>
-          <div className="text-xs text-gray-500">Unique</div>
+          <div className="text-xs text-muted-foreground">Unique</div>
         </div>
         <div className="text-center">
           <div className="text-lg font-semibold text-green-600">{stats.runningCount}</div>
-          <div className="text-xs text-gray-500">{t('common.running')}</div>
+          <div className="text-xs text-muted-foreground">{t('common.running')}</div>
         </div>
         <div className="text-center">
           <div className="text-lg font-semibold text-yellow-600">{stats.degradedCount}</div>
-          <div className="text-xs text-gray-500">{t('common.degraded')}</div>
+          <div className="text-xs text-muted-foreground">{t('common.degraded')}</div>
         </div>
         <div className="text-center">
           <div className="text-lg font-semibold text-blue-600">{stats.pendingCount}</div>
-          <div className="text-xs text-gray-500">{t('common.pending')}</div>
+          <div className="text-xs text-muted-foreground">{t('common.pending')}</div>
         </div>
         <div className="text-center">
           <div className="text-lg font-semibold text-red-600">{stats.failedCount}</div>
-          <div className="text-xs text-gray-500">{t('common.failed')}</div>
+          <div className="text-xs text-muted-foreground">{t('common.failed')}</div>
         </div>
       </div>
 
       {/* Type/Status Filters */}
-      <div className="px-3 py-2 border-b border-gray-200 dark:border-gray-700">
+      <div className="px-3 py-2 border-b border-gray-200 dark:border-border">
         <div className="flex gap-2 flex-wrap">
           <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value as WorkloadType | 'All')}
-            className="text-xs px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+            className="text-xs px-2 py-1 border border-gray-300 dark:border-border rounded bg-white dark:bg-secondary text-gray-900 dark:text-foreground"
           >
             {workloadTypes.map((t) => (
               <option key={t} value={t}>
@@ -680,7 +682,7 @@ export function WorkloadDeployment(_props: WorkloadDeploymentProps) {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as WorkloadStatus | 'All')}
-            className="text-xs px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+            className="text-xs px-2 py-1 border border-gray-300 dark:border-border rounded bg-white dark:bg-secondary text-gray-900 dark:text-foreground"
           >
             {workloadStatuses.map((s) => (
               <option key={s} value={s}>
@@ -688,21 +690,21 @@ export function WorkloadDeployment(_props: WorkloadDeploymentProps) {
               </option>
             ))}
           </select>
-          <span className="ml-auto text-[10px] text-muted-foreground italic">
+          <span className="ml-auto text-2xs text-muted-foreground italic">
             Drag onto Cluster Groups to deploy
           </span>
         </div>
       </div>
 
       {/* Workload list */}
-      <div className="flex-1 overflow-auto">
+      <div ref={containerRef} className="flex-1 overflow-auto" style={containerStyle}>
         {filteredWorkloads.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400 p-4">
+          <div className="flex flex-col items-center justify-center h-full text-muted-foreground p-4">
             <Box className="h-8 w-8 mb-2 opacity-50" />
             <p className="text-sm">No workloads found</p>
           </div>
         ) : (
-          <div className="divide-y divide-gray-100 dark:divide-gray-700">
+          <div className="divide-y divide-gray-100 dark:divide-border">
             {filteredWorkloads.map((workload) => (
               <DraggableWorkloadItem
                 key={`${workload.namespace}/${workload.name}`}

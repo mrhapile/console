@@ -33,6 +33,10 @@ interface SecurityReport {
   }
 }
 
+const IS_CI = !!process.env.CI
+const CI_TIMEOUT_MULTIPLIER = 2
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5174'
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -131,7 +135,8 @@ async function setupAuth(page: Page) {
 test.describe.configure({ mode: 'serial' })
 
 test('security compliance — frontend security audit', async ({ page }, testInfo) => {
-  testInfo.setTimeout(120_000) // multi-page navigation + auth bypass check needs extra time
+  const SECURITY_AUDIT_TIMEOUT_MS = 120_000 // multi-page navigation + auth bypass check
+  testInfo.setTimeout(IS_CI ? SECURITY_AUDIT_TIMEOUT_MS * CI_TIMEOUT_MULTIPLIER : SECURITY_AUDIT_TIMEOUT_MS)
   const checks: SecurityCheck[] = []
 
   function addCheck(
@@ -698,7 +703,7 @@ test('security compliance — frontend security audit', async ({ page }, testInf
 
   const additionalPages = ['/clusters', '/settings']
   for (const pagePath of additionalPages) {
-    await page.goto(`http://localhost:5174${pagePath}`, { waitUntil: 'domcontentloaded' })
+    await page.goto(`${BASE_URL}${pagePath}`, { waitUntil: 'domcontentloaded' })
     await page.waitForTimeout(2000)
 
     const pageSecurityCheck = await page.evaluate((route: string) => {
@@ -742,7 +747,7 @@ test('security compliance — frontend security audit', async ({ page }, testInf
   }
 
   // Navigate back to main dashboard for remaining checks
-  await page.goto('http://localhost:5174/', { waitUntil: 'domcontentloaded' })
+  await page.goto(`${BASE_URL}/`, { waitUntil: 'domcontentloaded' })
   await page.waitForTimeout(1000)
 
   // ══════════════════════════════════════════════════════════════════════
@@ -759,7 +764,7 @@ test('security compliance — frontend security audit', async ({ page }, testInf
   })
 
   try {
-    await noAuthPage.goto('http://localhost:5174/clusters', { waitUntil: 'domcontentloaded', timeout: 10000 })
+    await noAuthPage.goto(`${BASE_URL}/clusters`, { waitUntil: 'domcontentloaded', timeout: IS_CI ? 20_000 : 10_000 })
     await noAuthPage.waitForTimeout(2000)
 
     // Check if protected content is visible

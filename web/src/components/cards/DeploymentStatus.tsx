@@ -147,6 +147,8 @@ export function DeploymentStatus() {
       sortDirection,
       setSortDirection,
     },
+    containerRef,
+    containerStyle,
   } = useCardData<Deployment, SortByOption>(statusPreFiltered, {
     filter: {
       searchFields: ['name', 'namespace', 'cluster'] as (keyof Deployment)[],
@@ -280,7 +282,7 @@ export function DeploymentStatus() {
               >
                 {statusStyle && <statusStyle.icon className={`w-3 h-3 ${isActive ? statusStyle.color : ''}`} />}
                 <span className="capitalize">{status}</span>
-                <span className={`px-1 rounded text-[10px] ${isActive ? 'bg-purple-500/30' : 'bg-secondary'}`}>
+                <span className={`px-1 rounded text-2xs ${isActive ? 'bg-purple-500/30' : 'bg-secondary'}`}>
                   {count}
                 </span>
               </button>
@@ -290,7 +292,7 @@ export function DeploymentStatus() {
       </div>
 
       {/* Deployments list */}
-      <div className="flex-1 space-y-2 overflow-y-auto min-h-card-content">
+      <div ref={containerRef} className="flex-1 space-y-2 overflow-y-auto min-h-card-content" style={containerStyle}>
         {paginatedDeployments.length === 0 ? (
           <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
             No deployments match the current filters

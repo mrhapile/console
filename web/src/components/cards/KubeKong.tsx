@@ -4,6 +4,7 @@ import { CardComponentProps } from './cardRegistry'
 import { useCardExpanded } from './CardWrapper'
 import { useReportCardDataState } from './CardDataContext'
 import { useTranslation } from 'react-i18next'
+import { emitGameStarted, emitGameEnded } from '../../lib/analytics'
 
 // Game constants
 const CANVAS_WIDTH = 280
@@ -11,7 +12,7 @@ const CANVAS_HEIGHT = 320
 const GRAVITY = 0.4
 const JUMP_FORCE = -8
 const MOVE_SPEED = 2
-const BARREL_SPEED = 1.5
+const BARREL_SPEED = 2.5
 const PLAYER_WIDTH = 16
 const PLAYER_HEIGHT = 24
 const BARREL_SIZE = 14
@@ -90,7 +91,7 @@ function getPlatformY(platform: Platform, x: number): number {
 
 export function KubeKong(_props: CardComponentProps) {
   const { t: _t } = useTranslation()
-  useReportCardDataState({ hasData: true, isFailed: false, consecutiveFailures: 0 })
+  useReportCardDataState({ hasData: true, isFailed: false, consecutiveFailures: 0, isDemoData: false })
   const { isExpanded } = useCardExpanded()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const gameLoopRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -474,6 +475,7 @@ export function KubeKong(_props: CardComponentProps) {
             if (l <= 1) {
               setGameOver(true)
               setIsPlaying(false)
+              setScore(s => { emitGameEnded('kube_kong', 'loss', s); return s })
               return 0
             }
             return l - 1
@@ -486,7 +488,11 @@ export function KubeKong(_props: CardComponentProps) {
           setWon(true)
           setGameOver(true)
           setIsPlaying(false)
-          setScore(s => s + 1000 + lives * 500)
+          setScore(s => {
+            const finalScore = s + 1000 + lives * 500
+            emitGameEnded('kube_kong', 'win', finalScore)
+            return finalScore
+          })
         }
 
         return { ...p, x: newX, y: newY, vy: newVy, onGround, climbing, facingRight }
@@ -494,7 +500,7 @@ export function KubeKong(_props: CardComponentProps) {
 
       // Spawn barrels from Kong
       barrelSpawnCounter++
-      const spawnRate = Math.max(60, 150 - level * 20)
+      const spawnRate = Math.max(40, 120 - level * 15)
       if (barrelSpawnCounter >= spawnRate) {
         barrelSpawnCounter = 0
         setBossFrame(1)
@@ -588,6 +594,7 @@ export function KubeKong(_props: CardComponentProps) {
               if (l <= 1) {
                 setGameOver(true)
                 setIsPlaying(false)
+                setScore(s => { emitGameEnded('kube_kong', 'loss', s); return s })
                 return 0
               }
               return l - 1
@@ -665,6 +672,7 @@ export function KubeKong(_props: CardComponentProps) {
     setWon(false)
     setBossFrame(0)
     setIsPlaying(true)
+    emitGameStarted('kube_kong')
   }, [])
 
   const scale = isExpanded ? 1.5 : 1

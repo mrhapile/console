@@ -8,6 +8,13 @@ import { formatLastSeen } from '../../lib/errorClassifier'
 // Must match animation duration (1s) defined in index.css for animate-spin-min
 const MIN_SPIN_DURATION = 1000
 
+/** Milliseconds per minute, used for relative-time formatting */
+const MS_PER_MINUTE = 60_000
+/** Milliseconds per hour, used for relative-time formatting */
+const MS_PER_HOUR = 3_600_000
+/** Milliseconds per day, used for relative-time formatting */
+const MS_PER_DAY = 86_400_000
+
 interface RefreshIndicatorProps {
   isRefreshing: boolean
   lastUpdated?: Date | null
@@ -62,7 +69,7 @@ export function RefreshIndicator({
     (Date.now() - lastUpdated.getTime()) > staleThresholdMinutes * 60 * 1000
 
   const iconSize = size === 'xs' ? 'w-2.5 h-2.5' : size === 'sm' ? 'w-3 h-3' : 'w-4 h-4'
-  const textSize = size === 'xs' ? 'text-[9px]' : size === 'sm' ? 'text-[10px]' : 'text-xs'
+  const textSize = size === 'xs' ? 'text-[9px]' : size === 'sm' ? 'text-2xs' : 'text-xs'
 
   const tooltip = lastUpdated
     ? `Last updated: ${lastUpdated.toLocaleTimeString()}`
@@ -91,7 +98,7 @@ export function RefreshIndicator({
     <span
       className={cn(
         'inline-flex items-center gap-0.5',
-        isStale ? 'text-amber-400' : 'text-muted-foreground',
+        isStale ? 'text-yellow-400' : 'text-muted-foreground',
         textSize,
         className
       )}
@@ -128,16 +135,16 @@ function formatLastRefreshTime(value: Date | number | null | undefined): string 
   const now = Date.now()
   const diff = now - timestamp
 
-  if (diff < 60000) {
+  if (diff < MS_PER_MINUTE) {
     return 'Just now'
-  } else if (diff < 3600000) {
-    const minutes = Math.floor(diff / 60000)
+  } else if (diff < MS_PER_HOUR) {
+    const minutes = Math.floor(diff / MS_PER_MINUTE)
     return `${minutes}m ago`
-  } else if (diff < 86400000) {
-    const hours = Math.floor(diff / 3600000)
+  } else if (diff < MS_PER_DAY) {
+    const hours = Math.floor(diff / MS_PER_HOUR)
     return `${hours}h ago`
   } else {
-    const days = Math.floor(diff / 86400000)
+    const days = Math.floor(diff / MS_PER_DAY)
     return `${days}d ago`
   }
 }

@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react'
 import { CheckCircle, AlertTriangle, XCircle, Clock, ChevronRight, Server } from 'lucide-react'
-import { useClusters, useHelmReleases } from '../../hooks/useMCP'
+import { useClusters } from '../../hooks/useMCP'
+import { useCachedHelmReleases } from '../../hooks/useCachedData'
 import { useDrillDownActions } from '../../hooks/useDrillDown'
-import { useDemoMode } from '../../hooks/useDemoMode'
 import { Skeleton } from '../ui/Skeleton'
 import { ClusterBadge } from '../ui/ClusterBadge'
 import {
@@ -50,7 +50,6 @@ export function HelmReleaseStatus({ config }: HelmReleaseStatusProps) {
   )
   const { isLoading: clustersLoading } = useClusters()
   const { drillToHelm } = useDrillDownActions()
-  const { isDemoMode: demoMode } = useDemoMode()
 
   const [selectedNamespace, setSelectedNamespace] = useState<string>(config?.namespace || '')
 
@@ -60,7 +59,8 @@ export function HelmReleaseStatus({ config }: HelmReleaseStatusProps) {
     isLoading: releasesLoading,
     isFailed,
     consecutiveFailures,
-  } = useHelmReleases()
+    isDemoFallback: isDemoData,
+  } = useCachedHelmReleases()
 
   // Report loading state to CardWrapper for skeleton/refresh behavior
   const { showSkeleton, showEmptyState } = useCardLoadingState({
@@ -68,7 +68,7 @@ export function HelmReleaseStatus({ config }: HelmReleaseStatusProps) {
     hasAnyData: allHelmReleases.length > 0,
     isFailed,
     consecutiveFailures,
-    isDemoData: demoMode,
+    isDemoData,
   })
 
   // Transform API data to display format
@@ -134,6 +134,8 @@ export function HelmReleaseStatus({ config }: HelmReleaseStatusProps) {
       sortDirection,
       setSortDirection,
     },
+    containerRef,
+    containerStyle,
   } = useCardData<HelmReleaseDisplay, SortByOption>(namespacedReleases, {
     filter: {
       searchFields: ['name', 'namespace', 'chart', 'version'] as (keyof HelmReleaseDisplay)[],
@@ -309,7 +311,7 @@ export function HelmReleaseStatus({ config }: HelmReleaseStatusProps) {
           </div>
 
           {/* Releases list */}
-          <div className="flex-1 space-y-2 overflow-y-auto">
+          <div ref={containerRef} className="flex-1 space-y-2 overflow-y-auto" style={containerStyle}>
             {releases.map((release, idx) => {
               const StatusIcon = getStatusIcon(release.status)
               const color = getStatusColor(release.status)

@@ -5,6 +5,7 @@ import { useCardLoadingState } from '../CardDataContext'
 import { useCardData, commonComparators, CardSearchInput, CardControlsRow, CardPaginationFooter } from '../../../lib/cards'
 import { Skeleton } from '../../ui/Skeleton'
 import { useTranslation } from 'react-i18next'
+import { useDemoMode } from '../../../hooks/useDemoMode'
 
 interface KagentiAgentDiscoveryProps {
   config?: { cluster?: string }
@@ -14,6 +15,7 @@ type SortField = 'name' | 'cluster'
 
 export function KagentiAgentDiscovery({ config }: KagentiAgentDiscoveryProps) {
   const { t: _t } = useTranslation()
+  const { isDemoMode } = useDemoMode()
   const {
     data: cards,
     isLoading,
@@ -25,6 +27,7 @@ export function KagentiAgentDiscovery({ config }: KagentiAgentDiscoveryProps) {
     hasAnyData: cards.length > 0,
     isFailed: consecutiveFailures >= 3,
     consecutiveFailures,
+    isDemoData: isDemoMode,
   })
 
   // Aggregate skill counts
@@ -47,6 +50,8 @@ export function KagentiAgentDiscovery({ config }: KagentiAgentDiscoveryProps) {
     goToPage,
     needsPagination,
     itemsPerPage,
+    containerRef,
+    containerStyle,
   } = useCardData(cards, {
     filter: {
       searchFields: ['name', 'agentName', 'namespace', 'cluster'],
@@ -92,11 +97,11 @@ export function KagentiAgentDiscovery({ config }: KagentiAgentDiscoveryProps) {
             {skillSummary.map(([skill, count]) => (
               <span
                 key={skill}
-                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] rounded bg-violet-500/10 text-violet-400 border border-violet-500/20"
+                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-2xs rounded bg-purple-500/10 text-purple-400 border border-purple-500/20"
               >
                 <Tag className="w-2.5 h-2.5" />
                 {skill}
-                {count > 1 && <span className="text-violet-400/60">({count})</span>}
+                {count > 1 && <span className="text-purple-400/60">({count})</span>}
               </span>
             ))}
           </div>
@@ -109,13 +114,13 @@ export function KagentiAgentDiscovery({ config }: KagentiAgentDiscoveryProps) {
         }
       />
 
-      <div className="space-y-1">
+      <div ref={containerRef} className="space-y-1" style={containerStyle}>
         {paginatedItems.map(card => (
           <div
             key={`${card.cluster}-${card.namespace}-${card.name}`}
             className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-secondary transition-colors"
           >
-            <Radar className="w-3.5 h-3.5 text-violet-400 shrink-0" />
+            <Radar className="w-3.5 h-3.5 text-purple-400 shrink-0" />
             <div className="min-w-0 flex-1">
               <div className="text-sm font-medium truncate">{card.name}</div>
               <div className="text-xs text-muted-foreground/60 flex items-center gap-1">
@@ -125,9 +130,9 @@ export function KagentiAgentDiscovery({ config }: KagentiAgentDiscoveryProps) {
               </div>
             </div>
             {card.identityBinding ? (
-              <Shield className="w-3 h-3 text-emerald-400" />
+              <Shield className="w-3 h-3 text-green-400" />
             ) : (
-              <span className="text-xs text-zinc-500">No ID</span>
+              <span className="text-xs text-muted-foreground">No ID</span>
             )}
             {(card.skills || []).length > 0 && (
               <span className="text-xs text-muted-foreground/40">

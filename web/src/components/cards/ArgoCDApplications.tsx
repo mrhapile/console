@@ -4,6 +4,7 @@ import { ClusterBadge } from '../ui/ClusterBadge'
 import { useDrillDownActions } from '../../hooks/useDrillDown'
 import { Skeleton } from '../ui/Skeleton'
 import { useArgoCDApplications, useArgoCDTriggerSync, type ArgoApplication } from '../../hooks/useArgoCD'
+import { StatusBadge } from '../ui/StatusBadge'
 import { useCardLoadingState } from './CardDataContext'
 import {
   useCardData,
@@ -38,7 +39,7 @@ const SORT_OPTIONS_KEYS: ReadonlyArray<{ value: SortByOption; labelKey: SortTran
 const syncStatusConfig = {
   Synced: { icon: CheckCircle, color: 'text-green-400', bg: 'bg-green-500/20' },
   OutOfSync: { icon: RefreshCw, color: 'text-yellow-400', bg: 'bg-yellow-500/20' },
-  Unknown: { icon: AlertTriangle, color: 'text-gray-400', bg: 'bg-gray-500/20' },
+  Unknown: { icon: AlertTriangle, color: 'text-muted-foreground', bg: 'bg-gray-500/20' },
 }
 
 const healthStatusConfig = {
@@ -46,7 +47,7 @@ const healthStatusConfig = {
   Degraded: { icon: XCircle, color: 'text-red-400' },
   Progressing: { icon: Clock, color: 'text-blue-400' },
   Missing: { icon: AlertTriangle, color: 'text-orange-400' },
-  Unknown: { icon: AlertTriangle, color: 'text-gray-400' },
+  Unknown: { icon: AlertTriangle, color: 'text-muted-foreground' },
 }
 
 const syncOrder: Record<string, number> = { OutOfSync: 0, Unknown: 1, Synced: 2 }
@@ -66,6 +67,7 @@ function ArgoCDApplicationsInternal({ config }: ArgoCDApplicationsProps) {
     isLoading,
     isFailed,
     consecutiveFailures,
+    isDemoData,
   } = useArgoCDApplications()
   const { drillToArgoApp } = useDrillDownActions()
   const { triggerSync } = useArgoCDTriggerSync()
@@ -80,6 +82,7 @@ function ArgoCDApplicationsInternal({ config }: ArgoCDApplicationsProps) {
     hasAnyData: allApps.length > 0,
     isFailed,
     consecutiveFailures,
+    isDemoData,
   })
 
   // Translated sort options
@@ -125,6 +128,8 @@ function ArgoCDApplicationsInternal({ config }: ArgoCDApplicationsProps) {
       sortDirection,
       setSortDirection,
     },
+    containerRef,
+    containerStyle,
   } = useCardData<ArgoApplication, SortByOption>(preFiltered, {
     filter: {
       searchFields: ['name', 'namespace', 'cluster'],
@@ -177,9 +182,9 @@ function ArgoCDApplicationsInternal({ config }: ArgoCDApplicationsProps) {
       {/* Header with controls */}
       <div className="flex items-center justify-between mb-3 flex-shrink-0">
         <div className="flex items-center gap-2">
-          <span className="text-xs px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-400">
+          <StatusBadge color="orange">
             {t('argoCDApplications.appsCount', { count: totalItems })}
-          </span>
+          </StatusBadge>
         </div>
         <div className="flex items-center gap-2">
           <CardControlsRow
@@ -229,7 +234,7 @@ function ArgoCDApplicationsInternal({ config }: ArgoCDApplicationsProps) {
           <p className="text-orange-400 font-medium">{t('argoCDApplications.argocdIntegration')}</p>
           <p className="text-muted-foreground">
             {t('argoCDApplications.installArgoCD')}{' '}
-            <a href="https://argo-cd.readthedocs.io/en/stable/getting_started/" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:underline">
+            <a href="https://argo-cd.readthedocs.io/en/stable/getting_started/" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:underline inline-block py-2">
               {t('argoCDApplications.installGuide')}
             </a>
           </p>
@@ -247,22 +252,34 @@ function ArgoCDApplicationsInternal({ config }: ArgoCDApplicationsProps) {
       {/* Stats */}
       <div className="grid grid-cols-4 gap-2 mb-3">
         <div className="text-center p-2 rounded-lg bg-green-500/10 cursor-pointer hover:bg-green-500/20"
-             onClick={() => setSelectedFilter('all')}>
+             role="button" tabIndex={0}
+             aria-label={`Show all applications (${stats.synced} synced)`}
+             onClick={() => setSelectedFilter('all')}
+             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedFilter('all') } }}>
           <p className="text-lg font-bold text-green-400">{stats.synced}</p>
           <p className="text-xs text-muted-foreground">{t('argoCDApplications.synced')}</p>
         </div>
         <div className="text-center p-2 rounded-lg bg-yellow-500/10 cursor-pointer hover:bg-yellow-500/20"
-             onClick={() => setSelectedFilter('outOfSync')}>
+             role="button" tabIndex={0}
+             aria-label={`Filter out of sync applications (${stats.outOfSync} out of sync)`}
+             onClick={() => setSelectedFilter('outOfSync')}
+             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedFilter('outOfSync') } }}>
           <p className="text-lg font-bold text-yellow-400">{stats.outOfSync}</p>
           <p className="text-xs text-muted-foreground">{t('argoCDApplications.outOfSync')}</p>
         </div>
         <div className="text-center p-2 rounded-lg bg-green-500/10 cursor-pointer hover:bg-green-500/20"
-             onClick={() => setSelectedFilter('all')}>
+             role="button" tabIndex={0}
+             aria-label={`Show all applications (${stats.healthy} healthy)`}
+             onClick={() => setSelectedFilter('all')}
+             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedFilter('all') } }}>
           <p className="text-lg font-bold text-green-400">{stats.healthy}</p>
           <p className="text-xs text-muted-foreground">{t('argoCDApplications.healthy')}</p>
         </div>
         <div className="text-center p-2 rounded-lg bg-red-500/10 cursor-pointer hover:bg-red-500/20"
-             onClick={() => setSelectedFilter('unhealthy')}>
+             role="button" tabIndex={0}
+             aria-label={`Filter unhealthy applications (${stats.unhealthy} unhealthy)`}
+             onClick={() => setSelectedFilter('unhealthy')}
+             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedFilter('unhealthy') } }}>
           <p className="text-lg font-bold text-red-400">{stats.unhealthy}</p>
           <p className="text-xs text-muted-foreground">{t('argoCDApplications.unhealthy')}</p>
         </div>
@@ -283,7 +300,7 @@ function ArgoCDApplicationsInternal({ config }: ArgoCDApplicationsProps) {
       )}
 
       {/* Applications list */}
-      <div className="flex-1 space-y-2 overflow-y-auto min-h-card-content">
+      <div ref={containerRef} className="flex-1 space-y-2 overflow-y-auto min-h-card-content" style={containerStyle}>
         {applications.length === 0 ? (
           <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
             {t('argoCDApplications.noMatchingApplications')}

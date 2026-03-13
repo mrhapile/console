@@ -10,6 +10,7 @@ import {
   FileText, AlertCircle
 } from 'lucide-react'
 import { cn } from '../../../lib/cn'
+import { StatusBadge } from '../../ui/StatusBadge'
 import { LOCAL_AGENT_WS_URL } from '../../../lib/constants'
 import { ConsoleAIIcon } from '../../ui/ConsoleAIIcon'
 import {
@@ -37,7 +38,7 @@ const getStatusStyle = (status: string) => {
   if (lower === 'failed' || lower === 'error' || lower === 'inactive') {
     return { bg: 'bg-red-500/20', text: 'text-red-400', border: 'border-red-500/30', icon: XCircle }
   }
-  return { bg: 'bg-gray-500/20', text: 'text-gray-400', border: 'border-gray-500/30', icon: AlertCircle }
+  return { bg: 'bg-secondary', text: 'text-muted-foreground', border: 'border-border', icon: AlertCircle }
 }
 
 interface Violation {
@@ -315,7 +316,7 @@ Please:
                 <Layers className="w-4 h-4 text-purple-400" />
                 <span className="text-muted-foreground">{t('drilldown.fields.namespace')}</span>
                 <span className="font-mono text-purple-400 group-hover:text-purple-300 transition-colors">{namespace}</span>
-                <svg className="w-3 h-3 text-purple-400/50 group-hover:text-purple-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="w-3 h-3 text-purple-400/70 group-hover:text-purple-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
               </button>
@@ -327,7 +328,7 @@ Please:
               <Server className="w-4 h-4 text-blue-400" />
               <span className="text-muted-foreground">{t('drilldown.fields.cluster')}</span>
               <ClusterBadge cluster={cluster.split('/').pop() || cluster} size="sm" />
-              <svg className="w-3 h-3 text-blue-400/50 group-hover:text-blue-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-3 h-3 text-blue-400/70 group-hover:text-blue-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </button>
@@ -440,8 +441,8 @@ Please:
                     <div key={i} className="p-3 rounded-lg bg-secondary/50 flex items-center justify-between">
                       <span className="text-sm font-medium text-foreground">{rule.name}</span>
                       <div className="flex gap-2">
-                        {rule.validate && <span className="px-2 py-0.5 rounded text-xs bg-blue-500/20 text-blue-400">Validate</span>}
-                        {rule.mutate && <span className="px-2 py-0.5 rounded text-xs bg-purple-500/20 text-purple-400">Mutate</span>}
+                        {rule.validate && <StatusBadge color="blue" size="xs">Validate</StatusBadge>}
+                        {rule.mutate && <StatusBadge color="purple" size="xs">Mutate</StatusBadge>}
                       </div>
                     </div>
                   ))}

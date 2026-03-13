@@ -7,13 +7,14 @@ import { CardClusterFilter, CardSearchInput } from '../../../lib/cards'
 import { Skeleton } from '../../ui/Skeleton'
 import { CardControls } from '../../ui/CardControls'
 import { RefreshIndicator } from '../../ui/RefreshIndicator'
+import { StatusBadge } from '../../ui/StatusBadge'
 import { Pagination } from '../../ui/Pagination'
 import { useCardData, commonComparators } from '../../../lib/cards/cardHooks'
 import type { SortDirection } from '../../../lib/cards/cardHooks'
-import { useCachedLLMdServers } from '../../../hooks/useCachedData'
+import { useCachedLLMdServers, useCachedGPUNodes } from '../../../hooks/useCachedData'
 import type { LLMdServer, LLMdComponentType } from '../../../hooks/useLLMd'
 import { useLLMdClusters } from './shared'
-import { useClusters, useGPUNodes } from '../../../hooks/useMCP'
+import { useClusters } from '../../../hooks/useMCP'
 import { useCardLoadingState } from '../CardDataContext'
 import { useTranslation } from 'react-i18next'
 
@@ -44,16 +45,17 @@ export function LLMInference({ config: _config }: LLMInferenceProps) {
   const { t: _t } = useTranslation()
   // Dynamically discover LLM-d clusters instead of using static list
   const { deduplicatedClusters } = useClusters()
-  const { nodes: gpuNodes } = useGPUNodes()
+  const { nodes: gpuNodes } = useCachedGPUNodes()
   const gpuClusterNames = useMemo(() => new Set(gpuNodes.map(n => n.cluster)), [gpuNodes])
   const llmdClusters = useLLMdClusters(deduplicatedClusters, gpuClusterNames)
 
-  const { servers, isLoading, isRefreshing, lastRefresh, refetch, isFailed, consecutiveFailures, error } = useCachedLLMdServers(llmdClusters)
+  const { servers, isLoading, isRefreshing, lastRefresh, refetch, isFailed, consecutiveFailures, isDemoFallback, error } = useCachedLLMdServers(llmdClusters)
 
   // Report loading state to CardWrapper for skeleton/refresh behavior
   useCardLoadingState({
     isLoading,
     hasAnyData: servers.length > 0,
+    isDemoData: isDemoFallback,
     isFailed,
     consecutiveFailures,
   })
@@ -87,6 +89,8 @@ export function LLMInference({ config: _config }: LLMInferenceProps) {
   const {
     items, totalItems, currentPage, totalPages, goToPage, needsPagination,
     itemsPerPage, setItemsPerPage, filters, sorting,
+    containerRef,
+    containerStyle,
   } = useCardData<LLMdServer, LLMdSortByOption>(componentFiltered, {
     filter: {
       searchFields: ['name', 'namespace', 'cluster', 'status', 'componentType', 'type'] as (keyof LLMdServer)[],
@@ -111,13 +115,13 @@ export function LLMInference({ config: _config }: LLMInferenceProps) {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'running':
-        return <span className="text-xs px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 flex items-center gap-1"><Play className="w-2.5 h-2.5" /> Running</span>
+        return <StatusBadge color="green" icon={<Play className="w-2.5 h-2.5" />}>Running</StatusBadge>
       case 'scaling':
-        return <span className="text-xs px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 flex items-center gap-1"><RefreshCw className="w-2.5 h-2.5 animate-spin" /> Scaling</span>
+        return <StatusBadge color="blue" icon={<RefreshCw className="w-2.5 h-2.5 animate-spin" />}>Scaling</StatusBadge>
       case 'stopped':
-        return <span className="text-xs px-1.5 py-0.5 rounded bg-gray-500/20 text-gray-400 flex items-center gap-1"><Pause className="w-2.5 h-2.5" /> Stopped</span>
+        return <StatusBadge color="gray" icon={<Pause className="w-2.5 h-2.5" />}>Stopped</StatusBadge>
       default:
-        return <span className="text-xs px-1.5 py-0.5 rounded bg-gray-500/20 text-gray-400">{status}</span>
+        return <StatusBadge color="gray">{status}</StatusBadge>
     }
   }
 
@@ -127,9 +131,9 @@ export function LLMInference({ config: _config }: LLMInferenceProps) {
       'tgi': 'bg-blue-500/20 text-blue-400',
       'llm-d': 'bg-cyan-500/20 text-cyan-400',
       'triton': 'bg-green-500/20 text-green-400',
-      'unknown': 'bg-gray-500/20 text-gray-400',
+      'unknown': 'bg-gray-500/20 text-muted-foreground',
     }
-    return colors[type] || 'bg-gray-500/20 text-gray-400'
+    return colors[type] || 'bg-gray-500/20 text-muted-foreground'
   }
 
   const getTypeLabel = (type: LLMdServer['type']) => {
@@ -150,7 +154,7 @@ export function LLMInference({ config: _config }: LLMInferenceProps) {
       'gateway': { bg: 'bg-blue-500/20', text: 'text-blue-400', label: 'Gateway' },
       'prometheus': { bg: 'bg-orange-500/20', text: 'text-orange-400', label: 'Prometheus' },
       'autoscaler': { bg: 'bg-yellow-500/20', text: 'text-yellow-400', label: 'Autoscaler' },
-      'other': { bg: 'bg-gray-500/20', text: 'text-gray-400', label: 'Other' },
+      'other': { bg: 'bg-gray-500/20', text: 'text-muted-foreground', label: 'Other' },
     }
     return config[componentType] || config['other']
   }
@@ -189,9 +193,9 @@ export function LLMInference({ config: _config }: LLMInferenceProps) {
               {COMPONENT_FILTERS.find(f => f.value === componentFilter)?.label}
             </span>
           )}
-          <span className="text-xs px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400">
+          <StatusBadge color="purple">
             {items.filter(s => s.status === 'running').length} running
-          </span>
+          </StatusBadge>
         </div>
         <div className="flex items-center gap-2">
           {/* Component type filter */}
@@ -269,7 +273,7 @@ export function LLMInference({ config: _config }: LLMInferenceProps) {
           <p className="text-purple-400 font-medium">llm-d Inference Detection</p>
           <p className="text-muted-foreground">
             Auto-detects vLLM, TGI, LLM-d, and Triton inference servers.{' '}
-            <a href="https://docs.vllm.ai/en/latest/getting_started/installation.html" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:underline">
+            <a href="https://docs.vllm.ai/en/latest/getting_started/installation.html" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:underline inline-block py-2">
               vLLM docs <ExternalLink className="w-3 h-3 inline" />
             </a>
           </p>
@@ -277,7 +281,7 @@ export function LLMInference({ config: _config }: LLMInferenceProps) {
       </div>
 
       {/* Server list */}
-      <div className="flex-1 overflow-y-auto space-y-2">
+      <div ref={containerRef} className="flex-1 overflow-y-auto space-y-2" style={containerStyle}>
         {items.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-32 text-muted-foreground">
             <Cpu className="w-8 h-8 mb-2 opacity-50" />
@@ -310,9 +314,9 @@ export function LLMInference({ config: _config }: LLMInferenceProps) {
                   )}
                   {/* Autoscaler badge */}
                   {server.hasAutoscaler && (
-                    <span className="text-xs px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-400 flex-shrink-0" title={server.autoscalerType === 'va' ? 'VariantAutoscaling' : server.autoscalerType === 'both' ? 'HPA + VariantAutoscaling' : 'HorizontalPodAutoscaler'}>
+                    <StatusBadge color="orange" className="flex-shrink-0" title={server.autoscalerType === 'va' ? 'VariantAutoscaling' : server.autoscalerType === 'both' ? 'HPA + VariantAutoscaling' : 'HorizontalPodAutoscaler'}>
                       {server.autoscalerType === 'va' ? 'VA' : server.autoscalerType === 'both' ? 'HPA+VA' : 'HPA'}
-                    </span>
+                    </StatusBadge>
                   )}
                 </div>
                 {getStatusBadge(server.status)}
@@ -326,7 +330,7 @@ export function LLMInference({ config: _config }: LLMInferenceProps) {
                     className={`flex items-center gap-1 px-1.5 py-0.5 rounded ${
                       server.gatewayStatus === 'running'
                         ? 'bg-blue-500/20 text-blue-400'
-                        : 'bg-gray-500/20 text-gray-400'
+                        : 'bg-gray-500/20 text-muted-foreground'
                     }`}
                     title={`Gateway (${server.gatewayType || 'envoy'}): ${server.gatewayStatus}`}
                   >
@@ -340,7 +344,7 @@ export function LLMInference({ config: _config }: LLMInferenceProps) {
                     className={`flex items-center gap-1 px-1.5 py-0.5 rounded ${
                       server.prometheusStatus === 'running'
                         ? 'bg-orange-500/20 text-orange-400'
-                        : 'bg-gray-500/20 text-gray-400'
+                        : 'bg-gray-500/20 text-muted-foreground'
                     }`}
                     title={`Prometheus: ${server.prometheusStatus}`}
                   >

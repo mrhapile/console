@@ -1,9 +1,10 @@
 import { useMemo } from 'react'
 import { CheckCircle, AlertTriangle, XCircle, RefreshCw, ArrowUpCircle, ChevronRight } from 'lucide-react'
-import { useClusters, useOperators, Operator } from '../../hooks/useMCP'
+import { useClusters, Operator } from '../../hooks/useMCP'
+import { useCachedOperators } from '../../hooks/useCachedData'
 import { useDrillDownActions } from '../../hooks/useDrillDown'
-import { useDemoMode } from '../../hooks/useDemoMode'
 import { ClusterBadge } from '../ui/ClusterBadge'
+import { StatusBadge } from '../ui/StatusBadge'
 import { Skeleton } from '../ui/Skeleton'
 import { useCardLoadingState } from './CardDataContext'
 import { DynamicCardErrorBoundary } from './DynamicCardErrorBoundary'
@@ -62,10 +63,9 @@ function OperatorStatusInternal({ config: _config }: OperatorStatusProps) {
   )
   const { isLoading: clustersLoading } = useClusters()
   const { drillToOperator } = useDrillDownActions()
-  const { isDemoMode: demoMode } = useDemoMode()
 
   // Fetch operators - pass undefined to get all clusters
-  const { operators: rawOperators, isLoading: operatorsLoading, consecutiveFailures, isFailed } = useOperators(undefined)
+  const { operators: rawOperators, isLoading: operatorsLoading, consecutiveFailures, isFailed, isDemoFallback: isDemoData } = useCachedOperators(undefined)
 
   // Report card data state
   const { showSkeleton, showEmptyState } = useCardLoadingState({
@@ -73,7 +73,7 @@ function OperatorStatusInternal({ config: _config }: OperatorStatusProps) {
     hasAnyData: rawOperators.length > 0,
     isFailed,
     consecutiveFailures,
-    isDemoData: demoMode,
+    isDemoData,
   })
 
   // Use useCardFilters for status counts (globally filtered, before local search/pagination)
@@ -106,6 +106,8 @@ function OperatorStatusInternal({ config: _config }: OperatorStatusProps) {
       sortDirection,
       setSortDirection,
     },
+    containerRef,
+    containerStyle,
   } = useCardData<Operator, SortByOption>(rawOperators, {
     filter: {
       searchFields: ['name', 'namespace', 'version'] as (keyof Operator)[],
@@ -179,9 +181,9 @@ function OperatorStatusInternal({ config: _config }: OperatorStatusProps) {
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           {totalItems > 0 && (
-            <span className="text-xs px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400">
+            <StatusBadge color="purple">
               {t('operatorStatus.nOperators', { count: totalItems })}
-            </span>
+            </StatusBadge>
           )}
         </div>
         <CardControlsRow
@@ -218,13 +220,13 @@ function OperatorStatusInternal({ config: _config }: OperatorStatusProps) {
             {localClusterFilter.length === 1 ? (
               <ClusterBadge cluster={localClusterFilter[0]} />
             ) : localClusterFilter.length > 1 ? (
-              <span className="text-xs px-2 py-1 rounded-full bg-purple-500/20 text-purple-400">
+              <StatusBadge color="purple" size="md" rounded="full">
                 {t('operatorStatus.nClustersSelected', { count: localClusterFilter.length })}
-              </span>
+              </StatusBadge>
             ) : (
-              <span className="text-xs px-2 py-1 rounded-full bg-purple-500/20 text-purple-400">
+              <StatusBadge color="purple" size="md" rounded="full">
                 {t('operatorStatus.allClusters', { count: availableClusters.length })}
-              </span>
+              </StatusBadge>
             )}
           </div>
 
@@ -253,7 +255,7 @@ function OperatorStatusInternal({ config: _config }: OperatorStatusProps) {
           </div>
 
           {/* Operators list */}
-          <div className="flex-1 space-y-2 overflow-y-auto">
+          <div ref={containerRef} className="flex-1 space-y-2 overflow-y-auto" style={containerStyle}>
             {operators.map((op) => {
               const StatusIcon = getStatusIcon(op.status)
               const color = getStatusColor(op.status)

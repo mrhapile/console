@@ -4,6 +4,7 @@ import { useReportCardDataState } from './CardDataContext'
 import { RotateCcw, ChevronLeft, ChevronRight, Crown, Settings } from 'lucide-react'
 import { DynamicCardErrorBoundary } from './DynamicCardErrorBoundary'
 import { useTranslation } from 'react-i18next'
+import { emitGameStarted, emitGameEnded } from '../../lib/analytics'
 
 // Chess piece types
 type PieceType = 'K' | 'Q' | 'R' | 'B' | 'N' | 'P' // King, Queen, Rook, Bishop, kNight, Pawn
@@ -522,12 +523,15 @@ function KubeChessInternal() {
     if (gameResult !== 'ongoing') {
       if (gameResult === 'stalemate') {
         setStats((prev: typeof stats) => ({ ...prev, draws: prev.draws + 1 }))
+        emitGameEnded('chess', 'draw', 0)
       } else {
         const winner = gameState.turn === 'white' ? 'black' : 'white'
         if (winner === playerColor) {
           setStats((prev: typeof stats) => ({ ...prev, wins: prev.wins + 1 }))
+          emitGameEnded('chess', 'win', 0)
         } else {
           setStats((prev: typeof stats) => ({ ...prev, losses: prev.losses + 1 }))
+          emitGameEnded('chess', 'loss', 0)
         }
       }
     }
@@ -598,6 +602,7 @@ function KubeChessInternal() {
     setSelectedSquare(null)
     setValidMoves([])
     setPromotionPending(null)
+    emitGameStarted('chess')
   }, [])
 
   // Flip board
@@ -634,7 +639,7 @@ function KubeChessInternal() {
             onClick={() => handleSquareClick(row, col)}
             className={`
               flex items-center justify-center cursor-pointer relative
-              ${isLight ? 'bg-amber-100 dark:bg-amber-200' : 'bg-amber-700 dark:bg-amber-800'}
+              ${isLight ? 'bg-yellow-100 dark:bg-yellow-200' : 'bg-yellow-700 dark:bg-yellow-800'}
               ${isSelected ? 'ring-2 ring-blue-500 ring-inset z-10' : ''}
               ${isLastMove ? 'bg-yellow-300/50 dark:bg-yellow-400/30' : ''}
               ${isInCheckSquare ? 'bg-red-500/50' : ''}
@@ -700,21 +705,21 @@ function KubeChessInternal() {
 
         {/* Board */}
         <div className="relative">
-          <div className="border-2 border-amber-900 rounded overflow-hidden shadow-lg">
+          <div className="border-2 border-yellow-900 rounded overflow-hidden shadow-lg">
             {renderBoard()}
           </div>
 
           {/* Promotion dialog */}
           {promotionPending && (
             <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-              <div className="bg-white dark:bg-zinc-800 rounded-lg p-4 shadow-xl">
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-xl">
                 <p className="text-sm font-medium mb-3 text-center">Promote to:</p>
                 <div className="flex gap-2">
                   {(['Q', 'R', 'B', 'N'] as PieceType[]).map(type => (
                     <button
                       key={type}
                       onClick={() => handlePromotion(type)}
-                      className="w-12 h-12 flex items-center justify-center bg-amber-100 dark:bg-amber-200 rounded hover:bg-amber-200 dark:hover:bg-amber-300 transition-colors"
+                      className="w-12 h-12 flex items-center justify-center bg-yellow-100 dark:bg-yellow-200 rounded hover:bg-yellow-200 dark:hover:bg-yellow-300 transition-colors"
                     >
                       <span className="text-3xl">
                         {PIECE_SYMBOLS[playerColor][type]}
@@ -729,7 +734,7 @@ function KubeChessInternal() {
           {/* Game over overlay */}
           {gameResult !== 'ongoing' && (
             <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-              <div className="bg-white dark:bg-zinc-800 rounded-lg p-4 shadow-xl text-center">
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-xl text-center">
                 <Crown className={`w-12 h-12 mx-auto mb-2 ${
                   gameResult === 'stalemate' ? 'text-yellow-500' :
                   (gameState.turn !== playerColor ? 'text-green-500' : 'text-red-500')
@@ -812,7 +817,7 @@ function KubeChessInternal() {
 
 export function KubeChess() {
   const { t: _t } = useTranslation()
-  useReportCardDataState({ hasData: true, isFailed: false, consecutiveFailures: 0 })
+  useReportCardDataState({ hasData: true, isFailed: false, consecutiveFailures: 0, isDemoData: false })
   return (
     <DynamicCardErrorBoundary cardId="KubeChess">
       <KubeChessInternal />

@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { Cpu, Box, ChevronRight, AlertTriangle, CheckCircle, Loader2, Server } from 'lucide-react'
-import { useGPUNodes, useAllPods, useClusters } from '../../hooks/useMCP'
+import { useClusters } from '../../hooks/useMCP'
+import { useCachedGPUNodes, useCachedAllPods } from '../../hooks/useCachedData'
 import { useDrillDownActions } from '../../hooks/useDrillDown'
 import { ClusterBadge } from '../ui/ClusterBadge'
 import { CardClusterFilter, CardSearchInput, CardAIActions } from '../../lib/cards'
@@ -8,6 +9,7 @@ import { CardControls } from '../ui/CardControls'
 import { Pagination } from '../ui/Pagination'
 import { Skeleton } from '../ui/Skeleton'
 import { useCardData, commonComparators } from '../../lib/cards/cardHooks'
+import { StatusBadge } from '../ui/StatusBadge'
 import { useCardLoadingState } from './CardDataContext'
 import type { PodInfo } from '../../hooks/useMCP'
 import { useTranslation } from 'react-i18next'
@@ -62,10 +64,14 @@ export function GPUWorkloads({ config: _config }: GPUWorkloadsProps) {
   const {
     nodes: gpuNodes,
     isLoading: gpuLoading,
-  } = useGPUNodes()
-  const { pods: allPods, isLoading: podsLoading } = useAllPods()
+    isDemoFallback: gpuNodesDemoFallback,
+  } = useCachedGPUNodes()
+  const { pods: allPods, isLoading: podsLoading, isDemoFallback: podsDemoFallback } = useCachedAllPods()
   useClusters() // Keep hook for cache warming
   const { drillToPod } = useDrillDownActions()
+
+  // Combine all isDemoFallback values from cached hooks
+  const isDemoData = gpuNodesDemoFallback || podsDemoFallback
 
   // Only show loading when no cached data exists
   const isLoading = (gpuLoading && gpuNodes.length === 0) || (podsLoading && allPods.length === 0)
@@ -74,6 +80,7 @@ export function GPUWorkloads({ config: _config }: GPUWorkloadsProps) {
   useCardLoadingState({
     isLoading: gpuLoading || podsLoading,
     hasAnyData: gpuNodes.length > 0 || allPods.length > 0,
+    isDemoData,
   })
 
   // Pre-filter pods to only GPU workloads (domain-specific logic before hook)
@@ -137,6 +144,8 @@ export function GPUWorkloads({ config: _config }: GPUWorkloadsProps) {
     setItemsPerPage,
     filters,
     sorting,
+    containerRef,
+    containerStyle,
   } = useCardData<PodInfo, SortByOption>(gpuWorkloadSource, {
     filter: {
       searchFields: ['name', 'namespace', 'cluster', 'node'] as (keyof PodInfo)[],
@@ -220,9 +229,9 @@ export function GPUWorkloads({ config: _config }: GPUWorkloadsProps) {
       {/* Controls */}
       <div className="flex items-center justify-between mb-3">
         {summary.failed > 0 ? (
-          <span className="text-xs px-1.5 py-0.5 rounded bg-red-500/20 text-red-400">
+          <StatusBadge color="red">
             {t('gpuWorkloads.failedCount', { count: summary.failed })}
-          </span>
+          </StatusBadge>
         ) : <div />}
         <div className="flex items-center gap-2">
           {/* Cluster count indicator */}
@@ -285,7 +294,7 @@ export function GPUWorkloads({ config: _config }: GPUWorkloadsProps) {
       </div>
 
       {/* Workload list */}
-      <div className="flex-1 space-y-2 overflow-y-auto">
+      <div ref={containerRef} className="flex-1 space-y-2 overflow-y-auto" style={containerStyle}>
         {displayWorkloads.length === 0 ? (
           <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
             {t('gpuWorkloads.noGPUWorkloadsFound')}

@@ -5,14 +5,15 @@ import { Server, Clock, Layers, TrendingUp } from 'lucide-react'
 import { useChartFilters, CardClusterFilter } from '../../lib/cards'
 import { useCardLoadingState } from './CardDataContext'
 import { useTranslation } from 'react-i18next'
+import { useDemoMode } from '../../hooks/useDemoMode'
 
 type TimeRange = '15m' | '1h' | '6h' | '24h'
 
-const TIME_RANGE_KEYS: { value: TimeRange; labelKey: string; points: number; intervalMs: number }[] = [
-  { value: '15m', labelKey: 'clusterMetrics.timeRange15m', points: 15, intervalMs: 60000 },
-  { value: '1h', labelKey: 'clusterMetrics.timeRange1h', points: 20, intervalMs: 180000 },
-  { value: '6h', labelKey: 'clusterMetrics.timeRange6h', points: 24, intervalMs: 900000 },
-  { value: '24h', labelKey: 'clusterMetrics.timeRange24h', points: 24, intervalMs: 3600000 },
+const TIME_RANGE_KEYS = [
+  { value: '15m' as const, labelKey: 'clusterMetrics.timeRange15m' as const, points: 15, intervalMs: 60000 },
+  { value: '1h' as const, labelKey: 'clusterMetrics.timeRange1h' as const, points: 20, intervalMs: 180000 },
+  { value: '6h' as const, labelKey: 'clusterMetrics.timeRange6h' as const, points: 24, intervalMs: 900000 },
+  { value: '24h' as const, labelKey: 'clusterMetrics.timeRange24h' as const, points: 24, intervalMs: 3600000 },
 ]
 
 
@@ -20,10 +21,10 @@ type MetricType = 'cpu' | 'memory' | 'pods' | 'nodes'
 type ChartMode = 'total' | 'per-cluster'
 
 const metricConfigBase = {
-  cpu: { labelKey: 'clusterMetrics.cpuCores', color: '#9333ea', unit: '', baseValue: 65, variance: 30 },
-  memory: { labelKey: 'clusterMetrics.memory', color: '#3b82f6', unit: ' GB', baseValue: 72, variance: 20 },
-  pods: { labelKey: 'clusterMetrics.pods', color: '#10b981', unit: '', baseValue: 150, variance: 100 },
-  nodes: { labelKey: 'clusterMetrics.nodes', color: '#f59e0b', unit: '', baseValue: 10, variance: 5 },
+  cpu: { labelKey: 'clusterMetrics.cpuCores' as const, color: '#9333ea', unit: '', baseValue: 65, variance: 30 },
+  memory: { labelKey: 'clusterMetrics.memory' as const, color: '#3b82f6', unit: ' GB', baseValue: 72, variance: 20 },
+  pods: { labelKey: 'clusterMetrics.pods' as const, color: '#10b981', unit: '', baseValue: 150, variance: 100 },
+  nodes: { labelKey: 'clusterMetrics.nodes' as const, color: '#f59e0b', unit: '', baseValue: 10, variance: 5 },
 }
 
 interface ClusterMetricValues {
@@ -50,6 +51,7 @@ const MAX_AGE_MS = 30 * 60 * 1000 // 30 minutes TTL
 export function ClusterMetrics() {
   const { t } = useTranslation(['cards', 'common'])
   const { isLoading, deduplicatedClusters } = useClusters()
+  const { isDemoMode } = useDemoMode()
   const [selectedMetric, setSelectedMetric] = useState<MetricType>('cpu')
   const [timeRange, setTimeRange] = useState<TimeRange>('1h')
   const [chartMode, setChartMode] = useState<ChartMode>('total')
@@ -58,15 +60,13 @@ export function ClusterMetrics() {
   const metricConfig = useMemo(() => {
     const result: Record<MetricType, { label: string; color: string; unit: string; baseValue: number; variance: number }> = {} as typeof result
     for (const [key, val] of Object.entries(metricConfigBase)) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      result[key as MetricType] = { ...val, label: t(val.labelKey as any) as string }
+      result[key as MetricType] = { ...val, label: String(t(val.labelKey)) }
     }
     return result
   }, [t])
 
   const TIME_RANGE_OPTIONS = useMemo(() =>
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    TIME_RANGE_KEYS.map(opt => ({ ...opt, label: t(opt.labelKey as any) as string })),
+    TIME_RANGE_KEYS.map(opt => ({ ...opt, label: String(t(opt.labelKey)) })),
     [t]
   )
 
@@ -74,6 +74,7 @@ export function ClusterMetrics() {
   useCardLoadingState({
     isLoading,
     hasAnyData: deduplicatedClusters.length > 0,
+    isDemoData: isDemoMode,
   })
 
   // Use shared chart filters hook for cluster filtering

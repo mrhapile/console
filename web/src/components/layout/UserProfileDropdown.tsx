@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, lazy, Suspense } from 'react'
 import { useTranslation } from 'react-i18next'
 import { User, Mail, MessageSquare, Shield, Settings, LogOut, ChevronDown, Coins, Lightbulb, Linkedin, Globe, Check, Download, Code2, ExternalLink, Rocket, KeyRound, CheckCircle2, XCircle, GitBranch } from 'lucide-react'
 import { useRewards, REWARD_ACTIONS } from '../../hooks/useRewards'
@@ -6,10 +6,14 @@ import { getContributorLevel } from '../../types/rewards'
 import { useVersionCheck } from '../../hooks/useVersionCheck'
 import { languages } from '../../lib/i18n'
 import { isDemoModeForced } from '../../lib/demoMode'
+import { emitLinkedInShare, emitLanguageChanged } from '../../lib/analytics'
 import { checkOAuthConfigured } from '../../lib/api'
 import { SetupInstructionsDialog } from '../setup/SetupInstructionsDialog'
 import { DeveloperSetupDialog } from '../setup/DeveloperSetupDialog'
-import { FeatureRequestModal } from '../feedback/FeatureRequestModal'
+// Lazy-load the feedback modal (~67 KB) — only needed when user opens it
+const FeatureRequestModal = lazy(() =>
+  import('../feedback/FeatureRequestModal').then(m => ({ default: m.FeatureRequestModal }))
+)
 
 interface UserProfileDropdownProps {
   user: {
@@ -45,12 +49,14 @@ export function UserProfileDropdown({ user, onLogout, onPreferences }: UserProfi
 
   const handleLanguageChange = (langCode: string) => {
     i18n.changeLanguage(langCode)
+    emitLanguageChanged(langCode)
     setShowLanguageSubmenu(false)
   }
 
   const handleLinkedInShare = () => {
     const linkedInUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent('https://kubestellar.io')}`
-    window.open(linkedInUrl, '_blank', 'width=600,height=600')
+    window.open(linkedInUrl, '_blank', 'noopener,noreferrer,width=600,height=600')
+    emitLinkedInShare('profile_dropdown')
     awardCoins('linkedin_share')
     setIsOpen(false)
   }
@@ -193,7 +199,7 @@ export function UserProfileDropdown({ user, onLogout, onPreferences }: UserProfi
               <Coins className="w-4 h-4 text-yellow-500" />
               <span className="text-muted-foreground">{t('profile.coins')}</span>
               <span className="text-yellow-400 font-medium">{totalCoins.toLocaleString()}</span>
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${getContributorLevel(totalCoins).current.bgClass} ${getContributorLevel(totalCoins).current.textClass}`}>
+              <span className={`text-2xs px-1.5 py-0.5 rounded-full ${getContributorLevel(totalCoins).current.bgClass} ${getContributorLevel(totalCoins).current.textClass}`}>
                 {getContributorLevel(totalCoins).current.name}
               </span>
               <ChevronDown className="w-3 h-3 ml-auto text-muted-foreground -rotate-90" />
@@ -251,7 +257,7 @@ export function UserProfileDropdown({ user, onLogout, onPreferences }: UserProfi
                 <div className="px-5 pb-3 space-y-2">
                   {/* Version info */}
                   <div className="flex items-center gap-2 text-xs">
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] uppercase font-bold ${__DEV_MODE__ ? 'bg-yellow-900 text-yellow-400' : 'bg-green-900 text-green-400'}`}>
+                    <span className={`px-1.5 py-0.5 rounded text-2xs uppercase font-bold ${__DEV_MODE__ ? 'bg-yellow-900 text-yellow-400' : 'bg-green-900 text-green-400'}`}>
                       {__DEV_MODE__ ? 'dev' : 'prod'}
                     </span>
                     <span className="text-muted-foreground font-mono">
@@ -415,18 +421,26 @@ export function UserProfileDropdown({ user, onLogout, onPreferences }: UserProfi
       />
 
       {/* Rewards panel — opens feedback dialog to GitHub contributions tab */}
-      <FeatureRequestModal
-        isOpen={showRewards}
-        onClose={() => setShowRewards(false)}
-        initialTab="updates"
-      />
+      {showRewards && (
+        <Suspense fallback={null}>
+          <FeatureRequestModal
+            isOpen={showRewards}
+            onClose={() => setShowRewards(false)}
+            initialTab="updates"
+          />
+        </Suspense>
+      )}
 
       {/* Feedback modal — same as top navbar/card bug button */}
-      <FeatureRequestModal
-        isOpen={showFeedbackModal}
-        onClose={() => setShowFeedbackModal(false)}
-        initialTab="submit"
-      />
+      {showFeedbackModal && (
+        <Suspense fallback={null}>
+          <FeatureRequestModal
+            isOpen={showFeedbackModal}
+            onClose={() => setShowFeedbackModal(false)}
+            initialTab="submit"
+          />
+        </Suspense>
+      )}
     </div>
   )
 }

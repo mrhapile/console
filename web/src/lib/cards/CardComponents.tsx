@@ -7,6 +7,8 @@ import { Skeleton } from '../../components/ui/Skeleton'
 import { Pagination } from '../../components/ui/Pagination'
 import { CardControls as CardControlsUI, type SortDirection } from '../../components/ui/CardControls'
 import { ClusterStatusDot, getClusterState, type ClusterState } from '../../components/ui/ClusterStatusBadge'
+import { emitCardSearchUsed, emitCardClusterFilterChanged, emitCardListItemClicked, emitCardPaginationUsed } from '../analytics'
+import { useCardType } from '../../components/cards/CardWrapper'
 import type { ClusterWithHealth } from './cardHooks'
 
 // ============================================================================
@@ -212,6 +214,7 @@ export function CardSearchInput({
   className = '',
   debounceMs,
 }: CardSearchInputProps) {
+  const cardType = useCardType()
   const [localValue, setLocalValue] = useState(value)
   const timerRef = useRef<ReturnType<typeof setTimeout>>()
 
@@ -230,6 +233,14 @@ export function CardSearchInput({
     }
   }, [onChange, debounceMs])
 
+  // Fire analytics when user finishes typing (on blur) to avoid per-keystroke spam
+  const handleBlur = useCallback(() => {
+    const current = debounceMs ? localValue : value
+    if (current.length > 0) {
+      emitCardSearchUsed(current.length, cardType)
+    }
+  }, [debounceMs, localValue, value, cardType])
+
   // Cleanup timer on unmount
   useEffect(() => () => clearTimeout(timerRef.current), [])
 
@@ -240,6 +251,7 @@ export function CardSearchInput({
         type="text"
         value={debounceMs ? localValue : value}
         onChange={(e) => handleChange(e.target.value)}
+        onBlur={handleBlur}
         placeholder={placeholder}
         className="w-full pl-8 pr-3 py-1.5 text-xs bg-secondary rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-purple-500/50"
       />
@@ -280,6 +292,7 @@ export function CardClusterFilter({
   containerRef,
   minClusters = 2,
 }: CardClusterFilterProps) {
+  const cardType = useCardType()
   const buttonRef = useRef<HTMLButtonElement>(null)
   const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number } | null>(null)
 
@@ -320,7 +333,7 @@ export function CardClusterFilter({
         >
           <div className="p-1">
             <button
-              onClick={onClear}
+              onClick={() => { onClear(); emitCardClusterFilterChanged(0, availableClusters.length, cardType) }}
               className={`w-full px-2 py-1.5 text-xs text-left rounded transition-colors ${selectedClusters.length === 0
                 ? 'bg-purple-500/20 text-purple-400'
                 : 'hover:bg-secondary text-foreground'
@@ -352,7 +365,15 @@ export function CardClusterFilter({
               return (
                 <button
                   key={cluster.name}
-                  onClick={() => !isUnreachable && onToggle(cluster.name)}
+                  onClick={() => {
+                    if (!isUnreachable) {
+                      onToggle(cluster.name)
+                      // Compute resulting count: toggling adds or removes one cluster
+                      const willBeSelected = !selectedClusters.includes(cluster.name)
+                      const newCount = willBeSelected ? selectedClusters.length + 1 : selectedClusters.length - 1
+                      emitCardClusterFilterChanged(newCount, availableClusters.length, cardType)
+                    }
+                  }}
                   disabled={isUnreachable}
                   className={`w-full px-2 py-1.5 text-xs text-left rounded transition-colors flex items-center gap-2 ${isUnreachable
                     ? 'opacity-40 cursor-not-allowed'
@@ -365,7 +386,7 @@ export function CardClusterFilter({
                   <ClusterStatusDot state={clusterState} size="sm" />
                   <span className="flex-1 truncate">{cluster.name}</span>
                   {stateLabel && (
-                    <span className="text-[10px] text-muted-foreground shrink-0">{stateLabel}</span>
+                    <span className="text-2xs text-muted-foreground shrink-0">{stateLabel}</span>
                   )}
                 </button>
               )
@@ -469,16 +490,27 @@ export function CardListItem({
   title,
   dataTour,
 }: CardListItemProps) {
+  const cardType = useCardType()
   const variantConfig = listItemVariants[variant]
   const bg = bgClass || variantConfig.bg
   const border = borderClass || variantConfig.border
 
+  const handleClick = onClick ? () => {
+    emitCardListItemClicked(cardType)
+    onClick()
+  } : undefined
+
   return (
     <div
       data-tour={dataTour}
-      className={`p-3 rounded-lg ${bg} border ${border} ${onClick ? 'cursor-pointer hover:opacity-80' : ''
+      className={`p-3 rounded-lg ${bg} border ${border} ${handleClick ? 'cursor-pointer hover:opacity-80' : ''
         } transition-all group`}
-      onClick={onClick}
+      onClick={handleClick}
+      {...(handleClick ? {
+        role: 'button' as const,
+        tabIndex: 0,
+        onKeyDown: (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClick() } },
+      } : {})}
       title={title}
     >
       <div className="flex items-start gap-3">
@@ -615,7 +647,7 @@ export function CardFilterChips({ chips, activeChip, onChipClick }: CardFilterCh
             <span className="capitalize">{chip.label}</span>
             {chip.count !== undefined && (
               <span
-                className={`px-1 rounded text-[10px] ${isActive ? 'bg-purple-500/30' : 'bg-secondary'
+                className={`px-1 rounded text-2xs ${isActive ? 'bg-purple-500/30' : 'bg-secondary'
                   }`}
               >
                 {chip.count}
@@ -747,7 +779,14 @@ export function CardPaginationFooter({
   onPageChange,
   needsPagination,
 }: CardPaginationFooterProps) {
+  const cardType = useCardType()
+
   if (!needsPagination) return null
+
+  const handlePageChange = (page: number) => {
+    emitCardPaginationUsed(page, totalPages, cardType)
+    onPageChange(page)
+  }
 
   return (
     <div className="pt-2 mt-2 border-t border-border/50">
@@ -756,7 +795,7 @@ export function CardPaginationFooter({
         totalPages={totalPages}
         totalItems={totalItems}
         itemsPerPage={itemsPerPage}
-        onPageChange={onPageChange}
+        onPageChange={handlePageChange}
       />
     </div>
   )

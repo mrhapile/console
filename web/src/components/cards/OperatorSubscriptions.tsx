@@ -1,8 +1,10 @@
 import { useMemo } from 'react'
 import { Clock, AlertTriangle, Settings, ChevronRight } from 'lucide-react'
-import { useClusters, useOperatorSubscriptions, OperatorSubscription } from '../../hooks/useMCP'
+import { useClusters, OperatorSubscription } from '../../hooks/useMCP'
+import { useCachedOperatorSubscriptions } from '../../hooks/useCachedData'
 import { Skeleton } from '../ui/Skeleton'
 import { ClusterBadge } from '../ui/ClusterBadge'
+import { StatusBadge } from '../ui/StatusBadge'
 import { useDrillDownActions } from '../../hooks/useDrillDown'
 import { useCardLoadingState } from './CardDataContext'
 import {
@@ -27,10 +29,10 @@ interface OperatorSubscriptionsProps {
 type SortByOption = 'pending' | 'name' | 'approval' | 'channel'
 
 const SORT_OPTIONS_KEYS = [
-  { value: 'pending' as const, labelKey: 'operatorSubscriptions.pendingFirst' },
-  { value: 'name' as const, labelKey: 'common.name' },
-  { value: 'approval' as const, labelKey: 'operatorSubscriptions.approval' },
-  { value: 'channel' as const, labelKey: 'operatorSubscriptions.channel' },
+  { value: 'pending' as const, labelKey: 'operatorSubscriptions.pendingFirst' as const },
+  { value: 'name' as const, labelKey: 'common:common.name' as const },
+  { value: 'approval' as const, labelKey: 'operatorSubscriptions.approval' as const },
+  { value: 'channel' as const, labelKey: 'operatorSubscriptions.channel' as const },
 ]
 
 const SUBSCRIPTION_SORT_COMPARATORS = {
@@ -51,15 +53,14 @@ const FILTER_CONFIG = {
 export function OperatorSubscriptions({ config: _config }: OperatorSubscriptionsProps) {
   const { t } = useTranslation(['cards', 'common'])
   const SORT_OPTIONS = useMemo(() =>
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    SORT_OPTIONS_KEYS.map(opt => ({ value: opt.value, label: String(t(opt.labelKey as any)) })),
+    SORT_OPTIONS_KEYS.map(opt => ({ value: opt.value, label: String(t(opt.labelKey)) })),
     [t]
   )
   const { isLoading: clustersLoading } = useClusters()
   const { drillToOperator } = useDrillDownActions()
 
   // Fetch subscriptions - pass undefined to get all clusters
-  const { subscriptions: rawSubscriptions, isLoading: subscriptionsLoading, consecutiveFailures, isFailed } = useOperatorSubscriptions(undefined)
+  const { subscriptions: rawSubscriptions, isLoading: subscriptionsLoading, consecutiveFailures, isFailed, isDemoFallback: isDemoData } = useCachedOperatorSubscriptions(undefined)
 
   // Report loading state to CardWrapper for skeleton/refresh behavior
   const { showSkeleton, showEmptyState } = useCardLoadingState({
@@ -67,6 +68,7 @@ export function OperatorSubscriptions({ config: _config }: OperatorSubscriptions
     hasAnyData: rawSubscriptions.length > 0,
     isFailed,
     consecutiveFailures,
+    isDemoData,
   })
 
   // Use useCardFilters for summary counts (globally filtered, before local search/pagination)
@@ -99,6 +101,8 @@ export function OperatorSubscriptions({ config: _config }: OperatorSubscriptions
       sortDirection,
       setSortDirection,
     },
+    containerRef,
+    containerStyle,
   } = useCardData<OperatorSubscription, SortByOption>(rawSubscriptions, {
     filter: {
       searchFields: ['name', 'namespace', 'channel', 'currentCSV'] as (keyof OperatorSubscription)[],
@@ -151,9 +155,9 @@ export function OperatorSubscriptions({ config: _config }: OperatorSubscriptions
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           {pendingCount > 0 && (
-            <span className="text-xs px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-400">
+            <StatusBadge color="orange">
               {t('operatorSubscriptions.nPending', { count: pendingCount })}
-            </span>
+            </StatusBadge>
           )}
         </div>
         <CardControlsRow
@@ -190,13 +194,13 @@ export function OperatorSubscriptions({ config: _config }: OperatorSubscriptions
             {localClusterFilter.length === 1 ? (
               <ClusterBadge cluster={localClusterFilter[0]} />
             ) : localClusterFilter.length > 1 ? (
-              <span className="text-xs px-2 py-1 rounded-full bg-indigo-500/20 text-indigo-400">
+              <StatusBadge color="blue" size="md" rounded="full">
                 {t('operatorSubscriptions.nClustersSelected', { count: localClusterFilter.length })}
-              </span>
+              </StatusBadge>
             ) : (
-              <span className="text-xs px-2 py-1 rounded-full bg-indigo-500/20 text-indigo-400">
+              <StatusBadge color="blue" size="md" rounded="full">
                 {t('operatorSubscriptions.allClusters', { count: availableClusters.length })}
-              </span>
+              </StatusBadge>
             )}
           </div>
 
@@ -227,7 +231,7 @@ export function OperatorSubscriptions({ config: _config }: OperatorSubscriptions
           </div>
 
           {/* Subscriptions list */}
-          <div className="flex-1 space-y-2 overflow-y-auto">
+          <div ref={containerRef} className="flex-1 space-y-2 overflow-y-auto" style={containerStyle}>
             {subscriptions.map((sub) => (
               <div
                 key={`${sub.cluster || 'unknown'}-${sub.namespace}-${sub.name}`}

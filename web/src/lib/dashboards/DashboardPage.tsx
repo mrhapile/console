@@ -1,10 +1,7 @@
-import { useEffect, useCallback, ReactNode } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useState, useEffect, useCallback, useRef, ReactNode } from 'react'
+import { useSearchParams, useLocation } from 'react-router-dom'
 import { Plus, LayoutGrid, ChevronDown, ChevronRight } from 'lucide-react'
-// NOTE: Wildcard import is required for dynamic icon resolution
-// Dashboard page resolves icon names from dashboard definitions at runtime
-import * as Icons from 'lucide-react'
-import { LucideIcon } from 'lucide-react'
+import { getIcon } from '../icons'
 import {
   DndContext,
   closestCenter,
@@ -76,11 +73,6 @@ export interface DashboardPageProps {
   isDemoData?: boolean
 }
 
-// Helper to get icon component
-function getIcon(name: string): LucideIcon {
-  return (Icons as unknown as Record<string, LucideIcon>)[name] || Icons.HelpCircle
-}
-
 // ============================================================================
 // DashboardPage Component
 // ============================================================================
@@ -106,6 +98,10 @@ export function DashboardPage({
   isDemoData = false,
 }: DashboardPageProps) {
   const [searchParams, setSearchParams] = useSearchParams()
+  const location = useLocation()
+  // Capture the route path at mount time — KeepAlive keeps this component alive
+  // across navigations, so we need to know which route we belong to.
+  const mountedRouteRef = useRef(location.pathname)
   const { getStatValue: getUniversalStatValue } = useUniversalStats()
   const Icon = getIcon(icon)
 
@@ -138,6 +134,10 @@ export function DashboardPage({
     dnd: { sensors, activeId, handleDragStart, handleDragEnd },
     autoRefresh,
     setAutoRefresh,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
   } = useDashboard({
     storageKey,
     defaultCards,
@@ -153,13 +153,18 @@ export function DashboardPage({
   const isRefreshing = externalRefreshing || showIndicator
   const isFetching = isLoading || isRefreshing
 
-  // Handle addCard URL param - open modal and clear param
+  // Handle addCard URL param - open modal and clear param.
+  // Guard with mounted route: KeepAlive keeps hidden dashboards mounted,
+  // so all of them see the same searchParams. Only process when active.
+  const [addCardSearch, setAddCardSearch] = useState('')
   useEffect(() => {
+    if (location.pathname !== mountedRouteRef.current) return
     if (searchParams.get('addCard') === 'true') {
+      setAddCardSearch(searchParams.get('cardSearch') || '')
       setShowAddCard(true)
       setSearchParams({}, { replace: true })
     }
-  }, [searchParams, setSearchParams, setShowAddCard])
+  }, [searchParams, setSearchParams, setShowAddCard, location.pathname])
 
   // Card handlers
   const handleAddCards = useCallback((newCards: Array<{ type: string; title: string; config: Record<string, unknown> }>) => {
@@ -173,8 +178,8 @@ export function DashboardPage({
   }, [removeCard])
 
   const handleConfigureCard = useCallback((cardId: string) => {
-    openConfigureCard(cardId, cards)
-  }, [openConfigureCard, cards])
+    openConfigureCard(cardId)
+  }, [openConfigureCard])
 
   const handleSaveCardConfig = useCallback((cardId: string, config: Record<string, unknown>) => {
     configureCard(cardId, config)
@@ -336,14 +341,19 @@ export function DashboardPage({
         onOpenTemplates={() => setShowTemplates(true)}
         onResetToDefaults={reset}
         isCustomized={isCustomized}
+        onUndo={undo}
+        onRedo={redo}
+        canUndo={canUndo}
+        canRedo={canRedo}
       />
 
       {/* Add Card Modal */}
       <AddCardModal
         isOpen={showAddCard}
-        onClose={() => setShowAddCard(false)}
+        onClose={() => { setShowAddCard(false); setAddCardSearch('') }}
         onAddCards={handleAddCards}
         existingCardTypes={cards.map(c => c.card_type)}
+        initialSearch={addCardSearch}
       />
 
       {/* Templates Modal */}

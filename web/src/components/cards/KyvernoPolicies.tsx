@@ -1,89 +1,141 @@
+/**
+ * Kyverno Policies card — live data from useKyverno hook.
+ *
+ * Detects Kyverno installation per cluster via CRD check, then fetches
+ * policies and policy reports. Falls back to demo data when not installed.
+ * Offers AI mission install link in demo/uninstalled state.
+ */
+
 import { useState, useMemo } from 'react'
-import { AlertTriangle, CheckCircle, ExternalLink, AlertCircle, FileCheck } from 'lucide-react'
+import { AlertTriangle, CheckCircle, ExternalLink, AlertCircle, FileCheck, Sparkles } from 'lucide-react'
 import { CardSearchInput } from '../../lib/cards'
-import { useReportCardDataState } from './CardDataContext'
+import { useCardLoadingState } from './CardDataContext'
 import { useTranslation } from 'react-i18next'
 import { DynamicCardErrorBoundary } from './DynamicCardErrorBoundary'
+import { useKyverno } from '../../hooks/useKyverno'
+import { useMissions } from '../../hooks/useMissions'
+import { useGlobalFilters } from '../../hooks/useGlobalFilters'
+import { StatusBadge } from '../ui/StatusBadge'
+import { RefreshIndicator } from '../ui/RefreshIndicator'
+import { KyvernoDetailModal } from './kyverno/KyvernoDetailModal'
+import type { KyvernoPolicy } from '../../hooks/useKyverno'
 
 interface KyvernoPoliciesProps {
   config?: Record<string, unknown>
 }
 
-// Demo data for Kyverno policies
-const DEMO_POLICIES = [
-  {
-    name: 'disallow-privileged',
-    kind: 'ClusterPolicy',
-    category: 'Pod Security',
-    status: 'enforcing',
-    violations: 2,
-    description: 'Disallow privileged containers',
-  },
-  {
-    name: 'require-labels',
-    kind: 'ClusterPolicy',
-    category: 'Best Practices',
-    status: 'enforcing',
-    violations: 8,
-    description: 'Require app and team labels',
-  },
-  {
-    name: 'restrict-image-registries',
-    kind: 'ClusterPolicy',
-    category: 'Supply Chain',
-    status: 'audit',
-    violations: 5,
-    description: 'Only allow images from approved registries',
-  },
-  {
-    name: 'add-network-policy',
-    kind: 'ClusterPolicy',
-    category: 'Network',
-    status: 'enforcing',
-    violations: 0,
-    description: 'Automatically add default network policy',
-  },
-  {
-    name: 'validate-resources',
-    kind: 'Policy',
-    category: 'Resources',
-    status: 'audit',
-    violations: 12,
-    description: 'Validate resource requests and limits',
-  },
-]
-
-const DEMO_STATS = {
-  totalPolicies: 15,
-  clusterPolicies: 12,
-  namespacedPolicies: 3,
-  totalViolations: 27,
-  enforcingCount: 10,
-  auditCount: 5,
-}
-
 function KyvernoPoliciesInternal({ config: _config }: KyvernoPoliciesProps) {
   const { t } = useTranslation()
-  useReportCardDataState({ hasData: true, isFailed: false, consecutiveFailures: 0 })
+  const { statuses, isLoading, isRefreshing, lastRefresh, installed, isDemoData, refetch } = useKyverno()
+  const { startMission } = useMissions()
+  const { selectedClusters } = useGlobalFilters()
   const [localSearch, setLocalSearch] = useState('')
+  const [modalCluster, setModalCluster] = useState<string | null>(null)
+
+  // Aggregate all policies across clusters, filtered by global cluster filter
+  const allPolicies = useMemo(() => {
+    const policies: KyvernoPolicy[] = []
+    for (const [clusterName, status] of Object.entries(statuses)) {
+      if (!status.installed) continue
+      if (selectedClusters.length > 0 && !selectedClusters.includes(clusterName)) continue
+      policies.push(...(status.policies || []))
+    }
+    return policies
+  }, [statuses, selectedClusters])
+
+  // Stats
+  const stats = useMemo(() => {
+    let totalPolicies = 0
+    let enforcingCount = 0
+    let totalViolations = 0
+    for (const [clusterName, status] of Object.entries(statuses)) {
+      if (!status.installed) continue
+      if (selectedClusters.length > 0 && !selectedClusters.includes(clusterName)) continue
+      totalPolicies += status.totalPolicies
+      enforcingCount += status.enforcingCount
+      totalViolations += status.totalViolations
+    }
+    return { totalPolicies, enforcingCount, totalViolations }
+  }, [statuses, selectedClusters])
 
   // Filter policies by local search
   const filteredPolicies = useMemo(() => {
-    if (!localSearch.trim()) return DEMO_POLICIES
+    if (!localSearch.trim()) return allPolicies
     const query = localSearch.toLowerCase()
-    return DEMO_POLICIES.filter(policy =>
+    return allPolicies.filter(policy =>
       policy.name.toLowerCase().includes(query) ||
       policy.category.toLowerCase().includes(query) ||
       policy.description.toLowerCase().includes(query) ||
       policy.status.toLowerCase().includes(query) ||
-      policy.kind.toLowerCase().includes(query)
+      policy.kind.toLowerCase().includes(query) ||
+      policy.cluster.toLowerCase().includes(query)
     )
-  }, [localSearch])
+  }, [localSearch, allPolicies])
+
+  useCardLoadingState({
+    isLoading,
+    hasAnyData: installed || isDemoData,
+    isDemoData,
+  })
+
+  const handleInstall = () => {
+    startMission({
+      title: 'Install Kyverno',
+      description: 'Install Kyverno for Kubernetes-native policy management',
+      type: 'deploy',
+      initialPrompt: `I want to install Kyverno for policy management on my clusters.
+
+Please help me:
+1. Install Kyverno via Helm (audit mode only — do NOT enforce)
+2. Verify the installation is running
+3. Set up a basic audit policy (like requiring labels)
+
+Use: helm install kyverno kyverno/kyverno --namespace kyverno --create-namespace --version v1.17.1 --set admissionController.replicas=1
+
+Important: Set validationFailureAction to Audit (not Enforce) for all policies to avoid breaking workloads.
+
+Please proceed step by step.`,
+      context: {},
+    })
+  }
+
+  const handleDeploySamplePolicies = () => {
+    startMission({
+      title: 'Deploy Sample Kyverno Policies',
+      description: 'Deploy audit-mode sample policies to see Kyverno in action',
+      type: 'deploy',
+      initialPrompt: `Deploy 4 sample Kyverno audit-mode policies so I can see the compliance dashboard in action.
+
+Please create and apply these ClusterPolicies in audit mode (validationFailureAction: Audit):
+
+1. **require-labels** — Require 'app.kubernetes.io/name' and 'app.kubernetes.io/managed-by' labels on all Pods
+2. **disallow-privileged-containers** — Disallow privileged containers (securityContext.privileged: true)
+3. **restrict-image-registries** — Only allow images from docker.io, gcr.io, ghcr.io, quay.io
+4. **require-resource-limits** — Require CPU and memory resource limits on all containers
+
+Important:
+- Set validationFailureAction to "Audit" on ALL policies (never Enforce)
+- Set background: true so existing resources are scanned
+- Add appropriate categories via annotations (policies.kyverno.io/category)
+- After applying, verify with: kubectl get clusterpolicies
+- Check PolicyReports are generated: kubectl get policyreports -A
+
+Please proceed step by step.`,
+      context: {},
+    })
+  }
+
+  // Detect degraded state: installed but no policies configured
+  const isDegraded = useMemo(() => {
+    if (!installed || isLoading) return false
+    const installedClusters = Object.values(statuses).filter(s => s.installed)
+    return installedClusters.length > 0 && installedClusters.every(s => s.totalPolicies === 0)
+  }, [installed, isLoading, statuses])
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'enforcing': return 'bg-green-500/20 text-green-400'
-      case 'audit': return 'bg-amber-500/20 text-amber-400'
+      case 'audit': return 'bg-yellow-500/20 text-yellow-400'
       default: return 'bg-blue-500/20 text-blue-400'
     }
   }
@@ -103,6 +155,7 @@ function KyvernoPoliciesInternal({ config: _config }: KyvernoPoliciesProps) {
     <div className="h-full flex flex-col min-h-card">
       {/* Controls */}
       <div className="flex items-center justify-end gap-1 mb-3">
+        <RefreshIndicator isRefreshing={isRefreshing} lastUpdated={lastRefresh} size="xs" />
         <a
           href="https://kyverno.io/"
           target="_blank"
@@ -114,38 +167,67 @@ function KyvernoPoliciesInternal({ config: _config }: KyvernoPoliciesProps) {
         </a>
       </div>
 
-      {/* Integration notice */}
-      <div className="flex items-start gap-2 p-2 mb-3 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-xs">
-        <AlertCircle className="w-4 h-4 text-cyan-400 flex-shrink-0 mt-0.5" />
-        <div>
-          <p className="text-cyan-400 font-medium">Kyverno Integration</p>
-          <p className="text-muted-foreground">
-            Install Kyverno for Kubernetes-native policy management.{' '}
-            <a
-              href="https://kyverno.io/docs/installation/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-purple-400 hover:underline"
-            >
-              Install guide →
-            </a>
-          </p>
+      {/* Install prompt when not detected (only after scanning completes) */}
+      {!installed && !isLoading && !isRefreshing && (
+        <div className="flex items-start gap-2 p-2 mb-3 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-xs">
+          <AlertCircle className="w-4 h-4 text-cyan-400 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-cyan-400 font-medium">Kyverno Integration</p>
+            <p className="text-muted-foreground">
+              Install Kyverno for Kubernetes-native policy management.{' '}
+              <button onClick={handleInstall} className="text-purple-400 hover:underline">
+                Install with an AI Mission →
+              </button>
+            </p>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Per-cluster badges — click to open detail modal */}
+      {installed && Object.values(statuses).some(s => s.installed) && (
+        <div className="flex flex-wrap gap-1 mb-3">
+          {Object.values(statuses).filter(s => s.installed).map(s => (
+            <button key={s.cluster} onClick={() => setModalCluster(s.cluster)} className="cursor-pointer">
+              <StatusBadge
+                color={s.totalViolations > 0 ? 'yellow' : 'green'}
+                size="xs"
+              >
+                {s.cluster}: {s.totalPolicies}p/{s.totalViolations}v
+              </StatusBadge>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Deploy Sample Policies when installed but no policies */}
+      {isDegraded && (
+        <div className="flex items-start gap-2 p-2 mb-3 rounded-lg bg-purple-500/10 border border-purple-500/20 text-xs">
+          <Sparkles className="w-4 h-4 text-purple-400 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-purple-400 font-medium">No Policies Configured</p>
+            <p className="text-muted-foreground">
+              Kyverno is installed but has no policies.{' '}
+              <button onClick={handleDeploySamplePolicies} className="text-purple-400 hover:underline">
+                Deploy sample audit policies with AI →
+              </button>
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-2 mb-3">
         <div className="p-2 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-center">
-          <p className="text-[10px] text-cyan-400">Policies</p>
-          <p className="text-lg font-bold text-foreground">{DEMO_STATS.totalPolicies}</p>
+          <p className="text-2xs text-cyan-400">Policies</p>
+          <p className="text-lg font-bold text-foreground">{stats.totalPolicies}</p>
         </div>
         <div className="p-2 rounded-lg bg-green-500/10 border border-green-500/20 text-center">
-          <p className="text-[10px] text-green-400">Enforcing</p>
-          <p className="text-lg font-bold text-foreground">{DEMO_STATS.enforcingCount}</p>
+          <p className="text-2xs text-green-400">Enforcing</p>
+          <p className="text-lg font-bold text-foreground">{stats.enforcingCount}</p>
         </div>
-        <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-center">
-          <p className="text-[10px] text-amber-400">Violations</p>
-          <p className="text-lg font-bold text-foreground">{DEMO_STATS.totalViolations}</p>
+        <div className="p-2 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-center">
+          <p className="text-2xs text-yellow-400">Violations</p>
+          <p className="text-lg font-bold text-foreground">{stats.totalViolations}</p>
         </div>
       </div>
 
@@ -160,22 +242,26 @@ function KyvernoPoliciesInternal({ config: _config }: KyvernoPoliciesProps) {
       <div className="flex-1 overflow-y-auto space-y-2">
         <p className="text-xs text-muted-foreground font-medium flex items-center gap-1 mb-2">
           <FileCheck className="w-3 h-3" />
-          Sample Policies
+          {isDemoData ? 'Sample Policies' : `${filteredPolicies.length} Policies`}
         </p>
-        {filteredPolicies.map(policy => (
+        {(filteredPolicies || []).map((policy, i) => (
           <div
-            key={policy.name}
-            className="p-2.5 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors"
+            key={`${policy.cluster}-${policy.name}-${i}`}
+            className="p-2.5 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors cursor-pointer"
+            onClick={() => setModalCluster(policy.cluster)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setModalCluster(policy.cluster) } }}
           >
             <div className="flex items-center justify-between mb-1">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium text-foreground truncate">{policy.name}</span>
-                <span className={`px-1.5 py-0.5 rounded text-[10px] ${getStatusColor(policy.status)}`}>
+                <span className={`px-1.5 py-0.5 rounded text-2xs ${getStatusColor(policy.status)}`}>
                   {policy.status}
                 </span>
               </div>
               {policy.violations > 0 && (
-                <span className="flex items-center gap-1 text-xs text-amber-400">
+                <span className="flex items-center gap-1 text-xs text-yellow-400">
                   <AlertTriangle className="w-3 h-3" />
                   {policy.violations}
                 </span>
@@ -183,7 +269,10 @@ function KyvernoPoliciesInternal({ config: _config }: KyvernoPoliciesProps) {
             </div>
             <div className="flex items-center justify-between text-xs">
               <span className={getCategoryColor(policy.category)}>{policy.category}</span>
-              <span className="text-muted-foreground">{policy.kind}</span>
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <span>{policy.kind}</span>
+                <span className="text-2xs">{policy.cluster}</span>
+              </div>
             </div>
           </div>
         ))}
@@ -191,8 +280,8 @@ function KyvernoPoliciesInternal({ config: _config }: KyvernoPoliciesProps) {
 
       {/* Features highlight */}
       <div className="mt-3 pt-3 border-t border-border/50">
-        <p className="text-[10px] text-muted-foreground font-medium mb-2">Kyverno Features</p>
-        <div className="grid grid-cols-2 gap-1.5 text-[10px]">
+        <p className="text-2xs text-muted-foreground font-medium mb-2">Kyverno Features</p>
+        <div className="grid grid-cols-2 gap-1.5 text-2xs">
           <div className="flex items-center gap-1 text-muted-foreground">
             <CheckCircle className="w-3 h-3 text-green-400" />
             Validate Resources
@@ -213,7 +302,7 @@ function KyvernoPoliciesInternal({ config: _config }: KyvernoPoliciesProps) {
       </div>
 
       {/* Footer links */}
-      <div className="flex items-center justify-center gap-3 pt-2 mt-2 border-t border-border/50 text-[10px]">
+      <div className="flex items-center justify-center gap-3 pt-2 mt-2 border-t border-border/50 text-2xs">
         <a
           href="https://kyverno.io/docs/"
           target="_blank"
@@ -222,7 +311,7 @@ function KyvernoPoliciesInternal({ config: _config }: KyvernoPoliciesProps) {
         >
           Documentation
         </a>
-        <span className="text-muted-foreground/30">•</span>
+        <span className="text-muted-foreground/30">·</span>
         <a
           href="https://kyverno.io/policies/"
           target="_blank"
@@ -232,6 +321,18 @@ function KyvernoPoliciesInternal({ config: _config }: KyvernoPoliciesProps) {
           Policy Library
         </a>
       </div>
+
+      {/* Detail Modal */}
+      {modalCluster && statuses[modalCluster] && (
+        <KyvernoDetailModal
+          isOpen={!!modalCluster}
+          onClose={() => setModalCluster(null)}
+          clusterName={modalCluster}
+          status={statuses[modalCluster]}
+          onRefresh={() => refetch()}
+          isRefreshing={isRefreshing}
+        />
+      )}
     </div>
   )
 }

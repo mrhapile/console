@@ -5,8 +5,8 @@ import App from './App.tsx'
 import './index.css'
 // Initialize i18n before rendering
 import './lib/i18n'
-// Register unified card data hooks (must be before App renders)
-import './lib/unified/registerHooks'
+// NOTE: registerHooks is loaded dynamically (below) to split the MCP hooks
+// (~300 KB) into a separate chunk that downloads in parallel with the main bundle.
 // Register demo data generators for unified demo system
 import { registerAllDemoGenerators } from './lib/unified/demo'
 registerAllDemoGenerators()
@@ -20,9 +20,26 @@ import {
 } from './lib/cache'
 // Import dynamic card/stats persistence loaders
 import { loadDynamicCards, getAllDynamicCards, loadDynamicStats } from './lib/dynamic-cards'
-import { registerDynamicCardType } from './components/cards/cardRegistry'
 import { STORAGE_KEY_SQLITE_MIGRATED } from './lib/constants'
 import { initAnalytics } from './lib/analytics'
+
+// ── Chunk load error recovery ─────────────────────────────────────────────
+// When a new build is deployed, chunk filenames change (content hashes).
+// Browsers with cached HTML reference old chunks that no longer exist.
+// Vite fires `vite:preloadError` before React error boundaries see the error.
+// Auto-reload once to pick up fresh HTML with correct chunk references.
+const CHUNK_RELOAD_KEY = 'chunk-reload-ts'
+const CHUNK_RELOAD_COOLDOWN_MS = 30_000
+window.addEventListener('vite:preloadError', (event) => {
+  const lastReload = sessionStorage.getItem(CHUNK_RELOAD_KEY)
+  const now = Date.now()
+  if (!lastReload || now - parseInt(lastReload) > CHUNK_RELOAD_COOLDOWN_MS) {
+    sessionStorage.setItem(CHUNK_RELOAD_KEY, String(now))
+    // Prevent the error from propagating to error boundaries
+    event.preventDefault()
+    window.location.reload()
+  }
+})
 
 // Suppress recharts dimension warnings (these occur when charts render before container is sized)
 const originalWarn = console.warn
@@ -101,12 +118,30 @@ enableMocking()
       console.error('[Cache] Preload failed:', e)
     }
 
-    // Restore dynamic cards and stat blocks from localStorage
+    // Restore dynamic cards and stat blocks from localStorage.
+    // registerDynamicCardType is dynamically imported to keep cardRegistry
+    // (~52 KB + 195 KB card configs) out of the main chunk.
     loadDynamicCards()
-    getAllDynamicCards().forEach(card => {
-      registerDynamicCardType(card.id, card.defaultWidth ?? 6)
-    })
+    const dynamicCards = getAllDynamicCards()
+    if (dynamicCards.length > 0) {
+      const { registerDynamicCardType } = await import('./components/cards/cardRegistry')
+      dynamicCards.forEach(card => {
+        registerDynamicCardType(card.id, card.defaultWidth ?? 6)
+      })
+    }
     loadDynamicStats()
+
+    // Register unified card data hooks — loaded as a dynamic import so the
+    // MCP hooks (~300 KB) end up in a separate chunk that the browser downloads
+    // in parallel with the main bundle, reducing time-to-first-paint.
+    await import('./lib/unified/registerHooks')
+
+    // Initialize GA4 analytics BEFORE first render so engagement tracking
+    // starts before PageViewTracker fires. The old setTimeout(() => ..., 0)
+    // deferred init to the next tick, causing engagementStartMs to be 0 when
+    // the first page_view flushed engagement — dropping all engagement time
+    // and crashing engaged sessions from 82% to 1.6%.
+    initAnalytics()
 
     ReactDOM.createRoot(document.getElementById('root')!).render(
       <React.StrictMode>
@@ -115,7 +150,4 @@ enableMocking()
         </BrowserRouter>
       </React.StrictMode>,
     )
-
-    // Initialize GA4 analytics after first render (deferred)
-    setTimeout(() => initAnalytics(), 0)
   })

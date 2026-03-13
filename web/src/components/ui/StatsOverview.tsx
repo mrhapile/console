@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useModalState } from '../../lib/modals'
 import { useTranslation } from 'react-i18next'
 import {
   Server, CheckCircle2, XCircle, WifiOff, Box, Cpu, MemoryStick, HardDrive, Zap, Layers,
@@ -7,6 +8,7 @@ import {
   ShieldAlert, ShieldOff, User, Info, Percent, ClipboardList, Sparkles, Activity,
   List, DollarSign, ChevronDown, ChevronRight, FlaskConical,
 } from 'lucide-react'
+import { StatusBadge } from './StatusBadge'
 import { StatBlockConfig, DashboardStatsType } from './StatsBlockDefinitions'
 import { StatsConfigModal, useStatsConfig } from './StatsConfig'
 import { useLocalAgent } from '../../hooks/useLocalAgent'
@@ -32,7 +34,7 @@ const COLOR_CLASSES: Record<string, string> = {
   cyan: 'text-cyan-400',
   blue: 'text-blue-400',
   red: 'text-red-400',
-  gray: 'text-gray-400',
+  gray: 'text-muted-foreground',
 }
 
 // Value color mapping for specific stat types
@@ -93,7 +95,7 @@ function StatBlock({ block, data, hasData, isLoading }: StatBlockProps) {
     >
       {isDemo && (
         <span className="absolute -top-1 -right-1" title="Demo data">
-          <FlaskConical className="w-3.5 h-3.5 text-yellow-400/50" />
+          <FlaskConical className="w-3.5 h-3.5 text-yellow-400/70" />
         </span>
       )}
       <div className="flex items-center gap-2 mb-2">
@@ -167,7 +169,7 @@ export function StatsOverview({
   // Show skeleton during mode switching for smooth transitions
   const effectiveIsLoading = isLoading || forceLoadingForOffline || isModeSwitching
   const effectiveHasData = forceLoadingForOffline ? false : hasData
-  const [isConfigOpen, setIsConfigOpen] = useState(false)
+  const { isOpen, open: openConfig, close: closeConfig } = useModalState()
 
   // Manage collapsed state with localStorage persistence
   const storageKey = collapsedStorageKey || `kubestellar-${dashboardType}-stats-collapsed`
@@ -219,10 +221,9 @@ export function StatsOverview({
             </div>
           )}
           {isDemoData && (
-            <span className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
-              <FlaskConical className="w-2.5 h-2.5" />
+            <StatusBadge color="yellow" size="xs" variant="outline" rounded="full" icon={<FlaskConical className="w-2.5 h-2.5" />}>
               {t('statsOverview.demo')}
-            </span>
+            </StatusBadge>
           )}
           {lastUpdated && (
             <span className="text-xs text-muted-foreground/60">
@@ -232,7 +233,7 @@ export function StatsOverview({
         </div>
         {showConfigButton && isExpanded && (
           <button
-            onClick={() => setIsConfigOpen(true)}
+            onClick={openConfig}
             className="p-1 text-muted-foreground hover:text-foreground hover:bg-secondary rounded transition-colors"
             title={t('statsOverview.configureStats')}
           >
@@ -263,8 +264,8 @@ export function StatsOverview({
 
       {/* Config modal */}
       <StatsConfigModal
-        isOpen={isConfigOpen}
-        onClose={() => setIsConfigOpen(false)}
+        isOpen={isOpen}
+        onClose={closeConfig}
         blocks={blocks}
         onSave={saveBlocks}
         defaultBlocks={defaultBlocks}
@@ -277,12 +278,16 @@ export function StatsOverview({
 /**
  * Helper to format large numbers (1000 -> 1K, 1000000 -> 1M)
  */
+const STAT_MILLION_THRESHOLD = 1_000_000
+const STAT_KILO_THRESHOLD = 10_000
+const STAT_KILO_DIVISOR = 1_000
+
 export function formatStatNumber(value: number): string {
-  if (value >= 1_000_000) {
-    return `${(value / 1_000_000).toFixed(1)}M`
+  if (value >= STAT_MILLION_THRESHOLD) {
+    return `${(value / STAT_MILLION_THRESHOLD).toFixed(1)}M`
   }
-  if (value >= 10_000) {
-    return `${(value / 1000).toFixed(1)}K`
+  if (value >= STAT_KILO_THRESHOLD) {
+    return `${(value / STAT_KILO_DIVISOR).toFixed(1)}K`
   }
   return value.toLocaleString()
 }
@@ -290,18 +295,23 @@ export function formatStatNumber(value: number): string {
 /**
  * Helper to format memory/storage values
  */
+/** GiB per TiB (1024) — used for memory/storage unit conversions */
+const GB_PER_TB = 1_024
+/** GiB per PiB (1024²) — used for memory/storage unit conversions */
+const GB_PER_PB = 1_024 * 1_024
+
 export function formatMemoryValue(gb: number): string {
-  if (gb >= 1024 * 1024) {
-    return `${(gb / (1024 * 1024)).toFixed(1)} PB`
+  if (gb >= GB_PER_PB) {
+    return `${(gb / GB_PER_PB).toFixed(1)} PB`
   }
-  if (gb >= 1024) {
-    return `${(gb / 1024).toFixed(1)} TB`
+  if (gb >= GB_PER_TB) {
+    return `${(gb / GB_PER_TB).toFixed(1)} TB`
   }
   if (gb >= 1) {
     return `${Math.round(gb)} GB`
   }
   if (gb >= 0.001) {
-    return `${Math.round(gb * 1024)} MB`
+    return `${Math.round(gb * GB_PER_TB)} MB`
   }
   return '0 GB'
 }
@@ -313,12 +323,15 @@ export function formatPercentage(value: number): string {
   return `${Math.round(value)}%`
 }
 
+/** Threshold above which currency values are abbreviated to K (e.g. $1.5K) */
+const CURRENCY_KILO_THRESHOLD = 1_000
+
 /**
  * Helper to format currency values
  */
 export function formatCurrency(value: number): string {
-  if (value >= 1000) {
-    return `$${(value / 1000).toFixed(1)}K`
+  if (value >= CURRENCY_KILO_THRESHOLD) {
+    return `$${(value / CURRENCY_KILO_THRESHOLD).toFixed(1)}K`
   }
   return `$${value.toFixed(2)}`
 }

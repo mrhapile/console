@@ -6,6 +6,10 @@
  * content hashing. Browsers with cached HTML still reference old
  * chunk URLs, producing these characteristic error messages.
  */
+
+/** SessionStorage key set before auto-reload, checked after to measure recovery */
+export const CHUNK_RELOAD_TS_KEY = 'chunk-reload-ts'
+
 export function isChunkLoadError(error: Error): boolean {
   const msg = error.message || ''
   return (
@@ -15,6 +19,8 @@ export function isChunkLoadError(error: Error): boolean {
     msg.includes('dynamically imported module') ||
     msg.includes('error loading dynamically imported module') ||
     // Vite-specific preload error
-    msg.includes('Unable to preload CSS')
+    msg.includes('Unable to preload CSS') ||
+    // Server returned HTML instead of JS (404 → SPA fallback for missing chunk)
+    msg.includes('is not a valid JavaScript MIME type')
   )
 }

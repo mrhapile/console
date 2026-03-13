@@ -1,10 +1,10 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronRight, Plus, Edit, Filter, ChevronDown, Server, RotateCcw } from 'lucide-react'
-import { useClusters, useHelmReleases, useHelmValues } from '../../hooks/useMCP'
+import { useClusters } from '../../hooks/useMCP'
+import { useCachedHelmReleases, useCachedHelmValues } from '../../hooks/useCachedData'
 import { useDrillDownActions } from '../../hooks/useDrillDown'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
-import { useDemoMode } from '../../hooks/useDemoMode'
 import { Skeleton } from '../ui/Skeleton'
 import { ClusterBadge } from '../ui/ClusterBadge'
 import { useCardData, commonComparators } from '../../lib/cards/cardHooks'
@@ -53,18 +53,11 @@ const SORT_OPTIONS = [
 ]
 
 export function HelmValuesDiff({ config }: HelmValuesDiffProps) {
-  const { t: _t } = useTranslation()
+  const { t } = useTranslation()
   const { deduplicatedClusters: allClusters, isLoading: clustersLoading } = useClusters()
   const [selectedCluster, setSelectedCluster] = useState<string>(config?.cluster || '')
   const [selectedRelease, setSelectedRelease] = useState<string>(config?.release || '')
   const { drillToHelm } = useDrillDownActions()
-  const { isDemoMode: demoMode } = useDemoMode()
-
-  // Report state to CardWrapper for refresh animation
-  useCardLoadingState({
-    isLoading: clustersLoading,
-    hasAnyData: allClusters.length > 0,
-  })
 
   // Local cluster filter (card-specific, kept as separate state)
   const [localClusterFilter, setLocalClusterFilter] = useState<string[]>([])
@@ -136,11 +129,18 @@ export function HelmValuesDiff({ config }: HelmValuesDiffProps) {
   }, [globalSelectedClusters, isAllClustersSelected])
 
   // Fetch ALL Helm releases from all clusters once (not per-cluster)
-  const { releases: allHelmReleases, isLoading: releasesLoading } = useHelmReleases()
+  const { releases: allHelmReleases, isLoading: releasesLoading, isDemoFallback: isDemoData } = useCachedHelmReleases()
+
+  // Report state to CardWrapper for refresh animation
+  useCardLoadingState({
+    isLoading: clustersLoading,
+    hasAnyData: allClusters.length > 0,
+    isDemoData,
+  })
 
   // Auto-select first cluster and release in demo mode
   useEffect(() => {
-    if (demoMode && allHelmReleases.length > 0 && allClusters.length > 0) {
+    if (isDemoData && allHelmReleases.length > 0 && allClusters.length > 0) {
       if (!selectedCluster) {
         const firstCluster = allClusters[0].name
         setSelectedCluster(firstCluster)
@@ -152,7 +152,7 @@ export function HelmValuesDiff({ config }: HelmValuesDiffProps) {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [demoMode, allHelmReleases, allClusters])
+  }, [isDemoData, allHelmReleases, allClusters])
 
   // Look up namespace from the selected release (required for helm commands)
   const selectedReleaseNamespace = useMemo(() => {
@@ -166,14 +166,15 @@ export function HelmValuesDiff({ config }: HelmValuesDiffProps) {
   // Fetch values for selected release (hook handles caching)
   const {
     values,
-    format,
     isLoading: valuesLoading,
     isRefreshing: valuesRefreshing,
-  } = useHelmValues(
+  } = useCachedHelmValues(
     selectedCluster || undefined,
     selectedRelease || undefined,
     selectedReleaseNamespace
   )
+  // Cached hook doesn't return format; values are always JSON objects
+  const format = 'json' as string
 
   // Only show skeleton when no cached data exists
   const isLoading = (clustersLoading || releasesLoading) && allHelmReleases.length === 0
@@ -254,6 +255,8 @@ export function HelmValuesDiff({ config }: HelmValuesDiffProps) {
     setItemsPerPage,
     filters,
     sorting,
+    containerRef,
+    containerStyle,
   } = useCardData<ValueEntry, SortByOption>(rawValueEntries, {
     filter: {
       searchFields: ['path', 'value'],
@@ -384,7 +387,7 @@ export function HelmValuesDiff({ config }: HelmValuesDiffProps) {
           }}
           className="flex-1 px-3 py-1.5 rounded-lg bg-secondary border border-border text-sm text-foreground"
         >
-          <option value="">Select cluster...</option>
+          <option value="">{t('selectors.selectCluster')}</option>
           {clusters.map(c => (
             <option key={c.name} value={c.name}>{c.name}</option>
           ))}
@@ -395,7 +398,7 @@ export function HelmValuesDiff({ config }: HelmValuesDiffProps) {
           disabled={!selectedCluster || releasesLoading}
           className="flex-1 px-3 py-1.5 rounded-lg bg-secondary border border-border text-sm text-foreground disabled:opacity-50"
         >
-          <option value="">Select release...</option>
+          <option value="">{t('selectors.selectRelease')}</option>
           {releases.map(r => (
             <option key={r} value={r}>{r}</option>
           ))}
@@ -408,7 +411,7 @@ export function HelmValuesDiff({ config }: HelmValuesDiffProps) {
         </div>
       ) : (valuesLoading || valuesRefreshing) && values === null ? (
         <div className="flex-1 flex flex-col items-center justify-center gap-3">
-          <div className="flex items-center gap-2 text-sm text-amber-400">
+          <div className="flex items-center gap-2 text-sm text-yellow-400">
             <RotateCcw className="w-4 h-4 animate-spin" />
             <span>Loading values for {selectedRelease}...</span>
           </div>
@@ -430,7 +433,7 @@ export function HelmValuesDiff({ config }: HelmValuesDiffProps) {
           >
             <div className="shrink-0"><ClusterBadge cluster={selectedCluster} /></div>
             <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
-            <span className="text-sm text-foreground group-hover:text-amber-400 truncate min-w-0">{selectedRelease}</span>
+            <span className="text-sm text-foreground group-hover:text-yellow-400 truncate min-w-0">{selectedRelease}</span>
             <ChevronRight className="w-4 h-4 text-muted-foreground ml-auto opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
           </div>
 
@@ -443,7 +446,7 @@ export function HelmValuesDiff({ config }: HelmValuesDiffProps) {
           </div>
 
           {/* Values list */}
-          <div className="flex-1 space-y-1 overflow-y-auto font-mono text-xs">
+          <div ref={containerRef} className="flex-1 space-y-1 overflow-y-auto font-mono text-xs" style={containerStyle}>
             {valueEntries.length === 0 ? (
               <div className="flex items-center justify-center text-muted-foreground text-sm py-4">
                 No custom values set (using chart defaults)

@@ -1,12 +1,14 @@
 import { useState, useMemo, useEffect } from 'react'
 import { Layers, Box, Activity, AlertTriangle, Server } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { useClusters, useNamespaces } from '../../hooks/useMCP'
+import { useClusters } from '../../hooks/useMCP'
+import { useCachedNamespaces } from '../../hooks/useCachedData'
 import { useCachedPodIssues, useCachedDeploymentIssues } from '../../hooks/useCachedData'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { useDrillDownActions } from '../../hooks/useDrillDown'
 import { Skeleton } from '../ui/Skeleton'
 import { ClusterBadge } from '../ui/ClusterBadge'
+import { StatusBadge } from '../ui/StatusBadge'
 import { RefreshIndicator } from '../ui/RefreshIndicator'
 import { useCardLoadingState } from './CardDataContext'
 import { useDemoMode } from '../../hooks/useDemoMode'
@@ -62,7 +64,7 @@ export function NamespaceOverview({ config }: NamespaceOverviewProps) {
   const { issues: allDeploymentIssues, isDemoFallback: deploymentIssuesDemoFallback, isRefreshing: isDeploymentIssuesRefreshing, lastRefresh: deploymentIssuesLastRefresh } = useCachedDeploymentIssues(selectedCluster)
 
   // Fetch namespaces for the selected cluster
-  const { namespaces } = useNamespaces(selectedCluster || undefined)
+  const { namespaces } = useCachedNamespaces(selectedCluster || undefined)
 
   // Auto-select first namespace in demo mode once namespaces load
   useEffect(() => {
@@ -243,9 +245,9 @@ export function NamespaceOverview({ config }: NamespaceOverviewProps) {
                     <div className="flex items-center gap-2 min-w-0">
                       <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
                       <span className="text-sm text-foreground truncate min-w-0 flex-1">{issue.name}</span>
-                      <span className="text-xs px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 shrink-0">
+                      <StatusBadge color="red" className="shrink-0">
                         {issue.status}
-                      </span>
+                      </StatusBadge>
                     </div>
                   </div>
                 ))}

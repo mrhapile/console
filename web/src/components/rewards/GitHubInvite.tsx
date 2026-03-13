@@ -4,6 +4,7 @@
 
 import { useState } from 'react'
 import { Github, Send, Coins, CheckCircle2, X, ExternalLink } from 'lucide-react'
+import { StatusBadge } from '../ui/StatusBadge'
 import { useRewards } from '../../hooks/useRewards'
 import { useTranslation } from 'react-i18next'
 
@@ -93,7 +94,7 @@ export function GitHubInviteModal({ isOpen, onClose }: GitHubInviteProps) {
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-2xl">
       <div className="bg-card border border-border rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border bg-secondary/30">
@@ -208,7 +209,7 @@ export function GitHubInviteButton({ onClick }: { onClick: () => void }) {
     >
       <Github className="w-4 h-4" />
       Invite Friend
-      <span className="px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400 text-xs">+500</span>
+      <StatusBadge color="yellow">+500</StatusBadge>
     </button>
   )
 }

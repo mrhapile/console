@@ -25,6 +25,7 @@ import { AiGenerationPanel } from './AiGenerationPanel'
 import { InlineAIAssist } from './InlineAIAssist'
 import { STAT_BLOCK_SYSTEM_PROMPT, STAT_INLINE_ASSIST_PROMPT } from '../../lib/ai/prompts'
 import { useAIMode } from '../../hooks/useAIMode'
+import { StatusBadge } from '../ui/StatusBadge'
 
 // Demo/preview constants
 const DEMO_STAT_VALUE = 42 // Placeholder value shown in stat block previews
@@ -39,7 +40,7 @@ interface StatBlockFactoryModalProps {
 type Tab = 'builder' | 'ai' | 'manage'
 
 const AVAILABLE_COLORS: StatBlockColor[] = [
-  'purple', 'blue', 'green', 'yellow', 'orange', 'red', 'cyan', 'gray', 'indigo',
+  'purple', 'blue', 'green', 'yellow', 'orange', 'red', 'cyan', 'gray',
 ]
 
 const POPULAR_ICONS = [
@@ -111,14 +112,14 @@ const SMART_DEFAULTS: { pattern: RegExp; defaults: SmartDefault }[] = [
   { pattern: /^cpu/i, defaults: { icon: 'Cpu', color: 'blue' } },
   { pattern: /^mem/i, defaults: { icon: 'MemoryStick', color: 'cyan' } },
   { pattern: /^(disk|storage)/i, defaults: { icon: 'HardDrive', color: 'orange' } },
-  { pattern: /^(network|traffic|bandwidth)/i, defaults: { icon: 'Wifi', color: 'indigo' } },
+  { pattern: /^(network|traffic|bandwidth)/i, defaults: { icon: 'Wifi', color: 'blue' } },
   { pattern: /^(latency|response|time)/i, defaults: { icon: 'Clock', color: 'yellow' } },
   { pattern: /^(user|session)/i, defaults: { icon: 'Users', color: 'blue' } },
   { pattern: /^(security|auth|permission)/i, defaults: { icon: 'Shield', color: 'red' } },
   { pattern: /^(deploy|release|version)/i, defaults: { icon: 'GitBranch', color: 'purple' } },
   { pattern: /^(node|cluster|server)/i, defaults: { icon: 'Server', color: 'blue' } },
   { pattern: /^(pod|container)/i, defaults: { icon: 'Box', color: 'cyan' } },
-  { pattern: /^(namespace|scope)/i, defaults: { icon: 'Layers', color: 'indigo' } },
+  { pattern: /^(namespace|scope)/i, defaults: { icon: 'Layers', color: 'blue' } },
 ]
 
 function getSmartDefault(label: string): SmartDefault | null {
@@ -604,7 +605,7 @@ export function StatBlockFactoryModal({ isOpen, onClose, onStatsCreated }: StatB
                           {/* Remove */}
                           <button
                             onClick={() => removeBlock(idx)}
-                            className="p-1 text-muted-foreground hover:text-red-400 transition-colors"
+                            className="p-1 text-muted-foreground hover:text-red-400 transition-colors min-h-11 min-w-11 flex items-center justify-center"
                           >
                             <X className="w-3.5 h-3.5" />
                           </button>
@@ -615,7 +616,7 @@ export function StatBlockFactoryModal({ isOpen, onClose, onStatsCreated }: StatB
                           <div className="mt-1.5 ml-7">
                             <button
                               onClick={() => applySmartDefault(idx, smartDefault)}
-                              className="text-[10px] text-purple-400/60 hover:text-purple-400 transition-colors"
+                              className="text-2xs text-purple-400/60 hover:text-purple-400 transition-colors"
                             >
                               Suggested: {(() => { const SugIcon = getIcon(smartDefault.icon); return <SugIcon className="w-3 h-3 inline mr-0.5" /> })()}
                               {smartDefault.icon} · {smartDefault.color}
@@ -661,22 +662,22 @@ export function StatBlockFactoryModal({ isOpen, onClose, onStatsCreated }: StatB
                 <div className="flex items-center justify-between px-3 py-1.5 border-b border-border/30">
                   <div className="flex items-center gap-1.5">
                     <Eye className="w-3 h-3 text-muted-foreground" />
-                    <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">{t('dashboard.preview.header')}</span>
-                    <span className="text-[9px] px-1 py-0.5 rounded bg-purple-500/10 text-purple-400/70">
+                    <span className="text-2xs font-medium text-muted-foreground uppercase tracking-wide">{t('dashboard.preview.header')}</span>
+                    <StatusBadge color="purple" size="xs">
                       {t('dashboard.preview.sampleValues')}
-                    </span>
+                    </StatusBadge>
                   </div>
                   <div className="flex items-center gap-0.5">
                     <button
                       onClick={() => setPreviewSize(previewSize === 'card' ? 'full' : 'card')}
-                      className="p-1 rounded text-muted-foreground/60 hover:text-foreground transition-colors"
+                      className="p-1 rounded text-muted-foreground/60 hover:text-foreground transition-colors min-h-11 min-w-11 flex items-center justify-center"
                       title={previewSize === 'card' ? t('dashboard.preview.fullWidth') : t('dashboard.preview.cardWidth')}
                     >
                       {previewSize === 'card' ? <Maximize2 className="w-3 h-3" /> : <Minimize2 className="w-3 h-3" />}
                     </button>
                     <button
                       onClick={() => setPreviewCollapsed(true)}
-                      className="p-1 rounded text-muted-foreground/60 hover:text-foreground transition-colors"
+                      className="p-1 rounded text-muted-foreground/60 hover:text-foreground transition-colors min-h-11 min-w-11 flex items-center justify-center"
                       title={t('dashboard.preview.hidePreview')}
                     >
                       <EyeOff className="w-3 h-3" />
@@ -773,9 +774,9 @@ export function StatBlockFactoryModal({ isOpen, onClose, onStatsCreated }: StatB
                     <div className="flex items-center gap-2">
                       <Activity className="w-4 h-4 text-purple-400 shrink-0" />
                       <span className="text-sm font-medium text-foreground">{stats.title || stats.type}</span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400">
+                      <StatusBadge color="purple" size="xs">
                         {t('dashboard.statFactory.blocksCount', { count: stats.blocks.length })}
-                      </span>
+                      </StatusBadge>
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       Type: {stats.type}
@@ -786,7 +787,7 @@ export function StatBlockFactoryModal({ isOpen, onClose, onStatsCreated }: StatB
                         return (
                           <span
                             key={block.id}
-                            className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-secondary/50 text-muted-foreground"
+                            className="inline-flex items-center gap-1 text-2xs px-1.5 py-0.5 rounded bg-secondary/50 text-muted-foreground"
                           >
                             <BlockIcon className={cn('w-3 h-3', COLOR_CLASSES[block.color])} />
                             {block.label}
@@ -794,7 +795,7 @@ export function StatBlockFactoryModal({ isOpen, onClose, onStatsCreated }: StatB
                         )
                       })}
                       {stats.blocks.length > 8 && (
-                        <span className="text-[10px] px-1.5 py-0.5 text-muted-foreground">
+                        <span className="text-2xs px-1.5 py-0.5 text-muted-foreground">
                           +{stats.blocks.length - 8} more
                         </span>
                       )}

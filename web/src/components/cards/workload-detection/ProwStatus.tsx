@@ -1,5 +1,6 @@
 import { ExternalLink } from 'lucide-react'
 import { Skeleton } from '../../ui/Skeleton'
+import { RefreshIndicator } from '../../ui/RefreshIndicator'
 import { useCachedProwJobs } from '../../../hooks/useCachedData'
 import { useCardLoadingState, useCardDemoState } from '../CardDataContext'
 import { useTranslation } from 'react-i18next'
@@ -13,7 +14,7 @@ export function ProwStatus({ config: _config }: ProwStatusProps) {
   // Check if we should use demo data
   const { shouldUseDemoData } = useCardDemoState({ requires: 'agent' })
 
-  const { status, jobs, isLoading, isFailed, consecutiveFailures } = useCachedProwJobs('prow', 'prow')
+  const { status, jobs, isLoading, isRefreshing, lastRefresh, isFailed, consecutiveFailures } = useCachedProwJobs('prow', 'prow')
 
   // Report loading state to CardWrapper
   useCardLoadingState({
@@ -40,6 +41,12 @@ export function ProwStatus({ config: _config }: ProwStatusProps) {
         <span className={`text-xs px-1.5 py-0.5 rounded ${status.healthy ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
           {status.healthy ? 'Healthy' : 'Unhealthy'}
         </span>
+        <RefreshIndicator
+          isRefreshing={isRefreshing}
+          lastUpdated={lastRefresh ? new Date(lastRefresh) : null}
+          size="sm"
+          showLabel={true}
+        />
       </div>
 
       {/* Stats grid */}
@@ -54,7 +61,7 @@ export function ProwStatus({ config: _config }: ProwStatusProps) {
         </div>
         <div className="p-3 rounded-lg bg-secondary/30">
           <div className="flex items-center gap-2">
-            <div className="text-lg font-bold text-blue-400">{status.runningJobs}</div>
+            <div className="text-lg font-bold text-green-400">{status.runningJobs}</div>
             <span className="text-xs text-muted-foreground">running</span>
           </div>
           <div className="flex items-center gap-2">
@@ -76,7 +83,7 @@ export function ProwStatus({ config: _config }: ProwStatusProps) {
 
       {/* Footer */}
       <div className="mt-4 pt-3 border-t border-border/50 text-xs text-muted-foreground">
-        <a href="https://prow2.kubestellar.io" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:underline flex items-center gap-1">
+        <a href="https://prow2.kubestellar.io" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:underline flex items-center gap-1 min-h-11 min-w-11">
           Open Prow Dashboard <ExternalLink className="w-3 h-3" />
         </a>
       </div>

@@ -1,27 +1,159 @@
 /**
  * Anonymous Product Feedback — Lightweight Event Emitter
  *
- * Stealth event delivery that bypasses ALL blocking:
- *   - No external scripts (immune to content-based ad blockers)
- *   - First-party proxy path /api/m (immune to domain-based blockers)
- *   - Base64-encoded payload (immune to parameter-pattern network filters)
+ * Dual-path event delivery for maximum coverage:
+ *   1. PRIMARY: gtag.js loaded via first-party proxy (/api/gtag) — events
+ *      go directly from browser to GA4, appearing in Realtime reports.
+ *   2. FALLBACK: Custom proxy path /api/m with base64-encoded payloads —
+ *      used when ad blockers prevent gtag.js from loading. Events appear
+ *      in standard GA4 reports but NOT in Realtime.
  *
- * The proxy decodes the payload, rewrites the measurement ID, and forwards
- * to GA4's collection endpoint.
+ * The first-party proxy serves gtag.js from the console's own domain,
+ * bypassing domain-based ad blockers. Content-based blockers may still
+ * block it, in which case the custom proxy fallback kicks in.
  */
 
 import { STORAGE_KEY_ANALYTICS_OPT_OUT } from './constants'
+import { CHUNK_RELOAD_TS_KEY } from './chunkErrors'
 import { isDemoMode } from './demoMode'
 
 // DECOY Measurement ID — the proxy rewrites this to the real ID server-side.
 const GA_MEASUREMENT_ID = 'G-0000000000'
 
 const PROXY_PATH = '/api/m'
+const GTAG_SCRIPT_PATH = '/api/gtag'
+
+// ── Umami Integration ─────────────────────────────────────────────
+// Umami runs in parallel with GA4 for a 2-week validation period.
+// Events flow to both platforms via the send() function.
+// Umami auto-tracks pageviews; custom events use umami.track().
+
+/** First-party proxy path for the Umami tracking script — bypasses ad blockers */
+const UMAMI_SCRIPT_PATH = '/api/ksc'
+/** Single Umami website ID — all environments report here, filterable by hostname */
+const UMAMI_WEBSITE_ID = '07111027-162f-4e37-a0bb-067b9d08b88a'
+
+/** Load Umami tracking script via first-party proxy (async, non-blocking).
+ *  data-host-url tells Umami to POST events to our own origin (which proxies
+ *  to analytics.kubestellar.io/api/send) instead of the script's source domain. */
+function loadUmamiScript() {
+  const script = document.createElement('script')
+  script.src = UMAMI_SCRIPT_PATH
+  script.defer = true
+  script.dataset.websiteId = UMAMI_WEBSITE_ID
+  // Umami appends /api/send internally — set host to our origin so events
+  // go through the first-party proxy at /api/send → analytics.kubestellar.io
+  script.dataset.hostUrl = window.location.origin
+  document.head.appendChild(script)
+}
+
+/** Send event to Umami (fire-and-forget, never blocks GA4) */
+function sendToUmami(eventName: string, params?: Record<string, string | number | boolean>) {
+  try {
+    if (window.umami?.track) {
+      window.umami.track(eventName, params)
+    }
+  } catch {
+    // Umami failures must never affect GA4 tracking
+  }
+}
+
+// ── gtag.js Integration ─────────────────────────────────────────────
+// gtag.js sends events directly from browser → GA4, which is required
+// for GA4 Realtime reports. The custom proxy approach (server → GA4)
+// only populates standard reports with a 24-48h delay.
+
+let gtagAvailable = false
+let gtagDecided = false  // true once we know whether gtag.js loaded or was blocked
+let realMeasurementId = ''
+
+// Events queued while waiting for gtag.js load verdict.
+// Without queuing, events fire via the proxy (with our custom client ID) AND
+// gtag.js creates its own _ga cookie client ID — GA4 sees two separate users,
+// inflating active user counts.
+let pendingEvents: Array<{ name: string; params?: Record<string, string | number | boolean> }> = []
+
+// Maximum time to wait for gtag.js before falling back to proxy
+const GTAG_LOAD_TIMEOUT_MS = 5_000
+// Delay after script.onload to verify gtag.js actually initialized
+const GTAG_INIT_CHECK_MS = 100
+
+// Extend window for gtag + Umami globals
+declare global {
+  interface Window {
+    dataLayer: unknown[]
+    gtag: (...args: unknown[]) => void
+    google_tag_manager: unknown // Defined by gtag.js when it initializes
+    umami?: {
+      track: (eventName: string, data?: Record<string, string | number | boolean>) => void
+    }
+  }
+}
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000 // 30 min
 const CID_KEY = '_ksc_cid'
 const SID_KEY = '_ksc_sid'
 const SC_KEY = '_ksc_sc'
 const LAST_KEY = '_ksc_last'
+
+// ── Bot / Headless Detection ────────────────────────────────────────
+// Automated installs (CI pipelines, cloud VMs running curl|bash) start
+// the console but never interact with it. Without filtering, these
+// generate tens of thousands of fake "users" from data center IPs.
+// We gate analytics on real user interaction to exclude them.
+
+/** Returns true if the environment looks automated/headless */
+function isAutomatedEnvironment(): boolean {
+  try {
+    // WebDriver flag — set by Puppeteer, Selenium, Playwright, headless Chrome
+    if (navigator.webdriver) return true
+    // Headless Chrome UA substring
+    if (/HeadlessChrome/i.test(navigator.userAgent)) return true
+    // PhantomJS
+    if (/PhantomJS/i.test(navigator.userAgent)) return true
+    // No browser plugins (headless browsers have none)
+    // navigator.plugins is a PluginArray — check length, not truthiness
+    if (navigator.plugins && navigator.plugins.length === 0 && !/Firefox/i.test(navigator.userAgent)) return true
+    // No language preferences (bots often skip this)
+    if (!navigator.languages || navigator.languages.length === 0) return true
+  } catch {
+    // If any check throws, assume real browser
+  }
+  return false
+}
+
+/** Whether a real user interaction has been detected */
+let userHasInteracted = false
+/** Whether analytics scripts have been loaded (only after interaction) */
+let analyticsScriptsLoaded = false
+
+/**
+ * Called on first user interaction (click, scroll, keypress, touch).
+ * Loads analytics scripts and flushes the initial page_view / conversion events.
+ */
+function onFirstInteraction() {
+  if (userHasInteracted) return
+  userHasInteracted = true
+
+  // Remove interaction listeners — they're no longer needed
+  for (const evt of INTERACTION_GATE_EVENTS) {
+    document.removeEventListener(evt, onFirstInteraction)
+  }
+
+  if (!analyticsScriptsLoaded) {
+    analyticsScriptsLoaded = true
+    // NOW load gtag.js and Umami — only after a real human interacted
+    loadGtagScript()
+    loadUmamiScript()
+    startEngagementTracking()
+
+    // Fire the events that would have fired at page load
+    const deploymentType = getDeploymentType()
+    emitConversionStep(1, 'discovery', { deployment_type: deploymentType })
+    emitPageView(window.location.pathname)
+  }
+}
+
+const INTERACTION_GATE_EVENTS = ['mousedown', 'keydown', 'scroll', 'touchstart', 'click'] as const
 
 // ── Engagement Time Tracking ──────────────────────────────────────
 // GA4 requires the `_et` parameter (engagement time in milliseconds)
@@ -58,14 +190,21 @@ function checkEngagement() {
   }
 }
 
-/** Get total engagement time in ms and reset the accumulator */
-function getAndResetEngagementMs(): number {
+/** Get total engagement time in ms without resetting (peek) */
+function peekEngagementMs(): number {
   let total = accumulatedEngagementMs
   if (isUserActive) {
-    // Add current active period
     total += Date.now() - engagementStartMs
   }
-  // Reset for next event
+  return total
+}
+
+/** Get total engagement time in ms and reset the accumulator.
+ *  Only called for user_engagement events — GA4 calculates Engaged Sessions
+ *  and Average Engagement Time exclusively from _et on user_engagement hits.
+ *  Other events get a non-resetting peek so the accumulator isn't drained. */
+function getAndResetEngagementMs(): number {
+  const total = peekEngagementMs()
   accumulatedEngagementMs = 0
   if (isUserActive) {
     engagementStartMs = Date.now()
@@ -114,15 +253,11 @@ function stopEngagementTracking() {
  * the _et parameter on other events (page_view, custom events) is ignored
  * for engagement metrics.
  *
- * Note: We do NOT call getAndResetEngagementMs() here because send() already
- * calls it internally to set the _et parameter. Calling it here would reset
- * the accumulator before send() reads it, resulting in _et=0.
+ * send() calls getAndResetEngagementMs() only for user_engagement events,
+ * ensuring the full accumulated engagement time is attributed here.
  */
 function emitUserEngagement() {
-  // Check if there's accumulated engagement without resetting.
-  // send() will handle getting and resetting the actual value via _et.
-  const hasEngagement = accumulatedEngagementMs > 0 || (isUserActive && Date.now() - engagementStartMs > 0)
-  if (hasEngagement) {
+  if (peekEngagementMs() > 0) {
     send('user_engagement', {})
   }
 }
@@ -189,16 +324,61 @@ let pageId = ''
 let userProperties: Record<string, string> = {}
 let userId = ''
 let initialized = false
-let eventCount = 0
 
-function send(
+// GA4 considers a session "engaged" after 10 seconds of active use.
+// Once set, it stays true for the rest of the session.
+const ENGAGED_SESSION_THRESHOLD_MS = 10_000
+let sessionEngaged = false
+
+/**
+ * sendViaGtag sends an event through gtag.js (direct browser → GA4).
+ * This path appears in GA4 Realtime reports because GA4 sees a real
+ * browser session, not a server-side proxy request.
+ */
+function sendViaGtag(
   eventName: string,
   params?: Record<string, string | number | boolean>,
 ) {
-  if (!initialized || isOptedOut()) return
+  if (!window.gtag) return
 
+  // Build gtag event parameters — gtag.js handles session management,
+  // client ID, engagement time, etc. automatically. We only need to
+  // pass event-specific params and user properties.
+  const gtagParams: Record<string, string | number | boolean> = {
+    ...(params || {}),
+  }
+
+  // Include engagement time for user_engagement events
+  if (eventName === 'user_engagement') {
+    const engagementMs = getAndResetEngagementMs()
+    if (engagementMs > 0) {
+      gtagParams.engagement_time_msec = engagementMs
+    }
+  } else {
+    const engagementMs = peekEngagementMs()
+    if (engagementMs > 0) {
+      gtagParams.engagement_time_msec = engagementMs
+    }
+  }
+
+  // Pass user ID if set
+  if (userId) {
+    gtagParams.user_id = userId
+  }
+
+  window.gtag('event', eventName, gtagParams)
+}
+
+/**
+ * sendViaProxy sends an event through the custom first-party proxy
+ * (/api/m). This fallback is used when gtag.js is blocked by ad blockers.
+ * Events appear in standard GA4 reports but NOT in Realtime.
+ */
+function sendViaProxy(
+  eventName: string,
+  params?: Record<string, string | number | boolean>,
+) {
   const { sid, sc, isNew } = getSession()
-  eventCount++
 
   const p = new URLSearchParams()
   p.set('v', '2')
@@ -216,21 +396,31 @@ function send(
   if (isNew) {
     p.set('_ss', '1')
     p.set('_nsi', '1')
+    sessionEngaged = false
   }
   if (sc === 1 && isNew) {
     p.set('_fv', '1')
   }
-  if (eventCount > 1) {
+
+  if (!sessionEngaged && peekEngagementMs() >= ENGAGED_SESSION_THRESHOLD_MS) {
+    sessionEngaged = true
+  }
+  if (sessionEngaged) {
     p.set('seg', '1')
   }
 
-  // Engagement time — GA4 uses this to calculate Average Engagement Time
-  const engagementMs = getAndResetEngagementMs()
-  if (engagementMs > 0) {
-    p.set('_et', String(engagementMs))
+  if (eventName === 'user_engagement') {
+    const engagementMs = getAndResetEngagementMs()
+    if (engagementMs > 0) {
+      p.set('_et', String(engagementMs))
+    }
+  } else {
+    const engagementMs = peekEngagementMs()
+    if (engagementMs > 0) {
+      p.set('_et', String(engagementMs))
+    }
   }
 
-  // Event parameters (ep.key=val)
   if (params) {
     for (const [k, v] of Object.entries(params)) {
       if (typeof v === 'number') {
@@ -241,7 +431,6 @@ function send(
     }
   }
 
-  // User properties (up.key=val)
   for (const [k, v] of Object.entries(userProperties)) {
     p.set(`up.${k}`, v)
   }
@@ -250,8 +439,12 @@ function send(
     p.set('uid', userId)
   }
 
-  // Encode the entire payload as base64 so network-level filters
-  // can't match on GA4 parameter patterns (tid=G-*, en=, cid=, etc.)
+  if (utmParams.utm_source) p.set('cs', utmParams.utm_source)
+  if (utmParams.utm_medium) p.set('cm', utmParams.utm_medium)
+  if (utmParams.utm_campaign) p.set('cn', utmParams.utm_campaign)
+  if (utmParams.utm_term) p.set('ck', utmParams.utm_term)
+  if (utmParams.utm_content) p.set('cc', utmParams.utm_content)
+
   const encoded = btoa(p.toString())
   const url = `${PROXY_PATH}?d=${encodeURIComponent(encoded)}`
 
@@ -262,11 +455,165 @@ function send(
   }
 }
 
+/**
+ * Flush all queued events once we know whether gtag.js is available.
+ * Called exactly once when gtagDecided transitions to true.
+ */
+function flushPendingEvents() {
+  const queue = pendingEvents
+  pendingEvents = []
+  for (const evt of queue) {
+    if (gtagAvailable) {
+      sendViaGtag(evt.name, evt.params)
+    } else {
+      sendViaProxy(evt.name, evt.params)
+    }
+  }
+}
+
+/**
+ * Mark gtag.js availability and flush any queued events.
+ * Idempotent — only the first call takes effect.
+ */
+function markGtagDecided(available: boolean) {
+  if (gtagDecided) return
+  gtagAvailable = available
+  gtagDecided = true
+  flushPendingEvents()
+}
+
+function send(
+  eventName: string,
+  params?: Record<string, string | number | boolean>,
+) {
+  if (!initialized || isOptedOut()) return
+
+  // Don't send any events until a real user has interacted.
+  // This prevents automated/headless page loads from generating traffic.
+  if (!userHasInteracted) return
+
+  // Umami: send every event immediately (no queuing needed — Umami has its
+  // own session management and doesn't conflict with GA4 client IDs)
+  sendToUmami(eventName, params)
+
+  // While waiting for gtag.js to load, queue events instead of sending
+  // via the proxy. This prevents GA4 from seeing two different client IDs
+  // (our _ksc_cid via proxy vs gtag's _ga cookie) for the same user.
+  if (!gtagDecided) {
+    pendingEvents.push({ name: eventName, params })
+    return
+  }
+
+  // Primary path: gtag.js (appears in GA4 Realtime)
+  if (gtagAvailable) {
+    sendViaGtag(eventName, params)
+    return
+  }
+
+  // Fallback: custom proxy (standard reports only, no Realtime)
+  sendViaProxy(eventName, params)
+}
+
 // ── Initialization ─────────────────────────────────────────────────
+
+// Public GA4 measurement ID — same as any website's GA tag in page source.
+// Overridable via GA4_REAL_MEASUREMENT_ID env var on the backend.
+const GTAG_MEASUREMENT_ID = 'G-PXWNVQ8D1T'
+
+// Google Tag Manager CDN — used when first-party proxy is unavailable (Netlify)
+const GTAG_CDN_URL = 'https://www.googletagmanager.com/gtag/js'
+
+/**
+ * loadGtagScript loads gtag.js so events go directly from the browser to GA4.
+ * This is required for GA4 Realtime — the custom proxy only populates standard
+ * reports because GA4 can't see a real browser session through a server proxy.
+ *
+ * Loading order:
+ *   1. Try first-party proxy (/api/gtag) — works with Go backend, bypasses
+ *      domain-based ad blockers since it's same-origin.
+ *   2. Fall back to Google CDN — works on Netlify (CSP allows it).
+ *   3. If both fail (aggressive ad blocker) — custom proxy handles events.
+ */
+function loadGtagScript() {
+  const mid = GTAG_MEASUREMENT_ID
+  realMeasurementId = mid
+
+  // Initialize dataLayer and gtag function before script loads
+  window.dataLayer = window.dataLayer || []
+  window.gtag = function gtag() {
+    // eslint-disable-next-line prefer-rest-params
+    window.dataLayer.push(arguments)
+  }
+  window.gtag('js', new Date())
+
+  // Pass our custom client_id so gtag.js uses the SAME identity as
+  // our proxy fallback. Without this, gtag creates its own _ga cookie
+  // client ID — GA4 sees two different users for the same person,
+  // inflating active user counts.
+  window.gtag('config', mid, {
+    send_page_view: false, // We control page_view timing
+    cookie_domain: 'auto',
+    client_id: getClientId(),
+  })
+
+  // Set user properties explicitly via gtag('set') — more reliable than
+  // passing them in the config call. This ensures deployment_type and
+  // other user-scoped dimensions appear correctly in Realtime reports.
+  window.gtag('set', 'user_properties', { ...userProperties })
+
+  // Timeout: if gtag.js hasn't loaded in GTAG_LOAD_TIMEOUT_MS, fall back to proxy
+  setTimeout(() => markGtagDecided(false), GTAG_LOAD_TIMEOUT_MS)
+
+  // Helper: verify gtag.js actually initialized (not just HTTP 200 with wrong content).
+  // On Netlify, /api/gtag returns HTML (SPA fallback) with HTTP 200 — the browser
+  // fires onload but MIME-type checking prevents execution. We detect this by
+  // checking for google_tag_manager, which real gtag.js always defines.
+  const isGtagInitialized = () => typeof window.google_tag_manager !== 'undefined'
+
+  // Helper: load gtag.js from Google CDN (used as fallback)
+  const loadCdnFallback = () => {
+    const cdnScript = document.createElement('script')
+    cdnScript.async = true
+    cdnScript.src = `${GTAG_CDN_URL}?id=${mid}`
+    cdnScript.onload = () => {
+      // Small delay to let gtag.js initialize before checking
+      setTimeout(() => markGtagDecided(isGtagInitialized()), GTAG_INIT_CHECK_MS)
+    }
+    cdnScript.onerror = () => { markGtagDecided(false) } // Ad blocker blocked CDN too
+    document.head.appendChild(cdnScript)
+  }
+
+  // Try first-party proxy first (Go backend serves gtag.js from same origin)
+  const script = document.createElement('script')
+  script.async = true
+  script.src = `${GTAG_SCRIPT_PATH}?id=${mid}`
+  script.onload = () => {
+    // Verify the script actually initialized gtag.js — not just HTTP 200 with HTML.
+    // On Netlify the SPA catch-all returns index.html for /api/gtag, which loads
+    // (HTTP 200) but gets blocked by strict MIME type checking (nosniff).
+    setTimeout(() => {
+      if (isGtagInitialized()) {
+        markGtagDecided(true)
+      } else {
+        loadCdnFallback()
+      }
+    }, GTAG_INIT_CHECK_MS)
+  }
+  script.onerror = () => {
+    // First-party proxy returned non-200 — try Google CDN
+    loadCdnFallback()
+  }
+  document.head.appendChild(script)
+}
 
 export function initAnalytics() {
   measurementId = (import.meta.env.VITE_GA_MEASUREMENT_ID as string | undefined) || GA_MEASUREMENT_ID
   if (!measurementId || initialized) return
+
+  // Skip analytics entirely in automated/headless environments.
+  // This filters CI pipelines, cloud VMs, Puppeteer, etc.
+  if (isAutomatedEnvironment()) return
+
   initialized = true
   pageId = rand()
 
@@ -280,9 +627,6 @@ export function initAnalytics() {
     ...(tz && { timezone: tz }),
   }
 
-  // Start tracking user engagement for GA4 engagement time metrics
-  startEngagementTracking()
-
   // Flush engagement on page close (Safari doesn't always fire visibilitychange)
   window.addEventListener('beforeunload', emitUserEngagement)
 
@@ -292,8 +636,12 @@ export function initAnalytics() {
   // Capture UTM parameters from landing URL
   captureUtmParams()
 
-  // Fire discovery conversion step
-  emitConversionStep(1, 'discovery', { deployment_type: deploymentType })
+  // Gate analytics script loading on real user interaction.
+  // Automated installs load the page but never click/scroll/type — this
+  // single check eliminates ~25,000 bot "users" per day from data centers.
+  for (const evt of INTERACTION_GATE_EVENTS) {
+    document.addEventListener(evt, onFirstInteraction, { once: true, passive: true })
+  }
 }
 
 // ── Anonymous User ID ──────────────────────────────────────────────
@@ -309,15 +657,30 @@ async function hashUserId(uid: string): Promise<string> {
 export async function setAnalyticsUserId(uid: string) {
   if (!uid || uid === 'demo-user') return
   userId = await hashUserId(uid)
+  // Propagate to gtag if available
+  if (gtagAvailable && window.gtag && realMeasurementId) {
+    window.gtag('config', realMeasurementId, { user_id: userId })
+  }
 }
 
 export function setAnalyticsUserProperties(props: Record<string, string>) {
   userProperties = { ...userProperties, ...props }
+  // Propagate to gtag — use 'set' for reliable user property delivery
+  if (gtagAvailable && window.gtag) {
+    window.gtag('set', 'user_properties', props)
+  }
 }
 
 // ── Opt-out management ─────────────────────────────────────────────
 
 export function setAnalyticsOptOut(optOut: boolean) {
+  // Fire the event BEFORE setting the flag — send() checks isOptedOut()
+  // and would drop the event if the flag were already set.
+  if (optOut) {
+    send('ksc_analytics_opted_out', {})
+  } else {
+    send('ksc_analytics_opted_in', {})
+  }
   localStorage.setItem(STORAGE_KEY_ANALYTICS_OPT_OUT, String(optOut))
   window.dispatchEvent(new CustomEvent('kubestellar-settings-changed'))
   if (optOut) {
@@ -371,6 +734,73 @@ export function emitCardConfigured(cardType: string) {
 
 export function emitCardReplaced(oldType: string, newType: string) {
   send('ksc_card_replaced', { old_type: oldType, new_type: newType })
+}
+
+// ── Global Search (Cmd+K) ─────────────────────────────────────────────
+
+/** Fired when user opens the global search dialog (Cmd+K, Ctrl+K, or click) */
+export function emitGlobalSearchOpened(method: 'keyboard' | 'click') {
+  send('ksc_global_search_opened', { method })
+}
+
+/** Fired when user executes a search query (debounced — fires once per search session on blur) */
+export function emitGlobalSearchQueried(queryLength: number, resultCount: number) {
+  send('ksc_global_search_queried', { query_length: queryLength, result_count: resultCount })
+}
+
+/** Fired when user selects a result from global search */
+export function emitGlobalSearchSelected(category: string, resultIndex: number) {
+  send('ksc_global_search_selected', { category, result_index: resultIndex })
+}
+
+/** Fired when user chooses "Ask AI" from global search */
+export function emitGlobalSearchAskAI(queryLength: number) {
+  send('ksc_global_search_ask_ai', { query_length: queryLength })
+}
+
+// ── Card Interactions (framework-level) ──────────────────────────────
+// These fire automatically from shared UI components (CardControls,
+// CardSearchInput, CardClusterFilter) so all cards get consistent
+// tracking without per-card instrumentation.
+
+/** Fired when user changes sort field in a card's controls */
+export function emitCardSortChanged(sortField: string, cardType: string) {
+  send('ksc_card_sort_changed', { sort_field: sortField, card_type: cardType, page_path: window.location.pathname })
+}
+
+/** Fired when user toggles sort direction in a card's controls */
+export function emitCardSortDirectionChanged(direction: string, cardType: string) {
+  send('ksc_card_sort_direction_changed', { direction, card_type: cardType, page_path: window.location.pathname })
+}
+
+/** Fired when user changes the item limit in a card's controls */
+export function emitCardLimitChanged(limit: string, cardType: string) {
+  send('ksc_card_limit_changed', { limit, card_type: cardType, page_path: window.location.pathname })
+}
+
+/** Fired when user types in a card's search input (debounced — fires once per search session) */
+export function emitCardSearchUsed(queryLength: number, cardType: string) {
+  send('ksc_card_search_used', { query_length: queryLength, card_type: cardType, page_path: window.location.pathname })
+}
+
+/** Fired when user changes cluster filter selection in a card */
+export function emitCardClusterFilterChanged(selectedCount: number, totalCount: number, cardType: string) {
+  send('ksc_card_cluster_filter_changed', {
+    selected_count: selectedCount,
+    total_count: totalCount,
+    card_type: cardType,
+    page_path: window.location.pathname,
+  })
+}
+
+/** Fired when user navigates pages via pagination controls */
+export function emitCardPaginationUsed(page: number, totalPages: number, cardType: string) {
+  send('ksc_card_pagination_used', { page, total_pages: totalPages, card_type: cardType, page_path: window.location.pathname })
+}
+
+/** Fired when user clicks a list item row in a card */
+export function emitCardListItemClicked(cardType: string) {
+  send('ksc_card_list_item_clicked', { card_type: cardType, page_path: window.location.pathname })
 }
 
 // ── AI Missions ────────────────────────────────────────────────────
@@ -442,30 +872,87 @@ export function emitFeedbackSubmitted(type: string) {
 // Maximum length for error detail strings to avoid oversized payloads
 const ERROR_DETAIL_MAX_LEN = 100
 
-export function emitError(category: string, detail: string) {
+export function emitError(category: string, detail: string, cardId?: string) {
   send('ksc_error', {
     error_category: category,
     error_detail: detail.slice(0, ERROR_DETAIL_MAX_LEN),
     error_page: window.location.pathname,
+    ...(cardId && { card_id: cardId }),
   })
+}
+
+/**
+ * Check if this page load is a recovery from a chunk-load auto-reload.
+ * If CHUNK_RELOAD_TS_KEY exists in sessionStorage, the previous page load
+ * hit a stale chunk error and triggered window.location.reload().
+ * Emit a recovery event with the outcome and clear the marker.
+ */
+function checkChunkReloadRecovery() {
+  try {
+    const reloadTs = sessionStorage.getItem(CHUNK_RELOAD_TS_KEY)
+    if (!reloadTs) return
+
+    const reloadTime = parseInt(reloadTs)
+    const recoveryMs = Date.now() - reloadTime
+
+    // Clear the marker so we don't re-emit on subsequent navigations
+    sessionStorage.removeItem(CHUNK_RELOAD_TS_KEY)
+
+    // Emit recovery event — the app loaded successfully after auto-reload
+    send('ksc_chunk_reload_recovery', {
+      recovery_result: 'success',
+      recovery_latency_ms: recoveryMs,
+      recovery_page: window.location.pathname,
+    })
+  } catch {
+    // sessionStorage may be unavailable in some contexts
+  }
 }
 
 /** Track unhandled promise rejections and runtime errors globally */
 export function startGlobalErrorTracking() {
+  // Check if we just recovered from a chunk-load auto-reload
+  checkChunkReloadRecovery()
+
+  // Re-entrancy guard: if emitError() → send() triggers another error,
+  // the global handler must NOT call emitError() again (infinite recursion → max call stack)
+  let isEmitting = false
+
   window.addEventListener('unhandledrejection', (event) => {
-    const msg = event.reason?.message || String(event.reason || 'unknown')
-    emitError('unhandled_rejection', msg)
+    if (isEmitting) return
+    isEmitting = true
+    try {
+      const msg = event.reason?.message || String(event.reason || 'unknown')
+      emitError('unhandled_rejection', msg)
+    } finally {
+      isEmitting = false
+    }
   })
 
   window.addEventListener('error', (event) => {
     // Skip errors from cross-origin scripts (no useful info)
     if (!event.message || event.message === 'Script error.') return
-    emitError('runtime', event.message)
+    if (isEmitting) return
+    isEmitting = true
+    try {
+      emitError('runtime', event.message)
+    } finally {
+      isEmitting = false
+    }
   })
 }
 
 export function emitSessionExpired() {
   send('ksc_session_expired')
+}
+
+/** Emit when auto-reload failed to fix stale chunks (user sees manual reload UI) */
+export function emitChunkReloadRecoveryFailed(errorDetail: string) {
+  send('ksc_chunk_reload_recovery', {
+    recovery_result: 'failed',
+    recovery_page: window.location.pathname,
+    error_detail: errorDetail.slice(0, ERROR_DETAIL_MAX_LEN),
+  })
 }
 
 // ── Tour ───────────────────────────────────────────────────────────
@@ -490,6 +977,47 @@ export function emitMarketplaceInstall(itemType: string, itemName: string) {
 
 export function emitMarketplaceRemove(itemType: string) {
   send('ksc_marketplace_remove', { item_type: itemType })
+}
+
+/** Fired when a marketplace install attempt fails */
+export function emitMarketplaceInstallFailed(itemType: string, itemName: string, error: string) {
+  send('ksc_marketplace_install_failed', { item_type: itemType, item_name: itemName, error_detail: error.slice(0, 100) })
+}
+
+// ── Theme ─────────────────────────────────────────────────────────
+
+/** Fired when user changes theme via settings dropdown or navbar toggle */
+export function emitThemeChanged(themeId: string, source: string) {
+  send('ksc_theme_changed', { theme_id: themeId, source })
+}
+
+// ── Language ──────────────────────────────────────────────────────
+
+/** Fired when user changes UI language */
+export function emitLanguageChanged(langCode: string) {
+  send('ksc_language_changed', { language: langCode })
+}
+
+// ── AI Settings ───────────────────────────────────────────────────
+
+/** Fired when user changes AI mode (low/medium/high) */
+export function emitAIModeChanged(mode: string) {
+  send('ksc_ai_mode_changed', { mode })
+}
+
+/** Fired when user toggles AI predictions on/off */
+export function emitAIPredictionsToggled(enabled: boolean) {
+  send('ksc_ai_predictions_toggled', { enabled: String(enabled) })
+}
+
+/** Fired when user changes prediction confidence threshold */
+export function emitConfidenceThresholdChanged(value: number) {
+  send('ksc_confidence_threshold_changed', { threshold: value })
+}
+
+/** Fired when user toggles consensus (multi-provider) mode */
+export function emitConsensusModeToggled(enabled: boolean) {
+  send('ksc_consensus_mode_toggled', { enabled: String(enabled) })
 }
 
 // ── GitHub Token ───────────────────────────────────────────────────
@@ -525,6 +1053,71 @@ export function emitAgentDisconnected() {
   send('ksc_agent_disconnected')
 }
 
+/**
+ * Emitted when cluster inventory changes. Sends only aggregate counts —
+ * NEVER cluster names, IPs, servers, or any identifiable information.
+ */
+export function emitClusterInventory(counts: {
+  total: number
+  healthy: number
+  unhealthy: number
+  unreachable: number
+  distributions: Record<string, number>
+}) {
+  // Flatten distribution counts into safe GA4 params (e.g., dist_eks: 2)
+  const distParams: Record<string, string | number> = {}
+  for (const [dist, count] of Object.entries(counts.distributions)) {
+    distParams[`dist_${dist}`] = count
+  }
+  send('ksc_cluster_inventory', {
+    cluster_count: counts.total,
+    healthy_count: counts.healthy,
+    unhealthy_count: counts.unhealthy,
+    unreachable_count: counts.unreachable,
+    ...distParams,
+  })
+  // Set as user property so GA4 can compute averages across users
+  userProperties.cluster_count = String(counts.total)
+}
+
+// ── Agent Provider Detection ────────────────────────────────────
+// Emitted once per agent connection to track which coding agent CLIs
+// and API keys are configured on the user's machine.
+
+/** Capability bitmask values matching Go ProviderCapability constants */
+const CAPABILITY_CHAT = 1
+const CAPABILITY_TOOL_EXEC = 2
+
+interface ProviderSummary {
+  name: string
+  displayName: string
+  capabilities: number
+}
+
+/**
+ * Fired when kc-agent connects with the list of available AI providers.
+ * Categorizes providers into CLI (tool-exec capable) and API (chat-only)
+ * so GA4 reports show which coding agents users have installed.
+ */
+export function emitAgentProvidersDetected(providers: ProviderSummary[]) {
+  if (!providers || providers.length === 0) return
+
+  const cliProviders = (providers || [])
+    .filter(p => (p.capabilities & CAPABILITY_TOOL_EXEC) !== 0)
+    .map(p => p.name)
+  const apiProviders = (providers || [])
+    .filter(p => (p.capabilities & CAPABILITY_TOOL_EXEC) === 0 && (p.capabilities & CAPABILITY_CHAT) !== 0)
+    .map(p => p.name)
+
+  send('ksc_agent_providers_detected', {
+    provider_count: providers.length,
+    cli_providers: cliProviders.join(',') || 'none',
+    api_providers: apiProviders.join(',') || 'none',
+    cli_count: cliProviders.length,
+    api_count: apiProviders.length,
+  })
+}
+
 // ── API Key Configuration ───────────────────────────────────────
 
 export function emitApiKeyConfigured(provider: string) {
@@ -543,6 +1136,7 @@ export function emitApiKeyRemoved(provider: string) {
 //   4 = clusters      (real clusters detected)
 //   5 = api_key       (AI API key configured)
 //   6 = github_token  (GitHub token configured)
+//   7 = adopter_cta   (clicked "Join Adopters" to edit ADOPTERS.MD)
 
 export function emitConversionStep(
   step: number,
@@ -614,28 +1208,470 @@ export function emitWidgetDownloaded(widgetType: 'uebersicht' | 'browser') {
   send('ksc_widget_downloaded', { widget_type: widgetType })
 }
 
+// ── Engagement Nudges ────────────────────────────────────────────────
+
+/** Fired when contextual nudge is shown to user */
+export function emitNudgeShown(nudgeType: string) {
+  send('ksc_nudge_shown', { nudge_type: nudgeType })
+}
+
+/** Fired when user dismisses a contextual nudge */
+export function emitNudgeDismissed(nudgeType: string) {
+  send('ksc_nudge_dismissed', { nudge_type: nudgeType })
+}
+
+/** Fired when user acts on a contextual nudge (e.g. clicks "Add card") */
+export function emitNudgeActioned(nudgeType: string) {
+  send('ksc_nudge_actioned', { nudge_type: nudgeType })
+}
+
+/** Fired when smart card suggestions are shown after agent connects */
+export function emitSmartSuggestionsShown(cardCount: number) {
+  send('ksc_smart_suggestions_shown', { card_count: cardCount })
+}
+
+/** Fired when user adds a card from smart suggestions */
+export function emitSmartSuggestionAccepted(cardType: string) {
+  send('ksc_smart_suggestion_accepted', { card_type: cardType })
+}
+
+/** Fired when user adds all suggested cards at once */
+export function emitSmartSuggestionsAddAll(cardCount: number) {
+  send('ksc_smart_suggestions_add_all', { card_count: cardCount })
+}
+
+// ── Card Recommendations (dashboard panel) ──────────────────────────
+
+/** Fired when the "Recommended Cards for your clusters" panel renders */
+export function emitCardRecommendationsShown(cardCount: number, highPriorityCount: number) {
+  send('ksc_card_recommendations_shown', { card_count: cardCount, high_priority_count: highPriorityCount })
+}
+
+/** Fired when user adds a card from the recommendations panel */
+export function emitCardRecommendationActioned(cardType: string, priority: string) {
+  send('ksc_card_recommendation_actioned', { card_type: cardType, priority })
+}
+
+// ── Mission Suggestions (dashboard panel) ───────────────────────────
+
+/** Fired when the "Recommended Actions for your clusters" panel renders */
+export function emitMissionSuggestionsShown(count: number, criticalCount: number) {
+  send('ksc_mission_suggestions_shown', { suggestion_count: count, critical_count: criticalCount })
+}
+
+/** Fired when user starts an action from the mission suggestions panel */
+export function emitMissionSuggestionActioned(missionType: string, priority: string, action: string) {
+  send('ksc_mission_suggestion_actioned', { mission_type: missionType, priority, action })
+}
+
+// ── "Almost" Action Tracking ────────────────────────────────────────
+// These track user intent signals — users who almost engaged but didn't.
+// Helps distinguish discovery problems from conversion problems.
+
+/** Fired when add-card modal is opened (tracks intent to add) */
+export function emitAddCardModalOpened() {
+  send('ksc_add_card_modal_opened')
+}
+
+/** Fired when add-card modal is closed without adding any cards */
+export function emitAddCardModalAbandoned() {
+  send('ksc_add_card_modal_abandoned')
+}
+
+/** Fired when user scrolls the dashboard card grid (debounced) */
+export function emitDashboardScrolled(depth: 'shallow' | 'deep') {
+  send('ksc_dashboard_scrolled', { depth })
+}
+
+/** Fired when PWA install prompt is shown */
+export function emitPwaPromptShown() {
+  send('ksc_pwa_prompt_shown')
+}
+
+/** Fired when PWA install prompt is dismissed */
+export function emitPwaPromptDismissed() {
+  send('ksc_pwa_prompt_dismissed')
+}
+
+// ── LinkedIn Share ─────────────────────────────────────────────────
+
+/** Fired when user clicks a LinkedIn share button */
+export function emitLinkedInShare(source: string) {
+  send('ksc_linkedin_share', { source })
+}
+
+// ── Settings: Update ──────────────────────────────────────────────
+
+/** Fired when user clicks "Check for Updates" in settings */
+export function emitUpdateChecked() {
+  send('ksc_update_checked')
+}
+
+/** Fired when user clicks "Update Now" to trigger an update */
+export function emitUpdateTriggered() {
+  send('ksc_update_triggered')
+}
+
+/** Fired when kc-agent reports the update completed successfully */
+export function emitUpdateCompleted(durationMs: number) {
+  send('ksc_update_completed', { duration_ms: durationMs })
+}
+
+/** Fired when kc-agent reports the update failed */
+export function emitUpdateFailed(error: string) {
+  send('ksc_update_failed', { error_detail: error.slice(0, 100) })
+}
+
+/** Fired when user clicks "Refresh to load new version" after a successful update */
+export function emitUpdateRefreshed() {
+  send('ksc_update_refreshed')
+}
+
+/** Fired when the stale-update timeout fires (no WebSocket progress within threshold) */
+export function emitUpdateStalled() {
+  send('ksc_update_stalled')
+}
+
+// ── Drill-Down ───────────────────────────────────────────────────
+
+/** Fired when user opens a drill-down view (pod, cluster, namespace, etc.) */
+export function emitDrillDownOpened(viewType: string) {
+  send('ksc_drill_down_opened', { view_type: viewType })
+}
+
+/** Fired when user closes the drill-down modal */
+export function emitDrillDownClosed(viewType: string, depth: number) {
+  send('ksc_drill_down_closed', { view_type: viewType, depth })
+}
+
+// ── Card Refresh ─────────────────────────────────────────────────
+
+/** Fired when user clicks the manual refresh button on a card */
+export function emitCardRefreshed(cardType: string) {
+  send('ksc_card_refreshed', { card_type: cardType })
+}
+
+// ── Global Filters ───────────────────────────────────────────────
+
+/** Fired when user changes global cluster filter */
+export function emitGlobalClusterFilterChanged(selectedCount: number, totalCount: number) {
+  send('ksc_global_cluster_filter_changed', { selected_count: selectedCount, total_count: totalCount })
+}
+
+/** Fired when user changes global severity filter */
+export function emitGlobalSeverityFilterChanged(selectedCount: number) {
+  send('ksc_global_severity_filter_changed', { selected_count: selectedCount })
+}
+
+/** Fired when user changes global status filter */
+export function emitGlobalStatusFilterChanged(selectedCount: number) {
+  send('ksc_global_status_filter_changed', { selected_count: selectedCount })
+}
+
+// ── Prediction Feedback ──────────────────────────────────────────
+
+/** Fired when user gives thumbs up/down on a prediction */
+export function emitPredictionFeedbackSubmitted(feedback: string, predictionType: string, provider?: string) {
+  send('ksc_prediction_feedback', { feedback, prediction_type: predictionType, provider: provider ?? 'unknown' })
+}
+
+// ── Snooze ───────────────────────────────────────────────────────
+
+/** Fired when user snoozes a card, alert, mission, or recommendation */
+export function emitSnoozed(targetType: string, duration?: string) {
+  send('ksc_snoozed', { target_type: targetType, duration: duration ?? 'default' })
+}
+
+/** Fired when user unsnoozes an item */
+export function emitUnsnoozed(targetType: string) {
+  send('ksc_unsnoozed', { target_type: targetType })
+}
+
+// ── Dashboard CRUD ───────────────────────────────────────────────
+
+/** Fired when user creates a new dashboard */
+export function emitDashboardCreated(name: string) {
+  send('ksc_dashboard_created', { dashboard_name: name })
+}
+
+/** Fired when user deletes a dashboard */
+export function emitDashboardDeleted() {
+  send('ksc_dashboard_deleted')
+}
+
+/** Fired when user renames a dashboard */
+export function emitDashboardRenamed() {
+  send('ksc_dashboard_renamed')
+}
+
+/** Fired when user imports a dashboard */
+export function emitDashboardImported() {
+  send('ksc_dashboard_imported')
+}
+
+/** Fired when user exports a dashboard */
+export function emitDashboardExported() {
+  send('ksc_dashboard_exported')
+}
+
+// ── Data Export ──────────────────────────────────────────────────
+
+/** Fired when user downloads or copies data from a drill-down view */
+export function emitDataExported(exportType: string, resourceType?: string) {
+  send('ksc_data_exported', { export_type: exportType, resource_type: resourceType ?? '' })
+}
+
+// ── User Management ──────────────────────────────────────────────
+
+/** Fired when admin changes a user's role */
+export function emitUserRoleChanged(newRole: string) {
+  send('ksc_user_role_changed', { new_role: newRole })
+}
+
+/** Fired when admin removes a user */
+export function emitUserRemoved() {
+  send('ksc_user_removed')
+}
+
+// ── Marketplace Browsing ─────────────────────────────────────────
+
+/** Fired when user views a marketplace item detail */
+export function emitMarketplaceItemViewed(itemType: string, itemName: string) {
+  send('ksc_marketplace_item_viewed', { item_type: itemType, item_name: itemName })
+}
+
+// ── Insights ─────────────────────────────────────────────────────
+
+/** Fired when user views an insight card detail */
+export function emitInsightViewed(insightCategory: string) {
+  send('ksc_insight_viewed', { insight_category: insightCategory })
+}
+
+// ── Arcade Games ────────────────────────────────────────────────
+
+/** Fired when user starts or restarts an arcade game */
+export function emitGameStarted(gameName: string) {
+  send('ksc_game_started', { game_name: gameName })
+}
+
+/** Fired when a game ends (win, loss, or completion) */
+export function emitGameEnded(gameName: string, outcome: string, score: number) {
+  send('ksc_game_ended', { game_name: gameName, outcome, score })
+}
+
+// ── Sidebar Navigation ──────────────────────────────────────────
+
+/** Fired when user clicks a sidebar navigation item */
+export function emitSidebarNavigated(destination: string) {
+  send('ksc_sidebar_navigated', { destination })
+}
+
+// ── Local Cluster ─────────────────────────────────────────────────
+
+/** Fired when user creates a local cluster (kind, k3d, minikube) */
+export function emitLocalClusterCreated(tool: string) {
+  send('ksc_local_cluster_created', { tool })
+}
+
+// ── Developer Session ──────────────────────────────────────────────
+
+/** Storage key to ensure we only fire developer session once per client */
+const DEV_SESSION_KEY = 'ksc-dev-session-sent'
+
+/**
+ * Fired once per client when the user is running on localhost with the
+ * Go backend (cloned the repo + startup-oauth.sh). This distinguishes
+ * developers / contributors from regular console.kubestellar.io visitors.
+ */
+export function emitDeveloperSession() {
+  if (localStorage.getItem(DEV_SESSION_KEY)) return
+  const dep = getDeploymentType()
+  if (dep !== 'localhost') return
+  // Don't fire in forced demo mode (e.g. VITE_DEMO_MODE=true on localhost)
+  if (isDemoMode() && !localStorage.getItem('ksc-token')) return
+  localStorage.setItem(DEV_SESSION_KEY, '1')
+  send('ksc_developer_session', { deployment_type: dep })
+}
+
+// ── Card Modal Browsing ─────────────────────────────────────────────
+
+/** Fired when user expands a category in the add-card modal */
+export function emitCardCategoryBrowsed(category: string) {
+  send('ksc_card_category_browsed', { category })
+}
+
+/** Fired when the "Recommended for you" section renders in add-card modal */
+export function emitRecommendedCardShown(cardTypes: string[]) {
+  send('ksc_recommended_cards_shown', {
+    card_count: cardTypes.length,
+    card_types: cardTypes.join(','),
+  })
+}
+
+// ── Dashboard Duration ──────────────────────────────────────────────
+
+/** Fired when user navigates away from a dashboard, recording time spent */
+export function emitDashboardViewed(dashboardId: string, durationMs: number) {
+  send('ksc_dashboard_viewed', { dashboard_id: dashboardId, duration_ms: durationMs })
+}
+
+// ── Feature Hints ───────────────────────────────────────────────────
+
+/** Fired when a contextual feature hint tooltip appears */
+export function emitFeatureHintShown(hintType: string) {
+  send('ksc_feature_hint_shown', { hint_type: hintType })
+}
+
+/** Fired when user dismisses a feature hint tooltip */
+export function emitFeatureHintDismissed(hintType: string) {
+  send('ksc_feature_hint_dismissed', { hint_type: hintType })
+}
+
+/** Fired when user clicks the CTA on a feature hint tooltip */
+export function emitFeatureHintActioned(hintType: string) {
+  send('ksc_feature_hint_actioned', { hint_type: hintType })
+}
+
+// ── Getting Started Banner ──────────────────────────────────────────
+
+/** Fired when the Getting Started banner renders on main dashboard */
+export function emitGettingStartedShown() {
+  send('ksc_getting_started_shown')
+}
+
+/** Fired when user clicks one of the Getting Started quick-action buttons */
+export function emitGettingStartedActioned(action: string) {
+  send('ksc_getting_started_actioned', { action })
+}
+
+// ── Post-Connect Activation ──────────────────────────────────────────
+
+/** Fired when the post-agent-connect activation banner renders */
+export function emitPostConnectShown() {
+  send('ksc_post_connect_shown')
+}
+
+/** Fired when user clicks a CTA on the post-connect activation banner */
+export function emitPostConnectActioned(action: string) {
+  send('ksc_post_connect_actioned', { action })
+}
+
+// ── Demo-to-Local CTA ──────────────────────────────────────────────
+
+/** Fired when the "Try it locally" CTA renders for demo-site visitors */
+export function emitDemoToLocalShown() {
+  send('ksc_demo_to_local_shown')
+}
+
+/** Fired when a demo-site visitor clicks the install CTA */
+export function emitDemoToLocalActioned(action: string) {
+  send('ksc_demo_to_local_actioned', { action })
+}
+
+// ── Adopter Nudge ─────────────────────────────────────────────────
+
+/** Fired when the adopter nudge banner renders */
+export function emitAdopterNudgeShown() {
+  send('ksc_adopter_nudge_shown')
+}
+
+/** Fired when user clicks the adopter nudge CTA */
+export function emitAdopterNudgeActioned(action: string) {
+  send('ksc_adopter_nudge_actioned', { action })
+}
+
 // ── UTM Tracking ───────────────────────────────────────────────────
 
-let utmParams: Record<string, string> = {}
+/** Maximum length for UTM parameter values to avoid oversized beacon URLs */
+const UTM_PARAM_MAX_LEN = 100
+
+interface UtmParams {
+  utm_source?: string
+  utm_medium?: string
+  utm_campaign?: string
+  utm_term?: string
+  utm_content?: string
+}
+
+let utmParams: UtmParams = {}
 
 export function captureUtmParams() {
   const params = new URLSearchParams(window.location.search)
   const utmKeys = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content']
   for (const key of utmKeys) {
     const val = params.get(key)
-    if (val) utmParams[key] = val
+    if (val) utmParams[key as keyof UtmParams] = val.slice(0, UTM_PARAM_MAX_LEN)
   }
   if (Object.keys(utmParams).length > 0) {
     sessionStorage.setItem('_ksc_utm', JSON.stringify(utmParams))
-    send('ksc_utm_landing', utmParams)
+    send('ksc_utm_landing', utmParams as Record<string, string>)
   } else {
     const stored = sessionStorage.getItem('_ksc_utm')
     if (stored) {
-      try { utmParams = JSON.parse(stored) } catch { /* ignore */ }
+      try { utmParams = JSON.parse(stored) as UtmParams } catch { /* ignore */ }
     }
   }
 }
 
-export function getUtmParams(): Record<string, string> {
+export function getUtmParams(): UtmParams {
   return { ...utmParams }
+}
+
+// ── Dashboard Excellence: Modal & Action Events ─────────────────────
+
+/** Fired when any detail modal is opened */
+export function emitModalOpened(modalType: string, sourceCard: string) {
+  send('ksc_modal_opened', { modal_type: modalType, source_card: sourceCard })
+}
+
+/** Fired when a tab is viewed within a modal */
+export function emitModalTabViewed(modalType: string, tabName: string) {
+  send('ksc_modal_tab_viewed', { modal_type: modalType, tab_name: tabName })
+}
+
+/** Fired when a modal is closed, with duration */
+export function emitModalClosed(modalType: string, durationMs: number) {
+  send('ksc_modal_closed', { modal_type: modalType, duration_ms: durationMs })
+}
+
+/** Fired when an insight is acknowledged */
+export function emitInsightAcknowledged(insightCategory: string, insightSeverity: string) {
+  send('ksc_insight_acknowledged', { insight_category: insightCategory, insight_severity: insightSeverity })
+}
+
+/** Fired when an insight is dismissed */
+export function emitInsightDismissed(insightCategory: string, insightSeverity: string) {
+  send('ksc_insight_dismissed', { insight_category: insightCategory, insight_severity: insightSeverity })
+}
+
+/** Fired when an inline action button is clicked */
+export function emitActionClicked(actionType: string, sourceCard: string, dashboard: string) {
+  send('ksc_action_clicked', { action_type: actionType, source_card: sourceCard, dashboard })
+}
+
+/** Fired when the AI suggestion/remediation tab is viewed */
+export function emitAISuggestionViewed(insightCategory: string, hasAIEnrichment: boolean) {
+  send('ksc_ai_suggestion_viewed', { insight_category: insightCategory, has_ai_enrichment: hasAIEnrichment })
+}
+
+// ── From Lens Landing Page ──────────────────────────────────────────
+
+/** Fired when a user views the /from-lens landing page */
+export function emitFromLensViewed() {
+  send('ksc_from_lens_viewed')
+}
+
+/** Fired when a user interacts with a CTA on the /from-lens page */
+export function emitFromLensActioned(action: string) {
+  send('ksc_from_lens_actioned', { action })
+}
+
+/** Fired when a user switches deployment tabs (localhost / cluster-portforward / cluster-ingress) */
+export function emitFromLensTabSwitch(tab: string) {
+  send('ksc_from_lens_tab_switch', { tab })
+}
+
+/** Fired when a user copies an install command from the /from-lens page */
+export function emitFromLensCommandCopy(tab: string, step: number, command: string) {
+  send('ksc_from_lens_command_copy', { tab, step, command })
 }

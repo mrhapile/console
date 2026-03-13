@@ -1,7 +1,7 @@
 import { useMemo, useState, useCallback, useEffect } from 'react'
 import { Server, Box, Layers, Database, Network, HardDrive, AlertTriangle, RefreshCw, Folder } from 'lucide-react'
-import { useClusters, useNodes, useNamespaces, useDeployments, useServices, usePVCs, usePods, useConfigMaps, useSecrets, useServiceAccounts, useJobs, useHPAs, useReplicaSets, useStatefulSets, useDaemonSets, useCronJobs, useIngresses, useNetworkPolicies } from '../../../hooks/useMCP'
-import { useCachedPodIssues } from '../../../hooks/useCachedData'
+import { useClusters } from '../../../hooks/useMCP'
+import { useCachedPodIssues, useCachedNodes, useCachedNamespaces, useCachedDeployments, useCachedServices, useCachedPVCs, useCachedPods, useCachedConfigMaps, useCachedSecrets, useCachedServiceAccounts, useCachedJobs, useCachedHPAs, useCachedReplicaSets, useCachedStatefulSets, useCachedDaemonSets, useCachedCronJobs, useCachedIngresses, useCachedNetworkPolicies } from '../../../hooks/useCachedData'
 import { useGlobalFilters } from '../../../hooks/useGlobalFilters'
 import { useDrillDownActions } from '../../../hooks/useDrillDown'
 import { useCardLoadingState } from '../CardDataContext'
@@ -12,19 +12,13 @@ import { ResourceIcon, SORT_OPTIONS } from './types'
 import { buildNamespaceResources, getVisibleNamespaces, getIssueCounts, getPodsForDeployment } from './TreeBuilder'
 import type { ClusterResourceTreeProps, TreeLens, SortByOption, NamespaceResources, ClusterDataCache } from './types'
 import { useTranslation } from 'react-i18next'
+import { StatusBadge } from '../../ui/StatusBadge'
 
 export function ClusterResourceTree({ config: _config }: ClusterResourceTreeProps) {
   const { t } = useTranslation()
   const { deduplicatedClusters: clusters, isLoading } = useClusters()
   const { selectedClusters, isAllClustersSelected } = useGlobalFilters()
   const { drillToNamespace, drillToPod, drillToCluster, drillToDeployment, drillToService, drillToPVC } = useDrillDownActions()
-
-  // Report state to CardWrapper for refresh animation
-  useCardLoadingState({
-    isLoading,
-    hasAnyData: clusters.length > 0,
-  })
-
   // Tree view state - start with clusters expanded
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set(['clusters']))
   const [searchFilter, setSearchFilter] = useState('')
@@ -75,23 +69,37 @@ export function ClusterResourceTree({ config: _config }: ClusterResourceTreeProp
 
   // Fetch data for the selected cluster (only when a cluster is expanded)
   const { issues: podIssues } = useCachedPodIssues(selectedCluster || undefined)
-  const { nodes: allNodes, isLoading: nodesLoading } = useNodes(selectedCluster || undefined)
-  const { namespaces: allNamespaces, isLoading: namespacesLoading } = useNamespaces(selectedCluster || undefined)
-  const { deployments: allDeployments } = useDeployments(selectedCluster || undefined)
-  const { services: allServices } = useServices(selectedCluster || undefined)
-  const { pvcs: allPVCs } = usePVCs(selectedCluster || undefined)
-  const { pods: allPods } = usePods(selectedCluster || undefined, undefined, 'name', 500)
-  const { configmaps: allConfigMaps } = useConfigMaps(selectedCluster || undefined)
-  const { secrets: allSecrets } = useSecrets(selectedCluster || undefined)
-  const { serviceAccounts: allServiceAccounts } = useServiceAccounts(selectedCluster || undefined)
-  const { jobs: allJobs } = useJobs(selectedCluster || undefined)
-  const { hpas: allHPAs } = useHPAs(selectedCluster || undefined)
-  const { replicasets: allReplicaSets } = useReplicaSets(selectedCluster || undefined)
-  const { statefulsets: allStatefulSets } = useStatefulSets(selectedCluster || undefined)
-  const { daemonsets: allDaemonSets } = useDaemonSets(selectedCluster || undefined)
-  const { cronjobs: allCronJobs } = useCronJobs(selectedCluster || undefined)
-  const { ingresses: allIngresses } = useIngresses(selectedCluster || undefined)
-  const { networkpolicies: allNetworkPolicies } = useNetworkPolicies(selectedCluster || undefined)
+  const { nodes: allNodes, isLoading: nodesLoading, isDemoFallback: nodesDemoFallback } = useCachedNodes(selectedCluster || undefined)
+  const { namespaces: allNamespaces, isLoading: namespacesLoading, isDemoFallback: namespacesDemoFallback } = useCachedNamespaces(selectedCluster || undefined)
+  const { deployments: allDeployments, isDemoFallback: deploymentsDemoFallback } = useCachedDeployments(selectedCluster || undefined)
+  const { services: allServices, isDemoFallback: servicesDemoFallback } = useCachedServices(selectedCluster || undefined)
+  const { pvcs: allPVCs, isDemoFallback: pvcsDemoFallback } = useCachedPVCs(selectedCluster || undefined)
+  const { pods: allPods, isDemoFallback: podsDemoFallback } = useCachedPods(selectedCluster || undefined, undefined, { limit: 500 })
+  const { configmaps: allConfigMaps, isDemoFallback: configmapsDemoFallback } = useCachedConfigMaps(selectedCluster || undefined)
+  const { secrets: allSecrets, isDemoFallback: secretsDemoFallback } = useCachedSecrets(selectedCluster || undefined)
+  const { serviceAccounts: allServiceAccounts, isDemoFallback: serviceAccountsDemoFallback } = useCachedServiceAccounts(selectedCluster || undefined)
+  const { jobs: allJobs, isDemoFallback: jobsDemoFallback } = useCachedJobs(selectedCluster || undefined)
+  const { hpas: allHPAs, isDemoFallback: hpasDemoFallback } = useCachedHPAs(selectedCluster || undefined)
+  const { replicasets: allReplicaSets, isDemoFallback: replicasetsDemoFallback } = useCachedReplicaSets(selectedCluster || undefined)
+  const { statefulsets: allStatefulSets, isDemoFallback: statefulsetsDemoFallback } = useCachedStatefulSets(selectedCluster || undefined)
+  const { daemonsets: allDaemonSets, isDemoFallback: daemonsetsDemoFallback } = useCachedDaemonSets(selectedCluster || undefined)
+  const { cronjobs: allCronJobs, isDemoFallback: cronjobsDemoFallback } = useCachedCronJobs(selectedCluster || undefined)
+  const { ingresses: allIngresses, isDemoFallback: ingressesDemoFallback } = useCachedIngresses(selectedCluster || undefined)
+  const { networkpolicies: allNetworkPolicies, isDemoFallback: networkpoliciesDemoFallback } = useCachedNetworkPolicies(selectedCluster || undefined)
+
+  // Combine all isDemoFallback values from cached hooks
+  const isDemoData = nodesDemoFallback || namespacesDemoFallback || deploymentsDemoFallback ||
+    servicesDemoFallback || pvcsDemoFallback || podsDemoFallback || configmapsDemoFallback ||
+    secretsDemoFallback || serviceAccountsDemoFallback || jobsDemoFallback || hpasDemoFallback ||
+    replicasetsDemoFallback || statefulsetsDemoFallback || daemonsetsDemoFallback ||
+    cronjobsDemoFallback || ingressesDemoFallback || networkpoliciesDemoFallback
+
+  // Report state to CardWrapper for refresh animation
+  useCardLoadingState({
+    isLoading,
+    hasAnyData: clusters.length > 0,
+    isDemoData,
+  })
 
   // Cache data for the selected cluster when it changes
   useEffect(() => {
@@ -331,9 +339,9 @@ export function ClusterResourceTree({ config: _config }: ClusterResourceTreeProp
               <lens.icon className="w-3.5 h-3.5" />
               {lens.label}
               {lens.count !== undefined && lens.count > 0 && (
-                <span className="ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] bg-red-500/20 text-red-400">
+                <StatusBadge color="red" size="xs" rounded="full" className="ml-0.5">
                   {lens.count}
-                </span>
+                </StatusBadge>
               )}
             </button>
           ))}
@@ -539,7 +547,7 @@ export function ClusterResourceTree({ config: _config }: ClusterResourceTreeProp
                                 id={`${nsId}:pods`}
                                 label={t('resourceTree.pods')}
                                 icon={ResourceIcon.pod}
-                                iconColor="text-teal-400"
+                                iconColor="text-cyan-400"
                                 count={nsData.pods.length}
                                 badge={nsPodIssues > 0 ? nsPodIssues : undefined}
                                 badgeColor="bg-red-500/20 text-red-400"
@@ -601,7 +609,7 @@ export function ClusterResourceTree({ config: _config }: ClusterResourceTreeProp
                                 id={`${nsId}:pvcs`}
                                 label={t('resourceTree.pvcs')}
                                 icon={ResourceIcon.pvc}
-                                iconColor="text-emerald-400"
+                                iconColor="text-green-400"
                                 count={nsData.pvcs.length}
                                 indent={4}
                                 expandedNodes={expandedNodes}
@@ -716,7 +724,7 @@ export function ClusterResourceTree({ config: _config }: ClusterResourceTreeProp
                                 id={`${nsId}:jobs`}
                                 label={t('resourceTree.jobs')}
                                 icon={ResourceIcon.job}
-                                iconColor="text-amber-400"
+                                iconColor="text-yellow-400"
                                 count={nsData.jobs.length}
                                 indent={4}
                                 expandedNodes={expandedNodes}
@@ -731,9 +739,9 @@ export function ClusterResourceTree({ config: _config }: ClusterResourceTreeProp
                                       id={`${nsId}:job:${job.name}`}
                                       label={job.name}
                                       icon={ResourceIcon.job}
-                                      iconColor={isComplete ? 'text-green-400' : isRunning ? 'text-amber-400' : 'text-red-400'}
+                                      iconColor={isComplete ? 'text-green-400' : isRunning ? 'text-green-400' : 'text-red-400'}
                                       badge={`${job.status} (${job.completions})`}
-                                      badgeColor={isComplete ? 'bg-green-500/20 text-green-400' : isRunning ? 'bg-amber-500/20 text-amber-400' : 'bg-red-500/20 text-red-400'}
+                                      badgeColor={isComplete ? 'bg-green-500/20 text-green-400' : isRunning ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}
                                       indent={5}
                                       expandedNodes={expandedNodes}
                                       toggleNode={toggleNode}
@@ -749,7 +757,7 @@ export function ClusterResourceTree({ config: _config }: ClusterResourceTreeProp
                                 id={`${nsId}:hpas`}
                                 label={t('resourceTree.hpas')}
                                 icon={ResourceIcon.hpa}
-                                iconColor="text-violet-400"
+                                iconColor="text-purple-400"
                                 count={nsData.hpas.length}
                                 indent={4}
                                 expandedNodes={expandedNodes}
@@ -761,9 +769,9 @@ export function ClusterResourceTree({ config: _config }: ClusterResourceTreeProp
                                     id={`${nsId}:hpa:${hpa.name}`}
                                     label={hpa.name}
                                     icon={ResourceIcon.hpa}
-                                    iconColor="text-violet-400"
+                                    iconColor="text-purple-400"
                                     badge={`${hpa.currentReplicas} (${hpa.minReplicas}-${hpa.maxReplicas})`}
-                                    badgeColor="bg-violet-500/20 text-violet-400"
+                                    badgeColor="bg-purple-500/20 text-purple-400"
                                     indent={5}
                                     expandedNodes={expandedNodes}
                                     toggleNode={toggleNode}
@@ -778,7 +786,7 @@ export function ClusterResourceTree({ config: _config }: ClusterResourceTreeProp
                                 id={`${nsId}:replicasets`}
                                 label={t('resourceTree.replicaSets')}
                                 icon={ResourceIcon.replicaset}
-                                iconColor="text-indigo-400"
+                                iconColor="text-blue-400"
                                 count={nsData.replicasets.length}
                                 indent={4}
                                 expandedNodes={expandedNodes}
@@ -842,7 +850,7 @@ export function ClusterResourceTree({ config: _config }: ClusterResourceTreeProp
                                 id={`${nsId}:daemonsets`}
                                 label={t('resourceTree.daemonSets')}
                                 icon={ResourceIcon.daemonset}
-                                iconColor="text-teal-400"
+                                iconColor="text-cyan-400"
                                 count={nsData.daemonsets.length}
                                 indent={4}
                                 expandedNodes={expandedNodes}
@@ -874,7 +882,7 @@ export function ClusterResourceTree({ config: _config }: ClusterResourceTreeProp
                                 id={`${nsId}:cronjobs`}
                                 label={t('resourceTree.cronJobs')}
                                 icon={ResourceIcon.cronjob}
-                                iconColor="text-amber-400"
+                                iconColor="text-yellow-400"
                                 count={nsData.cronjobs.length}
                                 indent={4}
                                 expandedNodes={expandedNodes}
@@ -886,9 +894,9 @@ export function ClusterResourceTree({ config: _config }: ClusterResourceTreeProp
                                     id={`${nsId}:cj:${cj.name}`}
                                     label={cj.name}
                                     icon={ResourceIcon.cronjob}
-                                    iconColor={cj.suspend ? 'text-gray-400' : 'text-amber-400'}
+                                    iconColor={cj.suspend ? 'text-muted-foreground' : 'text-yellow-400'}
                                     badge={cj.suspend ? t('resourceTree.suspended') : cj.schedule}
-                                    badgeColor={cj.suspend ? 'bg-gray-500/20 text-gray-400' : 'bg-amber-500/20 text-amber-400'}
+                                    badgeColor={cj.suspend ? 'bg-gray-500/20 text-muted-foreground' : 'bg-yellow-500/20 text-yellow-400'}
                                     indent={5}
                                     expandedNodes={expandedNodes}
                                     toggleNode={toggleNode}
@@ -903,7 +911,7 @@ export function ClusterResourceTree({ config: _config }: ClusterResourceTreeProp
                                 id={`${nsId}:ingresses`}
                                 label={t('resourceTree.ingresses')}
                                 icon={ResourceIcon.ingress}
-                                iconColor="text-sky-400"
+                                iconColor="text-blue-400"
                                 count={nsData.ingresses.length}
                                 indent={4}
                                 expandedNodes={expandedNodes}
@@ -915,9 +923,9 @@ export function ClusterResourceTree({ config: _config }: ClusterResourceTreeProp
                                     id={`${nsId}:ing:${ing.name}`}
                                     label={ing.name}
                                     icon={ResourceIcon.ingress}
-                                    iconColor="text-sky-400"
+                                    iconColor="text-blue-400"
                                     badge={ing.hosts.length > 0 ? ing.hosts.join(', ') : ing.class || t('resourceTree.noHost')}
-                                    badgeColor="bg-sky-500/20 text-sky-400"
+                                    badgeColor="bg-blue-500/20 text-blue-400"
                                     indent={5}
                                     expandedNodes={expandedNodes}
                                     toggleNode={toggleNode}
@@ -932,7 +940,7 @@ export function ClusterResourceTree({ config: _config }: ClusterResourceTreeProp
                                 id={`${nsId}:networkpolicies`}
                                 label={t('resourceTree.networkPolicies')}
                                 icon={ResourceIcon.networkpolicy}
-                                iconColor="text-rose-400"
+                                iconColor="text-red-400"
                                 count={nsData.networkpolicies.length}
                                 indent={4}
                                 expandedNodes={expandedNodes}
@@ -944,9 +952,9 @@ export function ClusterResourceTree({ config: _config }: ClusterResourceTreeProp
                                     id={`${nsId}:np:${np.name}`}
                                     label={np.name}
                                     icon={ResourceIcon.networkpolicy}
-                                    iconColor="text-rose-400"
+                                    iconColor="text-red-400"
                                     badge={(np.policyTypes || []).join(', ') || t('resourceTree.noTypes')}
-                                    badgeColor="bg-rose-500/20 text-rose-400"
+                                    badgeColor="bg-red-500/20 text-red-400"
                                     indent={5}
                                     expandedNodes={expandedNodes}
                                     toggleNode={toggleNode}

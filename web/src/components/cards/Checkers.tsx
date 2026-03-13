@@ -4,6 +4,7 @@ import { CardComponentProps } from './cardRegistry'
 import { useCardExpanded } from './CardWrapper'
 import { useReportCardDataState } from './CardDataContext'
 import { useTranslation } from 'react-i18next'
+import { emitGameStarted, emitGameEnded } from '../../lib/analytics'
 
 // Board is 8x8, pieces only on dark squares
 const BOARD_SIZE = 8
@@ -66,6 +67,17 @@ const CAPTURE_TAUNTS = [
   "Arrr! Me cannons sink another one!",
   "Blimey! That'll teach ye to cross Captain Node!",
 ]
+
+// Pre-game taunts before the player starts
+const PRE_GAME_TAUNTS = [
+  "Arrr! Ye dare challenge Captain Node? Step right up!",
+  "Ahoy! Another scallywag approaches me checkerboard!",
+  "Yo ho ho! Fresh meat! Press that button if ye dare!",
+  "Shiver me timbers! Ye think ye can outwit a pirate?",
+  "Avast! Welcome aboard, ye bilge rat! Make yer move!",
+]
+
+const PRE_GAME_TAUNT_DELAY_MS = 2_000
 
 // Initialize board with starting positions
 function createInitialBoard(): Board {
@@ -408,7 +420,7 @@ function saveGameState(state: SavedGameState) {
 
 export function Checkers(_props: CardComponentProps) {
   const { t } = useTranslation(['cards', 'common'])
-  useReportCardDataState({ hasData: true, isFailed: false, consecutiveFailures: 0 })
+  useReportCardDataState({ hasData: true, isFailed: false, consecutiveFailures: 0, isDemoData: false })
   const { isExpanded } = useCardExpanded()
   const thinkingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const tauntIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -447,6 +459,7 @@ export function Checkers(_props: CardComponentProps) {
 
     if (counts.pods === 0 || podMoves.length === 0) {
       setGameOver('nodes')
+      emitGameEnded('checkers', 'loss', moveCount)
       setHighScore(prev => {
         const newScore = { ...prev, losses: prev.losses + 1 }
         localStorage.setItem('checkers-score', JSON.stringify(newScore))
@@ -454,13 +467,14 @@ export function Checkers(_props: CardComponentProps) {
       })
     } else if (counts.nodes === 0 || nodeMoves.length === 0) {
       setGameOver('pods')
+      emitGameEnded('checkers', 'win', moveCount)
       setHighScore(prev => {
         const newScore = { ...prev, wins: prev.wins + 1 }
         localStorage.setItem('checkers-score', JSON.stringify(newScore))
         return newScore
       })
     }
-  }, [board, gameOver])
+  }, [board, gameOver, moveCount])
 
   // Save game state when it changes
   useEffect(() => {
@@ -506,6 +520,17 @@ export function Checkers(_props: CardComponentProps) {
       }
     }
   }, [currentPlayer, gameOver, moveCount])
+
+  // Pre-game taunt after 2 seconds of being open
+  useEffect(() => {
+    if (moveCount > 0 || gameOver) return
+
+    const timer = setTimeout(() => {
+      setPirateTaunt(PRE_GAME_TAUNTS[Math.floor(Math.random() * PRE_GAME_TAUNTS.length)])
+    }, PRE_GAME_TAUNT_DELAY_MS)
+
+    return () => clearTimeout(timer)
+  }, [moveCount, gameOver])
 
   // AI move - runs when it's the AI's turn (1 second delay)
   useEffect(() => {
@@ -667,6 +692,7 @@ export function Checkers(_props: CardComponentProps) {
     setMustContinueJump(null)
     setMoveCount(0)
     setIsThinking(false)
+    emitGameStarted('checkers')
   }, [])
 
   const isSmall = !isExpanded
@@ -732,21 +758,8 @@ export function Checkers(_props: CardComponentProps) {
         )}
       </div>
 
-      {/* Pirate Taunt Speech Bubble */}
-      {pirateTaunt && (
-        <div className="flex items-start gap-2 mb-2 px-2 animate-fade-in">
-          <div className="text-2xl flex-shrink-0">🏴‍☠️</div>
-          <div className="relative bg-orange-500/20 border border-orange-400/50 rounded-lg px-3 py-2 flex-1">
-            <div className="absolute -left-2 top-3 w-0 h-0 border-t-[6px] border-t-transparent border-b-[6px] border-b-transparent border-r-[8px] border-r-orange-400/50" />
-            <span className="text-orange-300 italic text-sm font-medium leading-tight block">
-              &quot;{pirateTaunt}&quot;
-            </span>
-          </div>
-        </div>
-      )}
-
       {/* Board */}
-      <div className="flex-1 flex items-center justify-center">
+      <div className="flex-1 flex items-center justify-center relative min-h-0">
         <div className="inline-block border border-border rounded overflow-hidden">
           {board.map((row, rowIdx) => (
             <div key={rowIdx} className="flex">
@@ -765,7 +778,7 @@ export function Checkers(_props: CardComponentProps) {
                     onClick={() => handleCellClick(rowIdx, colIdx)}
                     className={`
                       ${cellSize} flex items-center justify-center cursor-pointer transition-colors relative
-                      ${isDark ? 'bg-emerald-800' : 'bg-emerald-200'}
+                      ${isDark ? 'bg-green-800' : 'bg-green-200'}
                       ${isValidMove && !isCapture ? 'ring-2 ring-inset ring-green-400' : ''}
                       ${isCapture ? 'ring-2 ring-inset ring-red-400 bg-red-500/30' : ''}
                       ${isSelected ? 'bg-yellow-500/30' : ''}
@@ -793,6 +806,20 @@ export function Checkers(_props: CardComponentProps) {
             </div>
           ))}
         </div>
+
+        {/* Pirate Taunt — absolute overlay, no layout shift */}
+        {pirateTaunt && (
+          <div className="absolute bottom-0 left-0 right-0 z-10 p-1 animate-fade-in pointer-events-none">
+            <div className="flex items-start gap-2 px-2">
+              <div className="text-lg flex-shrink-0">🏴‍☠️</div>
+              <div className="bg-background/80 backdrop-blur-sm border border-orange-400/50 rounded-lg px-2 py-1.5 flex-1">
+                <span className="text-orange-300 italic text-xs font-medium leading-tight block">
+                  &quot;{pirateTaunt}&quot;
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Game over overlay */}

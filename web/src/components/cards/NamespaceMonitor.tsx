@@ -5,10 +5,8 @@ import {
   AlertTriangle, Eye, X, Activity
 } from 'lucide-react'
 import { CardSearchInput } from '../../lib/cards'
-import {
-  useClusters, useNamespaces, useDeployments, useServices, usePVCs,
-  usePods, useConfigMaps, useSecrets, useJobs
-} from '../../hooks/useMCP'
+import { useClusters } from '../../hooks/useMCP'
+import { useCachedNamespaces, useCachedDeployments, useCachedServices, useCachedPVCs, useCachedPods, useCachedConfigMaps, useCachedSecrets, useCachedJobs } from '../../hooks/useCachedData'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { useDrillDownActions } from '../../hooks/useDrillDown'
 import { CardComponentProps } from './cardRegistry'
@@ -75,13 +73,13 @@ const ResourceIcons: Record<ResourceType, typeof Container> = {
 
 // Colors for resource types
 const ResourceColors: Record<ResourceType, string> = {
-  pods: 'text-teal-400',
+  pods: 'text-cyan-400',
   deployments: 'text-green-400',
   services: 'text-blue-400',
   configmaps: 'text-orange-400',
   secrets: 'text-red-400',
-  pvcs: 'text-emerald-400',
-  jobs: 'text-amber-400',
+  pvcs: 'text-green-400',
+  jobs: 'text-yellow-400',
 }
 
 // Animation classes for changes
@@ -97,13 +95,6 @@ export function NamespaceMonitor({ config: _config }: CardComponentProps) {
   const { deduplicatedClusters: clusters, isLoading } = useClusters()
   const { selectedClusters, isAllClustersSelected } = useGlobalFilters()
   const { drillToNamespace, drillToPod, drillToDeployment, drillToService, drillToPVC } = useDrillDownActions()
-
-  // Report loading state to CardWrapper for skeleton/refresh behavior
-  useCardLoadingState({
-    isLoading,
-    hasAnyData: clusters.length > 0,
-  })
-
   // UI state
   const [searchFilter, setSearchFilter] = useState('')
   const [expandedClusters, setExpandedClusters] = useState<Set<string>>(new Set())
@@ -141,14 +132,25 @@ export function NamespaceMonitor({ config: _config }: CardComponentProps) {
   }, [clusters, selectedClusters, isAllClustersSelected, searchFilter])
 
   // Fetch data for selected cluster
-  const { namespaces } = useNamespaces(selectedCluster || undefined)
-  const { deployments } = useDeployments(selectedCluster || undefined)
-  const { services } = useServices(selectedCluster || undefined)
-  const { pvcs } = usePVCs(selectedCluster || undefined)
-  const { pods } = usePods(selectedCluster || undefined, undefined, 'name', 500)
-  const { configmaps } = useConfigMaps(selectedCluster || undefined)
-  const { secrets } = useSecrets(selectedCluster || undefined)
-  const { jobs } = useJobs(selectedCluster || undefined)
+  const { namespaces, isDemoFallback: namespacesDemoFallback } = useCachedNamespaces(selectedCluster || undefined)
+  const { deployments, isDemoFallback: deploymentsDemoFallback } = useCachedDeployments(selectedCluster || undefined)
+  const { services, isDemoFallback: servicesDemoFallback } = useCachedServices(selectedCluster || undefined)
+  const { pvcs, isDemoFallback: pvcsDemoFallback } = useCachedPVCs(selectedCluster || undefined)
+  const { pods, isDemoFallback: podsDemoFallback } = useCachedPods(selectedCluster || undefined, undefined, { limit: 500 })
+  const { configmaps, isDemoFallback: configmapsDemoFallback } = useCachedConfigMaps(selectedCluster || undefined)
+  const { secrets, isDemoFallback: secretsDemoFallback } = useCachedSecrets(selectedCluster || undefined)
+  const { jobs, isDemoFallback: jobsDemoFallback } = useCachedJobs(selectedCluster || undefined)
+
+  // Combine all isDemoFallback values from cached hooks
+  const isDemoData = namespacesDemoFallback || deploymentsDemoFallback || servicesDemoFallback ||
+    pvcsDemoFallback || podsDemoFallback || configmapsDemoFallback || secretsDemoFallback || jobsDemoFallback
+
+  // Report loading state to CardWrapper for skeleton/refresh behavior
+  useCardLoadingState({
+    isLoading,
+    hasAnyData: clusters.length > 0,
+    isDemoData,
+  })
 
   // Build snapshots and detect changes
   useEffect(() => {
@@ -464,7 +466,7 @@ export function NamespaceMonitor({ config: _config }: CardComponentProps) {
 
     return (
       <div 
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" 
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-2xl" 
         onClick={() => setModalResource(null)}
       >
         <div 
@@ -577,7 +579,7 @@ export function NamespaceMonitor({ config: _config }: CardComponentProps) {
                   })()}
                   <span className="text-xs font-medium text-foreground truncate">{change.name}</span>
                 </div>
-                <div className="text-[10px] text-muted-foreground">
+                <div className="text-2xs text-muted-foreground">
                   {change.namespace} • {new Date(change.timestamp).toLocaleTimeString()}
                 </div>
               </div>
@@ -703,7 +705,7 @@ export function NamespaceMonitor({ config: _config }: CardComponentProps) {
                               ) : (
                                 <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
                               )}
-                              <Layers className={`w-3.5 h-3.5 ${data.hasIssues ? 'text-yellow-400' : 'text-yellow-500'}`} />
+                              <Layers className={`w-3.5 h-3.5 ${data.hasIssues ? 'text-yellow-400' : 'text-blue-400'}`} />
                               <span
                                 className="text-sm text-foreground flex-1 hover:text-purple-400"
                                 onClick={(e) => {
@@ -928,7 +930,7 @@ function ResourceSection({
               >
                 {item.name}
               </span>
-              <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+              <span className={`text-2xs px-1.5 py-0.5 rounded ${
                 item.healthy ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'
               }`}>
                 {item.status}
@@ -946,7 +948,7 @@ function ResourceSection({
           )
         })}
         {items.length > 10 && (
-          <div className="text-[10px] text-muted-foreground px-2 py-1">
+          <div className="text-2xs text-muted-foreground px-2 py-1">
             +{items.length - 10} more
           </div>
         )}

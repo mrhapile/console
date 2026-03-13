@@ -70,6 +70,8 @@ function EventStreamInternal() {
       sortDirection,
       setSortDirection,
     },
+    containerRef,
+    containerStyle,
   } = useCardData<ClusterEvent, SortByOption>(rawEvents, {
     filter: {
       searchFields: ['message', 'object', 'namespace', 'type'],
@@ -184,7 +186,7 @@ function EventStreamInternal() {
       />
 
       {/* Event list */}
-      <div className="flex-1 space-y-2 overflow-y-auto min-h-card-content">
+      <div ref={containerRef} className="flex-1 space-y-2 overflow-y-auto min-h-card-content" style={containerStyle}>
         {events.length === 0 ? (
           <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
             No recent events

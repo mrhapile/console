@@ -689,7 +689,7 @@
       "documentation": "Documentation"
     },
     "missions": {
-      "actions": "Actions:",
+      "actions": "Recommended Actions for your clusters",
       "repair": "Repair",
       "repairTitle": "AI Repair - automatically fix this issue",
       "snoozeTitle": "Snooze for 24 hours",
@@ -738,7 +738,7 @@
       "addCard": "Add \"{{title}}\" card to dashboard",
       "showRealTimeData": "Show real-time cluster data",
       "addressCriticalIssues": "Address critical issues faster",
-      "ai": "AI:",
+      "ai": "Recommended Cards for your clusters",
       "adding": "Adding...",
       "snooze": "Snooze",
       "dismiss": "Dismiss",
@@ -1491,7 +1491,9 @@
     "envVariableNote": "Key is set via environment variable. Modify the environment to change it.",
     "keysSavedTo": "Keys saved to",
     "securityNote": "API keys are stored securely on your local machine and never sent to our servers.",
-    "selectAgent": "Select AI agent"
+    "selectAgent": "Select AI agent",
+    "installViaHomebrewMacOS": "# Install via Homebrew (macOS / WSL)",
+    "installLinuxBuildFromSource": "# Linux / WSL: build from source (requires Go 1.24+)"
   },
   "navbar": {
     "closeMenu": "Close menu",
@@ -2769,7 +2771,11 @@
     "installFromSettings": "You can install the agent anytime from Settings.",
     "dontShowAgain": "Don't show again",
     "continueWithDemoData": "Continue with Demo Data",
-    "remindMeLater": "Remind Me Later"
+    "remindMeLater": "Remind Me Later",
+    "quickInstallMacOS": "Quick Install — macOS / WSL (Homebrew)",
+    "linuxInstructions": "Linux / WSL installation instructions",
+    "linuxBuildDesc": "Build from source (recommended for Linux / WSL). Requires Go 1.24+:",
+    "linuxBrewAlternative": "Alternatively, use Linuxbrew (Linux / WSL): brew tap kubestellar/tap && brew install --head kc-agent"
   },
   "agentStatus": {
     "connectingToAgent": "Connecting to local agent...",

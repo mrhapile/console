@@ -207,6 +207,8 @@ export function useLLMdServers(clusters: string[] = ['vllm-d', 'platform-eval'])
   const [consecutiveFailures, setConsecutiveFailures] = useState(0)
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null)
   const initialLoadDone = useRef(false)
+  /** Guard to prevent concurrent refetch calls from flooding the request queue */
+  const fetchInProgress = useRef(false)
 
   const refetch = useCallback(async (silent = false) => {
     // Skip fetching in demo mode — no agent available
@@ -215,7 +217,9 @@ export function useLLMdServers(clusters: string[] = ['vllm-d', 'platform-eval'])
       return
     }
 
-    console.log(`[useLLMdServers] refetch called, silent=${silent}`)
+    // Skip if a fetch is already in progress to prevent queue flooding
+    if (fetchInProgress.current) return
+    fetchInProgress.current = true
 
     // Progressive loading: reset state
     if (!silent) {
@@ -230,13 +234,11 @@ export function useLLMdServers(clusters: string[] = ['vllm-d', 'platform-eval'])
       // Process clusters sequentially to avoid overwhelming the WebSocket
       for (const cluster of (clusters || [])) {
         try {
-          console.log(`[useLLMdServers] Fetching from ${cluster}`)
 
           // Fetch deployments from all namespaces to discover llm-d workloads
           const allDeployments: DeploymentResource[] = []
 
           try {
-            console.log(`[useLLMdServers] Fetching all deployments from ${cluster}`)
             const resp = await kubectlProxy.exec(
               ['get', 'deployments', '-A', '-o', 'json'],
               { context: cluster, timeout: 15000 }
@@ -244,7 +246,6 @@ export function useLLMdServers(clusters: string[] = ['vllm-d', 'platform-eval'])
             if (resp.exitCode === 0 && resp.output) {
               const data = JSON.parse(resp.output)
               const items = data.items || []
-              console.log(`[useLLMdServers] Got ${items.length} deployments from ${cluster}`)
               allDeployments.push(...items)
             }
           } catch (err) {
@@ -255,7 +256,6 @@ export function useLLMdServers(clusters: string[] = ['vllm-d', 'platform-eval'])
             }
           }
 
-          console.log(`[useLLMdServers] Found ${allDeployments.length} deployments from ${cluster}`)
           if (allDeployments.length === 0) continue
 
           const deployments = allDeployments
@@ -343,8 +343,6 @@ export function useLLMdServers(clusters: string[] = ['vllm-d', 'platform-eval'])
             )
           })
 
-          console.log(`[useLLMdServers] Filtered to ${llmdDeployments.length} llm-d deployments on ${cluster}`)
-
           // Build namespace status maps for gateway and prometheus
           const namespaceGatewayStatus = new Map<string, { status: 'running' | 'stopped' | 'unknown', type: LLMdServer['gatewayType'] }>()
           const namespacePrometheusStatus = new Map<string, 'running' | 'stopped' | 'unknown'>()
@@ -401,7 +399,6 @@ export function useLLMdServers(clusters: string[] = ['vllm-d', 'platform-eval'])
 
           // Progressive loading: update state after each cluster
           if (clusterServers.length > 0) {
-            console.log(`[useLLMdServers] Progressive update: adding ${clusterServers.length} servers from ${cluster}`)
             setServers(prev => [...prev, ...clusterServers])
             // Clear loading state after first batch of data arrives
             if (!initialLoadDone.current) {
@@ -434,21 +431,19 @@ export function useLLMdServers(clusters: string[] = ['vllm-d', 'platform-eval'])
         setError(err instanceof Error ? err.message : 'Failed to fetch LLM-d servers')
       }
     } finally {
-      console.log('[useLLMdServers] refetch finally block')
       setIsLoading(false)
       setIsRefreshing(false)
+      fetchInProgress.current = false
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [(clusters || []).join(',')])
 
   useEffect(() => {
-    console.log('[useLLMdServers] useEffect mounting, starting initial fetch')
     refetch(false).catch(err => {
       console.error('[useLLMdServers] Initial fetch error:', err)
     })
     const interval = setInterval(() => refetch(true), REFRESH_INTERVAL_MS)
     return () => {
-      console.log('[useLLMdServers] useEffect cleanup')
       clearInterval(interval)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -493,6 +488,8 @@ export function useLLMdModels(clusters: string[] = ['vllm-d', 'platform-eval']) 
   const [consecutiveFailures, setConsecutiveFailures] = useState(0)
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null)
   const initialLoadDone = useRef(false)
+  /** Guard to prevent concurrent refetch calls from flooding the request queue */
+  const fetchInProgress = useRef(false)
 
   const refetch = useCallback(async (silent = false) => {
     // Skip fetching in demo mode — no agent available
@@ -501,7 +498,9 @@ export function useLLMdModels(clusters: string[] = ['vllm-d', 'platform-eval']) 
       return
     }
 
-    console.log(`[useLLMdModels] refetch called, silent=${silent}, clusters=${clusters.join(',')}`)
+    // Skip if a fetch is already in progress to prevent queue flooding
+    if (fetchInProgress.current) return
+    fetchInProgress.current = true
 
     // Progressive loading: reset state
     if (!silent) {
@@ -548,7 +547,6 @@ export function useLLMdModels(clusters: string[] = ['vllm-d', 'platform-eval']) 
 
           // Progressive loading: update state after each cluster
           if (clusterModels.length > 0) {
-            console.log(`[useLLMdModels] Progressive update: adding ${clusterModels.length} models from ${cluster}`)
             setModels(prev => [...prev, ...clusterModels])
             // Clear loading state after first batch of data arrives
             if (!initialLoadDone.current) {
@@ -578,6 +576,7 @@ export function useLLMdModels(clusters: string[] = ['vllm-d', 'platform-eval']) 
     } finally {
       setIsLoading(false)
       setIsRefreshing(false)
+      fetchInProgress.current = false
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [(clusters || []).join(',')])

@@ -39,7 +39,7 @@ const getDriftSeverityStyle = (severity: string) => {
   if (lower === 'high' || lower === 'critical' || lower === 'drifted') {
     return { bg: 'bg-red-500/20', text: 'text-red-400', border: 'border-red-500/30', icon: XCircle }
   }
-  return { bg: 'bg-gray-500/20', text: 'text-gray-400', border: 'border-gray-500/30', icon: AlertTriangle }
+  return { bg: 'bg-secondary', text: 'text-muted-foreground', border: 'border-border', icon: AlertTriangle }
 }
 
 // Change type styles
@@ -54,7 +54,7 @@ const getChangeTypeStyle = (changeType: string) => {
   if (lower === 'deleted' || lower === 'remove') {
     return { bg: 'bg-red-500/20', text: 'text-red-400', label: 'Deleted' }
   }
-  return { bg: 'bg-gray-500/20', text: 'text-gray-400', label: changeType }
+  return { bg: 'bg-secondary', text: 'text-muted-foreground', label: changeType }
 }
 
 interface DriftChange {
@@ -322,7 +322,7 @@ Please:
                 <Layers className="w-4 h-4 text-purple-400" />
                 <span className="text-muted-foreground">{t('drilldown.fields.namespace')}</span>
                 <span className="font-mono text-purple-400 group-hover:text-purple-300 transition-colors">{namespace}</span>
-                <svg className="w-3 h-3 text-purple-400/50 group-hover:text-purple-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="w-3 h-3 text-purple-400/70 group-hover:text-purple-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
               </button>
@@ -334,7 +334,7 @@ Please:
               <Server className="w-4 h-4 text-blue-400" />
               <span className="text-muted-foreground">{t('drilldown.fields.cluster')}</span>
               <ClusterBadge cluster={cluster.split('/').pop() || cluster} size="sm" />
-              <svg className="w-3 h-3 text-blue-400/50 group-hover:text-blue-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-3 h-3 text-blue-400/70 group-hover:text-blue-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </button>
@@ -390,7 +390,7 @@ Please:
             {/* Drift Status Card */}
             <div className={cn(
               'p-4 rounded-lg border',
-              driftedResources > 0 ? 'bg-gradient-to-r from-red-500/10 to-orange-500/10 border-red-500/20' : 'bg-gradient-to-r from-green-500/10 to-emerald-500/10 border-green-500/20'
+              driftedResources > 0 ? 'bg-gradient-to-r from-red-500/10 to-orange-500/10 border-red-500/20' : 'bg-gradient-to-r from-green-500/10 to-green-500/10 border-green-500/20'
             )}>
               <div className="flex items-start gap-3">
                 <GitBranch className={cn('w-8 h-8 mt-1', driftedResources > 0 ? 'text-red-400' : 'text-green-400')} />

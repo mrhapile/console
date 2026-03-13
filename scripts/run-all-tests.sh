@@ -58,6 +58,8 @@ declare -a FAST_SCRIPTS=(
   "scripts/license-compliance-test.sh"
   "scripts/error-boundary-test.sh"
   "scripts/mission-security-test.sh"
+  "scripts/card-registry-integrity-test.sh"
+  "scripts/unit-test.sh"
 )
 
 # Scripts that run Go tests
@@ -70,6 +72,14 @@ declare -a GO_SCRIPTS=(
   "scripts/dependency-audit-test.sh"
 )
 
+# Security scanning scripts
+declare -a SECURITY_SCRIPTS=(
+  "scripts/secret-scan-test.sh"
+  "scripts/ts-sast-test.sh"
+  "scripts/container-scan-test.sh"
+  "scripts/security-headers-test.sh"
+)
+
 # Scripts that require a running server or are long-running
 declare -a SLOW_SCRIPTS=(
   "scripts/api-contract-test.sh"
@@ -80,6 +90,7 @@ declare -a SLOW_SCRIPTS=(
 declare -a ALL_SCRIPTS=()
 for s in "${FAST_SCRIPTS[@]}"; do ALL_SCRIPTS+=("$s"); done
 for s in "${GO_SCRIPTS[@]}"; do ALL_SCRIPTS+=("$s"); done
+for s in "${SECURITY_SCRIPTS[@]}"; do ALL_SCRIPTS+=("$s"); done
 if [ -z "$FAST_MODE" ]; then
   for s in "${SLOW_SCRIPTS[@]}"; do ALL_SCRIPTS+=("$s"); done
 fi
@@ -90,6 +101,22 @@ FAILED_SUITES=0
 SKIPPED_SUITES=0
 RESULTS=""
 declare -a FAILED_NAMES=()
+
+# Extract a short failure reason from a log file, JSON-escaped for embedding
+extract_failure_reason() {
+  local log_file="$1"
+  local reason
+  # Strip ANSI codes, grab last 5 non-empty lines, join with \n
+  reason=$(sed 's/\x1b\[[0-9;]*m//g' "$log_file" 2>/dev/null \
+    | grep -v '^\s*$' \
+    | tail -5 \
+    | tr '\n' '|' \
+    | sed 's/|$//' \
+    | sed 's/|/\\n/g' \
+    | sed 's/"/\\"/g' \
+    | cut -c1-500)
+  echo "$reason"
+}
 
 # ============================================================================
 # Run each test suite
@@ -128,7 +155,8 @@ for script in "${ALL_SCRIPTS[@]}"; do
     done
     FAILED_SUITES=$((FAILED_SUITES + 1))
     FAILED_NAMES+=("$SUITE_NAME")
-    RESULTS="${RESULTS}{\"suite\":\"${SUITE_NAME}\",\"status\":\"fail\",\"duration\":${SUITE_DURATION}},"
+    FAIL_REASON=$(extract_failure_reason "$SUITE_OUTPUT")
+    RESULTS="${RESULTS}{\"suite\":\"${SUITE_NAME}\",\"status\":\"fail\",\"duration\":${SUITE_DURATION},\"failure_reason\":\"${FAIL_REASON}\"},"
   fi
 done
 
@@ -143,7 +171,15 @@ declare -a PLAYWRIGHT_SCRIPTS=(
   "scripts/nav-test.sh"
   "scripts/perf-test.sh"
   "scripts/ui-compliance-test.sh"
+  "scripts/deploy-test.sh"
   "scripts/cache-test.sh"
+  "scripts/benchmark-test.sh"
+  "scripts/ai-ml-test.sh"
+  "scripts/a11y-test.sh"
+  "scripts/error-resilience-test.sh"
+  "scripts/i18n-test.sh"
+  "scripts/interaction-test.sh"
+  "scripts/security-e2e-test.sh"
 )
 
 PREVIEW_PORT=4174
@@ -250,7 +286,8 @@ if [ -z "$FAST_MODE" ]; then
             done
             FAILED_SUITES=$((FAILED_SUITES + 1))
             FAILED_NAMES+=("$SUITE_NAME")
-            RESULTS="${RESULTS}{\"suite\":\"${SUITE_NAME}\",\"status\":\"fail\",\"duration\":${SUITE_DURATION}},"
+            FAIL_REASON=$(extract_failure_reason "$SUITE_OUTPUT")
+            RESULTS="${RESULTS}{\"suite\":\"${SUITE_NAME}\",\"status\":\"fail\",\"duration\":${SUITE_DURATION},\"failure_reason\":\"${FAIL_REASON}\"},"
           fi
         done
 

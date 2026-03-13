@@ -27,6 +27,12 @@ export function getEffectiveInterval(baseInterval: number): number {
   return baseInterval
 }
 
+/** Name length above which a cluster context name is considered auto-generated */
+const AUTO_GENERATED_NAME_LENGTH_THRESHOLD = 50
+
+/** Debounce delay for batching rapid cluster health check notifications */
+const CLUSTER_NOTIFY_DEBOUNCE_MS = 50
+
 // Minimum time to show the "Updating" indicator (ensures visibility for fast API responses)
 export const MIN_REFRESH_INDICATOR_MS = 500
 
@@ -268,7 +274,6 @@ function handleClusterDemoModeChange() {
         lastRefresh: new Date(),
       }
       notifyClusterSubscribers()
-      console.log('[Clusters] Reset to demo data for demo mode')
     }
     // When switching FROM demo mode, fullFetchClusters will be called by useClusters hook
   }
@@ -313,7 +318,7 @@ export function notifyClusterSubscribersDebounced() {
   notifyTimeout = setTimeout(() => {
     notifyClusterSubscribers()
     notifyTimeout = null
-  }, 50) // 50ms debounce batches rapid health check completions
+  }, CLUSTER_NOTIFY_DEBOUNCE_MS)
 }
 
 // Update shared cluster cache
@@ -445,7 +450,7 @@ export function deduplicateClustersByServer(clusters: ClusterInfo[]): ClusterInf
              name.includes(':443/') ||
              name.includes('.openshiftapps.com') ||
              name.includes('.openshift.com') ||
-             (name.includes('/') && name.includes(':') && name.length > 50)
+             (name.includes('/') && name.includes(':') && name.length > AUTO_GENERATED_NAME_LENGTH_THRESHOLD)
     }
 
     const sorted = [...group].sort((a, b) => {
@@ -1102,6 +1107,7 @@ async function processClusterHealth(cluster: ClusterInfo): Promise<void> {
           storageGB: health.storageGB,
           pvcCount: health.pvcCount,
           pvcBoundCount: health.pvcBoundCount,
+          issues: health.issues,
           errorType: undefined,
           errorMessage: undefined,
           refreshing: false,

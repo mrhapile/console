@@ -1,8 +1,7 @@
-import { lazy, Suspense, useState, useEffect } from 'react'
+import { lazy, Suspense, useState, useEffect, useRef } from 'react'
 import { Routes, Route, Navigate, useNavigate, useLocation, useParams, useSearchParams } from 'react-router-dom'
 import { CardHistoryEntry } from './hooks/useCardHistory'
 import { Layout } from './components/layout/Layout'
-import { DrillDownModal } from './components/drilldown/DrillDownModal'
 import { AuthProvider, useAuth } from './lib/auth'
 import { ThemeProvider } from './hooks/useTheme'
 import { DrillDownProvider } from './hooks/useDrillDown'
@@ -15,15 +14,20 @@ import { AlertsProvider } from './contexts/AlertsContext'
 import { RewardsProvider } from './hooks/useRewards'
 import { UnifiedDemoProvider } from './lib/unified/demo'
 import { ChunkErrorBoundary } from './components/ChunkErrorBoundary'
+import { AppErrorBoundary } from './components/AppErrorBoundary'
 import { ROUTES } from './config/routes'
 import { usePersistedSettings } from './hooks/usePersistedSettings'
-import { prefetchCardData } from './lib/prefetchCardData'
 import { SHORT_DELAY_MS } from './lib/constants/network'
-import { prefetchCardChunks, prefetchDemoCardChunks } from './components/cards/cardRegistry'
 import { isDemoMode } from './lib/demoMode'
 import { STORAGE_KEY_TOKEN } from './lib/constants'
-import { emitPageView } from './lib/analytics'
+import { emitPageView, emitDashboardViewed } from './lib/analytics'
 import { fetchEnabledDashboards, getEnabledDashboardIds } from './hooks/useSidebarConfig'
+
+// Lazy-load DrillDownModal — the drilldown views (~64 KB) are only needed
+// when a user clicks into a card detail, not on initial page render.
+const DrillDownModal = lazy(() =>
+  import('./components/drilldown/DrillDownModal').then(m => ({ default: m.DrillDownModal }))
+)
 
 // Lazy load all page components for better code splitting
 const Login = lazy(() => import('./components/auth/Login').then(m => ({ default: m.Login })))
@@ -62,8 +66,10 @@ const AIAgents = lazy(() => import('./components/aiagents/AIAgents').then(m => (
 const LLMdBenchmarks = lazy(() => import('./components/llmd-benchmarks/LLMdBenchmarks').then(m => ({ default: m.LLMdBenchmarks })))
 const ClusterAdmin = lazy(() => import('./components/cluster-admin/ClusterAdmin').then(m => ({ default: m.ClusterAdmin })))
 const CICD = lazy(() => import('./components/cicd/CICD').then(m => ({ default: m.CICD })))
+const Insights = lazy(() => import('./components/insights/Insights').then(m => ({ default: m.Insights })))
 const Marketplace = lazy(() => import('./components/marketplace/Marketplace').then(m => ({ default: m.Marketplace })))
 const MiniDashboard = lazy(() => import('./components/widget/MiniDashboard').then(m => ({ default: m.MiniDashboard })))
+const FromLens = lazy(() => import('./pages/FromLens').then(m => ({ default: m.FromLens })))
 const UnifiedCardTest = lazy(() => import('./pages/UnifiedCardTest').then(m => ({ default: m.UnifiedCardTest })))
 const UnifiedStatsTest = lazy(() => import('./pages/UnifiedStatsTest').then(m => ({ default: m.UnifiedStatsTest })))
 const UnifiedDashboardTest = lazy(() => import('./pages/UnifiedDashboardTest').then(m => ({ default: m.UnifiedDashboardTest })))
@@ -103,6 +109,7 @@ const DASHBOARD_CHUNKS: Record<string, () => Promise<unknown>> = {
   'llm-d-benchmarks': () => import('./components/llmd-benchmarks/LLMdBenchmarks'),
   'cluster-admin': () => import('./components/cluster-admin/ClusterAdmin'),
   'ci-cd': () => import('./components/cicd/CICD'),
+  'insights': () => import('./components/insights/Insights'),
   'marketplace': () => import('./components/marketplace/Marketplace'),
 }
 
@@ -243,8 +250,42 @@ function SettingsSyncInit() {
   return null
 }
 
-/** Redirect /missions/:missionId → /?mission=:missionId to open MissionBrowser via deep-link.
+/** Redirect /missions → /?browse=missions to open MissionBrowser.
+ *  Redirect /missions/:missionId → /?mission=:missionId to open a specific mission.
  *  Preserves UTM and other query params so GA4 campaign attribution survives the redirect. */
+function IssueRedirect() {
+  const navigate = useNavigate()
+  const dispatched = useRef(false)
+  useEffect(() => {
+    if (!dispatched.current) {
+      dispatched.current = true
+      navigate(ROUTES.HOME, { replace: true })
+      window.dispatchEvent(new CustomEvent('open-feedback'))
+    }
+  }, [navigate])
+  return null
+}
+
+function FeatureRedirect() {
+  const navigate = useNavigate()
+  const dispatched = useRef(false)
+  useEffect(() => {
+    if (!dispatched.current) {
+      dispatched.current = true
+      navigate(ROUTES.HOME, { replace: true })
+      window.dispatchEvent(new CustomEvent('open-feedback-feature'))
+    }
+  }, [navigate])
+  return null
+}
+
+function MissionBrowseLink() {
+  const [searchParams] = useSearchParams()
+  const params = new URLSearchParams(searchParams)
+  params.set('browse', 'missions')
+  return <Navigate to={`/?${params.toString()}`} replace />
+}
+
 function MissionDeepLink() {
   const { missionId } = useParams()
   const [searchParams] = useSearchParams()
@@ -292,19 +333,57 @@ const ROUTE_TITLES: Record<string, string> = {
   '/settings': 'Settings',
   '/users': 'User Management',
   '/login': 'Login',
+  '/from-lens': 'Switching from Lens',
 }
 
 const APP_NAME = 'KubeStellar Console'
 
+/** Map route paths to dashboard IDs for duration analytics */
+function pathToDashboardId(path: string): string | null {
+  if (path === '/') return 'main'
+  if (path.startsWith('/custom-dashboard/')) return path.replace('/custom-dashboard/', 'custom-')
+  const id = path.replace(/^\//, '')
+  return id || null
+}
+
 // Track page views in Google Analytics on route change and set document title
 function PageViewTracker() {
   const location = useLocation()
+  const pageEnteredRef = useRef<{ path: string; timestamp: number } | null>(null)
+
+  // Flush duration for current page (used on route change and tab close)
+  const flushDuration = () => {
+    if (pageEnteredRef.current) {
+      const durationMs = Date.now() - pageEnteredRef.current.timestamp
+      const dashboardId = pathToDashboardId(pageEnteredRef.current.path)
+      if (dashboardId) {
+        emitDashboardViewed(dashboardId, durationMs)
+      }
+    }
+  }
+
+  // Capture final page duration when the tab becomes hidden (covers tab close/switch)
   useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') flushDuration()
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [])
+
+  useEffect(() => {
+    // Emit duration for previous page
+    flushDuration()
+
+    // Track new page entry
+    pageEnteredRef.current = { path: location.pathname, timestamp: Date.now() }
+
     const section = ROUTE_TITLES[location.pathname]
     const title = section ? `${section} - ${APP_NAME}` : APP_NAME
     document.title = title
     emitPageView(location.pathname)
   }, [location.pathname])
+
   return null
 }
 
@@ -318,20 +397,26 @@ const DEFAULT_MAIN_CARD_TYPES = [
 
 // Prefetches core Kubernetes data and card chunks immediately after login
 // so dashboard cards render instantly instead of showing skeletons.
+// Uses dynamic imports to keep prefetchCardData (~92 KB useCachedData) and
+// cardRegistry (~52 KB + 195 KB card configs) out of the main chunk.
 function DataPrefetchInit() {
   const { isAuthenticated } = useAuth()
   useEffect(() => {
     if (!isAuthenticated) return
-    prefetchCardData()
-    // Prefetch default dashboard card chunks immediately — don't wait for
-    // Dashboard.tsx to lazy-load and mount before starting chunk downloads.
-    prefetchCardChunks(DEFAULT_MAIN_CARD_TYPES)
-    // Demo-only card chunks are lower priority — defer 15s in live mode.
-    if (isDemoMode()) {
-      prefetchDemoCardChunks()
-    } else {
-      setTimeout(prefetchDemoCardChunks, 15_000)
-    }
+    // Dynamic import: prefetchCardData pulls in useCachedData (~92 KB)
+    import('./lib/prefetchCardData').then(m => m.prefetchCardData()).catch(() => {})
+    // Dynamic import: cardRegistry pulls in card configs (~195 KB)
+    import('./components/cards/cardRegistry').then(m => {
+      // Prefetch default dashboard card chunks immediately — don't wait for
+      // Dashboard.tsx to lazy-load and mount before starting chunk downloads.
+      m.prefetchCardChunks(DEFAULT_MAIN_CARD_TYPES)
+      // Demo-only card chunks are lower priority — defer 15s in live mode.
+      if (isDemoMode()) {
+        m.prefetchDemoCardChunks()
+      } else {
+        setTimeout(m.prefetchDemoCardChunks, 15_000)
+      }
+    }).catch(() => {})
   }, [isAuthenticated])
   return null
 }
@@ -352,11 +437,13 @@ function App() {
       <AlertsProvider>
       <DashboardProvider>
       <DrillDownProvider>
-      <DrillDownModal />
+      <Suspense fallback={null}><DrillDownModal /></Suspense>
+      <AppErrorBoundary>
       <ChunkErrorBoundary>
       <Suspense fallback={<LoadingFallback />}>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/from-lens" element={<FromLens />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
         {/* PWA Mini Dashboard - lightweight widget mode (no auth required for local monitoring) */}
         <Route path="/widget" element={<MiniDashboard />} />
@@ -404,6 +491,7 @@ function App() {
           <Route path="/llm-d-benchmarks" element={<LLMdBenchmarks />} />
           <Route path="/cluster-admin" element={<ClusterAdmin />} />
           <Route path="/ci-cd" element={<CICD />} />
+          <Route path="/insights" element={<Insights />} />
           <Route path="/marketplace" element={<Marketplace />} />
           {/* Dev test routes for unified framework validation */}
           <Route path="/test/unified-card" element={<UnifiedCardTest />} />
@@ -412,13 +500,22 @@ function App() {
           {/* Mission deep-link: /missions/install-prometheus → opens MissionBrowser.
               Must be inside ProtectedRoute so auth is verified before redirect,
               and the ?mission= param survives the OAuth round-trip. */}
+          <Route path="/missions" element={<MissionBrowseLink />} />
           <Route path="/missions/:missionId" element={<MissionDeepLink />} />
+          {/* /issue, /issues, /feedback open the feedback modal on the dashboard */}
+          <Route path="/issue" element={<IssueRedirect />} />
+          <Route path="/issues" element={<IssueRedirect />} />
+          <Route path="/feedback" element={<IssueRedirect />} />
+          {/* /feature, /features open the feedback modal on the feature tab */}
+          <Route path="/feature" element={<FeatureRedirect />} />
+          <Route path="/features" element={<FeatureRedirect />} />
         </Route>
 
         <Route path="*" element={<Navigate to={ROUTES.HOME} replace />} />
       </Routes>
       </Suspense>
       </ChunkErrorBoundary>
+      </AppErrorBoundary>
       </DrillDownProvider>
       </DashboardProvider>
       </AlertsProvider>

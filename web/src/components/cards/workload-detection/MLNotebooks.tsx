@@ -1,5 +1,6 @@
 import { ExternalLink, AlertCircle } from 'lucide-react'
 import { Skeleton } from '../../ui/Skeleton'
+import { StatusBadge } from '../../ui/StatusBadge'
 import { useCardData } from '../../../lib/cards/cardHooks'
 import { CardPaginationFooter, CardControlsRow, CardSearchInput } from '../../../lib/cards/CardComponents'
 import { DEMO_NOTEBOOKS, useDemoData } from './shared'
@@ -20,17 +21,21 @@ interface MLNotebooksProps {
 }
 
 export function MLNotebooks({ config: _config }: MLNotebooksProps) {
-  const { t } = useTranslation()
+  const { t } = useTranslation(['cards', 'common'])
   const { data: notebooks, isLoading } = useDemoData(DEMO_NOTEBOOKS)
 
   useCardLoadingState({
     isLoading,
     hasAnyData: notebooks.length > 0,
+    isDemoData: true,
   })
 
   const statusOrder: Record<string, number> = { running: 0, idle: 1, stopped: 2 }
 
-  const { items, totalItems, currentPage, totalPages, goToPage, needsPagination, itemsPerPage, setItemsPerPage, filters, sorting } = useCardData<Notebook, SortByOption>(notebooks, {
+  const { items, totalItems, currentPage, totalPages, goToPage, needsPagination, itemsPerPage, setItemsPerPage, filters, sorting,
+    containerRef,
+    containerStyle,
+  } = useCardData<Notebook, SortByOption>(notebooks, {
     filter: {
       searchFields: ['name', 'user', 'status'] as (keyof Notebook)[],
       storageKey: 'ml-notebooks',
@@ -50,13 +55,13 @@ export function MLNotebooks({ config: _config }: MLNotebooksProps) {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'running':
-        return <span className="text-xs px-1.5 py-0.5 rounded bg-green-500/20 text-green-400">{t('common.active')}</span>
+        return <StatusBadge color="green">{t('common:common.active')}</StatusBadge>
       case 'idle':
-        return <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400">Idle</span>
+        return <StatusBadge color="yellow">Idle</StatusBadge>
       case 'stopped':
-        return <span className="text-xs px-1.5 py-0.5 rounded bg-gray-500/20 text-gray-400">Stopped</span>
+        return <StatusBadge color="gray">Stopped</StatusBadge>
       default:
-        return <span className="text-xs px-1.5 py-0.5 rounded bg-gray-500/20 text-gray-400">{status}</span>
+        return <StatusBadge color="gray">{status}</StatusBadge>
     }
   }
 
@@ -74,9 +79,9 @@ export function MLNotebooks({ config: _config }: MLNotebooksProps) {
     <div className="h-full flex flex-col min-h-card">
       {/* Header controls */}
       <div className="flex items-center justify-between mb-3">
-        <span className="text-xs px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400">
+        <StatusBadge color="blue">
           {notebooks.filter(n => n.status === 'running').length} active
-        </span>
+        </StatusBadge>
         <CardControlsRow
           cardControls={{
             limit: itemsPerPage,
@@ -103,10 +108,10 @@ export function MLNotebooks({ config: _config }: MLNotebooksProps) {
       <div className="flex items-start gap-2 p-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-xs mb-4">
         <AlertCircle className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
         <div>
-          <p className="text-blue-400 font-medium">Notebook Detection</p>
+          <p className="text-blue-400 font-medium">{t('cards:mlNotebooks.notebookDetection')}</p>
           <p className="text-muted-foreground">
-            Scans for JupyterHub and standalone notebook servers.{' '}
-            <a href="https://jupyterhub.readthedocs.io/en/stable/getting-started/index.html" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">
+            {t('cards:mlNotebooks.notebookDetectionDescription')}{' '}
+            <a href="https://jupyterhub.readthedocs.io/en/stable/getting-started/index.html" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline inline-block py-2">
               JupyterHub docs <ExternalLink className="w-3 h-3 inline" />
             </a>
           </p>
@@ -114,14 +119,14 @@ export function MLNotebooks({ config: _config }: MLNotebooksProps) {
       </div>
 
       {/* Notebook list */}
-      <div className="flex-1 overflow-y-auto">
+      <div ref={containerRef} className="flex-1 overflow-y-auto" style={containerStyle}>
         <table className="w-full text-sm">
           <thead>
             <tr className="text-xs text-muted-foreground border-b border-border/50">
               <th className="text-left py-2">Notebook</th>
               <th className="text-left py-2">User</th>
-              <th className="text-right py-2">{t('common.resources')}</th>
-              <th className="text-right py-2">{t('common.status')}</th>
+              <th className="text-right py-2">{t('common:common.resources')}</th>
+              <th className="text-right py-2">{t('common:common.status')}</th>
             </tr>
           </thead>
           <tbody>

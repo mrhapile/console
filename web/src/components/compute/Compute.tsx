@@ -1,6 +1,7 @@
 import { useEffect, useCallback, useRef, useState } from 'react'
 import { useSearchParams, useLocation, useNavigate } from 'react-router-dom'
 import { GitCompare, CheckSquare, Square, ChevronDown, ChevronRight, AlertCircle } from 'lucide-react'
+import { Button } from '../ui/Button'
 import { useClusters, useGPUNodes } from '../../hooks/useMCP'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { useDrillDownActions } from '../../hooks/useDrillDown'
@@ -35,12 +36,14 @@ export function Compute() {
   const [selectedForComparison, setSelectedForComparison] = useState<string[]>([])
   const [showClusterList, setShowClusterList] = useState(false)
 
-  // Handle addCard URL param - open modal and clear param
+  // Handle addCard URL param - open modal and clear param.
+  // Guard: KeepAlive keeps hidden dashboards mounted; only process on active route.
   useEffect(() => {
+    if (location.pathname !== '/compute') return
     if (searchParams.get('addCard') === 'true') {
       setSearchParams({}, { replace: true })
     }
-  }, [searchParams, setSearchParams])
+  }, [searchParams, setSearchParams, location.pathname])
 
   // Trigger refresh when navigating to this page (location.key changes on each navigation)
   useEffect(() => {
@@ -195,13 +198,14 @@ export function Compute() {
               Clear
             </button>
             {selectedForComparison.length >= 2 && (
-              <button
+              <Button
+                variant="accent"
+                size="sm"
                 onClick={handleCompare}
-                className="flex items-center gap-2 px-3 py-1.5 bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 rounded-lg transition-colors text-sm font-medium"
+                icon={<GitCompare className="w-4 h-4" />}
               >
-                <GitCompare className="w-4 h-4" />
                 Compare ({selectedForComparison.length})
-              </button>
+              </Button>
             )}
           </div>
         )}

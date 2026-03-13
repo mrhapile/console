@@ -24,6 +24,7 @@ import {
 import { useSearchParams } from 'react-router-dom'
 import { useMissions } from '../../../hooks/useMissions'
 import { useMobile } from '../../../hooks/useMobile'
+import { StatusBadge } from '../../ui/StatusBadge'
 import { cn } from '../../../lib/cn'
 import { AgentSelector } from '../../agent/AgentSelector'
 import { AgentIcon } from '../../agent/AgentIcon'
@@ -54,19 +55,21 @@ export function MissionSidebar() {
   // Cluster selection for install missions
   const [pendingRunMissionId, setPendingRunMissionId] = useState<string | null>(null)
 
-  // Deep-link: open MissionBrowser to specific mission via ?mission= URL param
+  // Deep-link: open MissionBrowser via ?mission= (specific) or ?browse=missions (explorer)
   const [searchParams, setSearchParams] = useSearchParams()
   const deepLinkMission = searchParams.get('mission')
+  const browseParam = searchParams.get('browse')
 
   useEffect(() => {
-    if (deepLinkMission) {
+    if (deepLinkMission || browseParam === 'missions') {
       setShowBrowser(true)
-      // Clear the param from URL after opening
+      // Clear the params from URL after opening
       const newParams = new URLSearchParams(searchParams)
       newParams.delete('mission')
+      newParams.delete('browse')
       setSearchParams(newParams, { replace: true })
     }
-  }, [deepLinkMission, searchParams, setSearchParams])
+  }, [deepLinkMission, browseParam, searchParams, setSearchParams])
 
   // Split missions into saved (library) and active
   const savedMissions = missions.filter(m => m.status === 'saved')
@@ -213,7 +216,7 @@ export function MissionSidebar() {
       {/* Mobile backdrop */}
       {isMobile && isSidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-30 md:hidden"
+          className="fixed inset-0 bg-black/60 backdrop-blur-2xl z-30 md:hidden"
           onClick={closeSidebar}
         />
       )}
@@ -246,9 +249,7 @@ export function MissionSidebar() {
           <AgentIcon provider={getAgentProvider(selectedAgent)} className="w-5 h-5" />
           <h2 className="font-semibold text-foreground text-sm md:text-base">{t('missionSidebar.aiMissions')}</h2>
           {needsAttention > 0 && (
-            <span className="px-1.5 py-0.5 text-xs bg-purple-500/20 text-purple-400 rounded-full">
-              {needsAttention}
-            </span>
+            <StatusBadge color="purple" rounded="full">{needsAttention}</StatusBadge>
           )}
         </div>
         {/* Agent Selector */}
@@ -361,7 +362,7 @@ export function MissionSidebar() {
               }}
             />
             <div className="flex items-center justify-between">
-              <span className="text-[10px] text-muted-foreground">
+              <span className="text-2xs text-muted-foreground">
                 {isMobile ? t('missionSidebar.tapSend') : t('missionSidebar.cmdEnterSubmit')}
               </span>
               <div className="flex items-center gap-2">
@@ -413,9 +414,9 @@ export function MissionSidebar() {
           <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="text-xs font-medium text-green-400 truncate">Saved to library</p>
-            <p className="text-[10px] text-muted-foreground truncate">{showSavedToast}</p>
+            <p className="text-2xs text-muted-foreground truncate">{showSavedToast}</p>
           </div>
-          <button onClick={() => { setActiveMission(null); setShowSavedToast(null) }} className="text-[10px] text-green-400 hover:underline flex-shrink-0">View</button>
+          <button onClick={() => { setActiveMission(null); setShowSavedToast(null) }} className="text-2xs text-green-400 hover:underline flex-shrink-0">{t('common.view')}</button>
         </div>
       )}
 
@@ -457,9 +458,9 @@ export function MissionSidebar() {
           {isFullScreen && savedMissions.length > 0 && (
             <div className="w-64 border-r border-border bg-secondary/20 flex flex-col overflow-hidden flex-shrink-0">
               <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
-                <Bookmark className="w-4 h-4 text-amber-500" />
+                <Bookmark className="w-4 h-4 text-yellow-500" />
                 <span className="text-xs font-semibold text-foreground">Saved Missions</span>
-                <span className="text-[10px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded-full ml-auto">{savedMissions.length}</span>
+                <StatusBadge color="yellow" size="xs" rounded="full" className="ml-auto">{savedMissions.length}</StatusBadge>
               </div>
               <div className="flex-1 overflow-y-auto scroll-enhanced p-1.5 space-y-1">
                 {savedMissions.map(m => (
@@ -469,11 +470,11 @@ export function MissionSidebar() {
                     onClick={() => handleViewSavedMission(m)}
                   >
                     <div className="flex items-start gap-2">
-                      <Bookmark className="w-3.5 h-3.5 text-amber-500 mt-0.5 flex-shrink-0" />
+                      <Bookmark className="w-3.5 h-3.5 text-yellow-500 mt-0.5 flex-shrink-0" />
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-medium text-foreground truncate">{m.title}</p>
                         {m.importedFrom?.cncfProject && (
-                          <p className="text-[10px] text-muted-foreground truncate">{m.importedFrom.cncfProject}</p>
+                          <p className="text-2xs text-muted-foreground truncate">{m.importedFrom.cncfProject}</p>
                         )}
                         {m.importedFrom?.tags && m.importedFrom.tags.length > 0 && (
                           <div className="flex flex-wrap gap-0.5 mt-1">
@@ -487,19 +488,19 @@ export function MissionSidebar() {
                     <div className="flex items-center gap-1 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
                         onClick={(e) => { e.stopPropagation(); handleViewSavedMission(m) }}
-                        className="flex items-center gap-1 px-2 py-0.5 text-[10px] text-muted-foreground hover:text-foreground rounded hover:bg-secondary transition-colors"
+                        className="flex items-center gap-1 px-2 py-0.5 text-2xs text-muted-foreground hover:text-foreground rounded hover:bg-secondary transition-colors"
                       >
                         <Eye className="w-2.5 h-2.5" /> View
                       </button>
                       <button
                         onClick={(e) => { e.stopPropagation(); handleRunMission(m.id) }}
-                        className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors"
+                        className="flex items-center gap-1 px-2 py-0.5 text-2xs font-medium bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors"
                       >
                         <Play className="w-2.5 h-2.5" /> Run
                       </button>
                       <button
                         onClick={(e) => { e.stopPropagation(); dismissMission(m.id) }}
-                        className="flex items-center gap-1 px-2 py-0.5 text-[10px] text-muted-foreground hover:text-red-400 rounded hover:bg-red-500/10 transition-colors"
+                        className="flex items-center gap-1 px-2 py-0.5 text-2xs text-muted-foreground hover:text-red-400 rounded hover:bg-red-500/10 transition-colors"
                       >
                         <Trash2 className="w-2.5 h-2.5" /> Remove
                       </button>
@@ -532,25 +533,25 @@ export function MissionSidebar() {
           {savedMissions.length > 0 && (
             <div className="mb-3">
               <div className="flex items-center gap-2 px-2 py-1.5 mb-1">
-                <Bookmark className="w-4 h-4 text-amber-500" />
+                <Bookmark className="w-4 h-4 text-yellow-500" />
                 <span className="text-xs font-semibold text-foreground">Saved Missions</span>
-                <span className="text-[10px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded-full">{savedMissions.length}</span>
+                <StatusBadge color="yellow" size="xs" rounded="full">{savedMissions.length}</StatusBadge>
               </div>
               <div className="space-y-1.5">
                 {savedMissions.map(m => (
                   <div
                     key={m.id}
-                    className="group flex items-center gap-3 p-3 rounded-lg border border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10 transition-colors cursor-pointer"
+                    className="group flex items-center gap-3 p-3 rounded-lg border border-yellow-500/20 bg-yellow-500/5 hover:bg-yellow-500/10 transition-colors cursor-pointer"
                     onClick={() => handleViewSavedMission(m)}
                   >
-                    <Bookmark className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                    <Bookmark className="w-4 h-4 text-yellow-500 flex-shrink-0" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-foreground truncate">{m.title}</p>
                       <p className="text-xs text-muted-foreground truncate">{m.description}</p>
                       {m.importedFrom?.tags && m.importedFrom.tags.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1">
                           {m.importedFrom.tags.slice(0, 4).map(tag => (
-                            <span key={tag} className="text-[10px] px-1.5 py-0.5 bg-secondary rounded text-muted-foreground">{tag}</span>
+                            <span key={tag} className="text-2xs px-1.5 py-0.5 bg-secondary rounded text-muted-foreground">{tag}</span>
                           ))}
                         </div>
                       )}
@@ -590,7 +591,7 @@ export function MissionSidebar() {
               {savedMissions.length > 0 && (
                 <div className="flex items-center gap-2 px-2 py-1.5">
                   <span className="text-xs font-semibold text-foreground">Active Missions</span>
-                  <span className="text-[10px] bg-secondary px-1.5 py-0.5 rounded-full">{activeMissions.length}</span>
+                  <span className="text-2xs bg-secondary px-1.5 py-0.5 rounded-full">{activeMissions.length}</span>
                 </div>
               )}
               {[...activeMissions].reverse().map((mission) => (
@@ -621,7 +622,7 @@ export function MissionSidebar() {
       {/* Saved Mission Detail Modal */}
       {viewingMission && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-2xl"
           onClick={(e) => { if (e.target === e.currentTarget) setViewingMission(null) }}
           onKeyDown={(e) => { if (e.key === 'Escape') setViewingMission(null) }}
           tabIndex={-1}
@@ -716,7 +717,7 @@ export function MissionSidebarToggle() {
   return (
     <button
       onClick={openSidebar}
-      data-tour="ai-missions"
+      data-tour="ai-missions-toggle"
       className={cn(
         'fixed flex items-center gap-2 rounded-full shadow-lg transition-all z-50',
         // Mobile: smaller padding, bottom right

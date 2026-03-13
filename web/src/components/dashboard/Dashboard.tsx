@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   DndContext,
   closestCenter,
@@ -36,7 +36,9 @@ import { ConfigureCardModal } from './ConfigureCardModal'
 import { CardRecommendations } from './CardRecommendations'
 import { safeGetItem, safeSetItem, safeGetJSON, safeSetJSON } from '../../lib/utils/localStorage'
 import { MissionSuggestions } from './MissionSuggestions'
-import { MissionCTA } from './MissionCTA'
+import { GettingStartedBanner } from './GettingStartedBanner'
+import { SidebarCustomizer } from '../layout/SidebarCustomizer'
+import { useMissions } from '../../hooks/useMissions'
 import { TemplatesModal } from './TemplatesModal'
 import { CreateDashboardModal } from './CreateDashboardModal'
 import { FloatingDashboardActions } from './FloatingDashboardActions'
@@ -44,9 +46,19 @@ import { DashboardTemplate } from './templates'
 import { SortableCard, DragPreviewCard } from './SharedSortableCard'
 import type { Card, DashboardData } from './dashboardUtils'
 import { useDashboardReset } from '../../hooks/useDashboardReset'
+import { useDashboardUndoRedo } from '../../hooks/useUndoRedo'
 import { WelcomeCard } from './WelcomeCard'
+
+import { PostConnectBanner } from './PostConnectBanner'
+import { AdopterNudge } from './AdopterNudge'
+import { DemoToLocalCTA } from './DemoToLocalCTA'
+import { ContextualNudgeBanner } from './ContextualNudgeBanner'
+import { DiscoverCardsPlaceholder } from './DiscoverCardsPlaceholder'
+import { WidgetExportModal } from '../widgets/WidgetExportModal'
 import { getDemoMode } from '../../hooks/useDemoMode'
 import { useRefreshIndicator } from '../../hooks/useRefreshIndicator'
+import { useContextualNudges } from '../../hooks/useContextualNudges'
+import { useDashboardScrollTracking } from '../../hooks/useDashboardScrollTracking'
 import { DashboardHeader } from '../shared/DashboardHeader'
 import { StatsOverview, StatBlockValue } from '../ui/StatsOverview'
 import { useUniversalStats, createMergedStatValueGetter } from '../../hooks/useUniversalStats'
@@ -55,6 +67,7 @@ import { useDeployWorkload } from '../../hooks/useWorkloads'
 import { DeployConfirmDialog } from '../deploy/DeployConfirmDialog'
 import { DashboardHealthIndicator } from './DashboardHealthIndicator'
 import { useCardGridNavigation } from '../../hooks/useCardGridNavigation'
+import { useModalState } from '../../lib/modals'
 
 // Module-level cache for dashboard data (survives navigation)
 interface CachedDashboard {
@@ -78,7 +91,8 @@ export function Dashboard() {
   const [isLoading, setIsLoading] = useState(false) // Cards are pre-populated from localStorage/defaults — never block
   const location = useLocation()
   const navigate = useNavigate()
-  const [isConfigureCardOpen, setIsConfigureCardOpen] = useState(false)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const { isOpen: isConfigureCardOpen, open: openConfigureCard, close: closeConfigureCard } = useModalState()
   const [selectedCard, setSelectedCard] = useState<Card | null>(null)
   const [localCards, setLocalCards] = useState<Card[]>(() => {
     // Priority: cache > localStorage > default cards
@@ -92,7 +106,9 @@ export function Dashboard() {
   const [activeId, setActiveId] = useState<string | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [_dragOverDashboard, setDragOverDashboard] = useState<string | null>(null)
-  const [isCreateDashboardOpen, setIsCreateDashboardOpen] = useState(false)
+  const { isOpen: isCreateDashboardOpen, open: openCreateDashboard, close: closeCreateDashboard } = useModalState()
+  const { isOpen: isWidgetExportOpen, open: openWidgetExport, close: closeWidgetExport } = useModalState()
+  const { isOpen: isSidebarCustomizerOpen, open: openSidebarCustomizer, close: closeSidebarCustomizer } = useModalState()
 
   // Get context for modals that can be triggered from sidebar
   const {
@@ -107,6 +123,9 @@ export function Dashboard() {
     pendingRestoreCard,
     clearPendingRestoreCard,
   } = useDashboardContext()
+
+  // Missions context for Getting Started banner + PostConnectBanner
+  const { openSidebar: openMissionSidebar, startMission } = useMissions()
 
   // Get all dashboards for cross-dashboard dragging
   const { dashboards, moveCardToDashboard, createDashboard, exportDashboard, importDashboard } = useDashboards()
@@ -129,6 +148,23 @@ export function Dashboard() {
     setCards: setLocalCards,
     cards: localCards,
   })
+
+  // Undo/redo for card mutations
+  const localCardsRef = useRef(localCards)
+  localCardsRef.current = localCards
+  const { snapshot, undo, redo, canUndo, canRedo } = useDashboardUndoRedo<Card>(
+    setLocalCards,
+    () => localCardsRef.current,
+  )
+
+  // Contextual nudges (replaces traditional tour with in-context hints)
+  const { activeNudge, showDragHint, dismissNudge, actionNudge, recordVisit } = useContextualNudges(isCustomized)
+
+  // Track dashboard scroll depth for "almost" engagement analytics
+  useDashboardScrollTracking()
+
+  // Record dashboard visit for nudge thresholds
+  useEffect(() => { recordVisit() }, [recordVisit])
 
   // Universal stats for cross-dashboard stat blocks
   const { getStatValue: getUniversalStatValue } = useUniversalStats()
@@ -287,6 +323,7 @@ export function Dashboard() {
         try {
           await moveCardToDashboard(active.id as string, targetDashboardId)
           // Remove card from local state
+          snapshot(localCards)
           setLocalCards((items) => items.filter((item) => item.id !== active.id))
           // Show success toast
           showToast(`Card moved to "${targetDashboardName}"`, 'success')
@@ -302,6 +339,7 @@ export function Dashboard() {
     if (active.id !== over.id) {
       const draggedCard = localCards.find(c => c.id === active.id)
       if (draggedCard) emitCardDragged(draggedCard.card_type)
+      snapshot(localCards)
       setLocalCards((items) => {
         const oldIndex = items.findIndex((item) => item.id === active.id)
         const newIndex = items.findIndex((item) => item.id === over.id)
@@ -384,7 +422,7 @@ export function Dashboard() {
   }, [pendingDeploy, publishCardEvent, deployWorkload, showToast])
 
   const handleCreateDashboard = () => {
-    setIsCreateDashboardOpen(true)
+    openCreateDashboard()
   }
 
   const handleCreateDashboardConfirm = async (name: string, template?: DashboardTemplate) => {
@@ -460,6 +498,7 @@ export function Dashboard() {
         dashboard?.name
       )
       // Add the card at the TOP
+      snapshot(localCards)
       setLocalCards((prev) => [newCard, ...prev])
       // Clear the pending card
       clearPendingRestoreCard()
@@ -475,6 +514,22 @@ export function Dashboard() {
       setPendingOpenAddCardModal(false)
     }
   }, [pendingOpenAddCardModal, isLoading, openAddCardModal, setPendingOpenAddCardModal])
+
+  // Handle addCard URL param from search — open modal and clear param.
+  // Guard with pathname check: KeepAlive keeps hidden dashboards mounted,
+  // so all of them see the same searchParams. Only process when active.
+  const [addCardSearch, setAddCardSearch] = useState('')
+  useEffect(() => {
+    if (location.pathname !== '/' && location.pathname !== '') return
+    if (searchParams.get('addCard') === 'true') {
+      setAddCardSearch(searchParams.get('cardSearch') || '')
+      openAddCardModal()
+      const cleaned = new URLSearchParams(searchParams)
+      cleaned.delete('addCard')
+      cleaned.delete('cardSearch')
+      setSearchParams(cleaned, { replace: true })
+    }
+  }, [searchParams, setSearchParams, openAddCardModal, location.pathname])
 
   // Helper to check if a card ID is a local-only (not persisted) card
   const isLocalOnlyCard = (cardId: string) => {
@@ -573,6 +628,7 @@ export function Dashboard() {
       emitCardAdded(card.card_type, 'add_modal')
     })
     // Add new cards at the TOP of the dashboard (prepend)
+    snapshot(localCards)
     setLocalCards((prev) => [...newCards, ...prev])
 
     // Persist to backend if dashboard exists
@@ -602,6 +658,7 @@ export function Dashboard() {
         dashboard?.name
       )
     }
+    snapshot(localCards)
     setLocalCards((prev) => prev.filter((c) => c.id !== cardId))
 
     // Persist deletion to backend
@@ -613,14 +670,15 @@ export function Dashboard() {
         showToast('Failed to delete card from backend', 'error')
       }
     }
-  }, [localCards, dashboard, recordCardRemoved])
+  }, [localCards, dashboard, recordCardRemoved, snapshot])
 
   const handleConfigureCard = useCallback((card: Card) => {
     setSelectedCard(card)
-    setIsConfigureCardOpen(true)
-  }, [])
+    openConfigureCard()
+  }, [openConfigureCard])
 
   const handleWidthChange = useCallback(async (cardId: string, newWidth: number) => {
+    snapshot(localCards)
     setLocalCards((prev) =>
       prev.map((c) =>
         c.id === cardId
@@ -643,7 +701,7 @@ export function Dashboard() {
         showToast('Failed to update card width', 'error')
       }
     }
-  }, [dashboard, localCards])
+  }, [dashboard, localCards, snapshot])
 
   const handleCardConfigured = useCallback(async (cardId: string, newConfig: Record<string, unknown>, newTitle?: string) => {
     const card = localCards.find((c) => c.id === cardId)
@@ -658,6 +716,7 @@ export function Dashboard() {
         dashboard?.name
       )
     }
+    snapshot(localCards)
     setLocalCards((prev) =>
       prev.map((c) =>
         c.id === cardId
@@ -665,7 +724,7 @@ export function Dashboard() {
           : c
       )
     )
-    setIsConfigureCardOpen(false)
+    closeConfigureCard()
     setSelectedCard(null)
 
     // Persist configuration to backend
@@ -677,9 +736,10 @@ export function Dashboard() {
         showToast('Failed to update card configuration', 'error')
       }
     }
-  }, [localCards, dashboard, recordCardConfigured])
+  }, [localCards, dashboard, recordCardConfigured, closeConfigureCard, snapshot])
 
   const handleAddRecommendedCard = useCallback((cardType: string, config?: Record<string, unknown>, title?: string) => {
+    snapshot(localCards)
     setLocalCards((prev) => {
       // Check if a card with the same type already exists
       const existingIndex = prev.findIndex((c) => c.card_type === cardType)
@@ -702,7 +762,7 @@ export function Dashboard() {
       recordCardAdded(newCard.id, cardType, title, config, dashboard?.id, dashboard?.name)
       return [newCard, ...prev]
     })
-  }, [dashboard, recordCardAdded])
+  }, [dashboard, recordCardAdded, snapshot, localCards])
 
   // Create a new card from AI configuration
   const handleCreateCardFromAI = useCallback((cardType: string, config: Record<string, unknown>, title?: string) => {
@@ -717,10 +777,11 @@ export function Dashboard() {
     // Record in history
     recordCardAdded(newCard.id, cardType, title, config, dashboard?.id, dashboard?.name)
     // Add at TOP and close the configure modal
+    snapshot(localCards)
     setLocalCards((prev) => [newCard, ...prev])
-    setIsConfigureCardOpen(false)
+    closeConfigureCard()
     setSelectedCard(null)
-  }, [dashboard, recordCardAdded])
+  }, [dashboard, recordCardAdded, closeConfigureCard, snapshot, localCards])
 
   // Apply template - add all template cards to dashboard
   const handleApplyTemplate = useCallback((template: DashboardTemplate) => {
@@ -736,9 +797,35 @@ export function Dashboard() {
       recordCardAdded(card.id, card.card_type, card.title, card.config, dashboard?.id, dashboard?.name)
     })
     // Add template cards at the top
+    snapshot(localCards)
     setLocalCards((prev) => [...newCards, ...prev])
     showToast(`Applied "${template.name}" template with ${newCards.length} cards`, 'success')
-  }, [dashboard, recordCardAdded, showToast])
+  }, [dashboard, recordCardAdded, showToast, snapshot, localCards])
+
+  // Handle single card addition from smart suggestions or discover placeholder
+  const handleAddSingleCard = useCallback((cardType: string) => {
+    const size = getDefaultCardSize(cardType)
+    const newCard: Card = {
+      id: `rec-${Date.now()}`,
+      card_type: cardType,
+      config: {},
+      position: { x: 0, y: 0, ...size },
+    }
+    recordCardAdded(newCard.id, cardType, undefined, {}, dashboard?.id, dashboard?.name)
+    emitCardAdded(cardType, 'smart_suggestion')
+    snapshot(localCards)
+    setLocalCards((prev) => [newCard, ...prev])
+  }, [dashboard, recordCardAdded, snapshot, localCards])
+
+  // Handle nudge CTA actions
+  const handleNudgeAction = useCallback(() => {
+    if (activeNudge === 'customize') {
+      openAddCardModal()
+    } else if (activeNudge === 'pwa-install') {
+      openWidgetExport()
+    }
+    actionNudge()
+  }, [activeNudge, actionNudge, openAddCardModal])
 
   const currentCardTypes = localCards.map(c => {
     if (c.card_type === 'dynamic_card' && c.config?.dynamicCardId) {
@@ -815,9 +902,45 @@ export function Dashboard() {
         collapsedStorageKey="kubestellar-dashboard-stats-collapsed"
       />
 
+      {/* Getting Started banner — quick-action buttons for first-time users */}
+      <GettingStartedBanner
+        onBrowseCards={openAddCardModal}
+        onTryMission={openMissionSidebar}
+        onExploreDashboards={openSidebarCustomizer}
+      />
+
+      {/* Demo-to-local CTA — shown on console.kubestellar.io for demo visitors */}
+      <DemoToLocalCTA />
+
       {/* Getting Started guide when no clusters are connected */}
       {clusters.length === 0 && !isClustersLoading && !getDemoMode() && (
         <WelcomeCard />
+      )}
+
+      {/* Post-connect activation — bridges the 90% drop between agent connect and first mission */}
+      <PostConnectBanner
+        onRunHealthCheck={() => {
+          startMission({
+            title: 'Cluster Health Check',
+            description: 'AI-powered audit of your connected clusters',
+            type: 'custom',
+            initialPrompt: 'Run a comprehensive health check on all my connected clusters. Check for pod issues, resource constraints, and security concerns.',
+          })
+        }}
+        onExploreClusters={() => navigate(ROUTES.CLUSTERS)}
+        onSetupAlerts={() => navigate(ROUTES.ALERTS)}
+      />
+
+      {/* Adopter nudge — shows after 3+ days of usage to encourage ADOPTERS.MD contribution */}
+      <AdopterNudge />
+
+      {/* Contextual nudge banner — replaces traditional tour */}
+      {activeNudge && activeNudge !== 'drag-hint' && (
+        <ContextualNudgeBanner
+          nudgeType={activeNudge}
+          onAction={handleNudgeAction}
+          onDismiss={dismissNudge}
+        />
       )}
 
       {/* AI Recommendations & Actions - both rows wrapped for tour highlight */}
@@ -829,9 +952,6 @@ export function Dashboard() {
         {/* Mission Suggestions - actionable items like scaling, restarts, security issues */}
         <MissionSuggestions />
       </div>
-
-      {/* Mission CTA - encourage users who haven't tried missions yet */}
-      <MissionCTA />
 
       {/* Dashboard drop zone (shows when dragging) */}
       <DashboardDropZone
@@ -851,7 +971,13 @@ export function Dashboard() {
         onDragCancel={handleDragCancel}
       >
         <SortableContext items={localCards.map(c => c.id)} strategy={rectSortingStrategy}>
-          <div data-testid="dashboard-cards-grid" data-tour="dashboard" role="grid" aria-label="Dashboard cards" className="grid grid-cols-1 md:grid-cols-12 gap-4 auto-rows-[minmax(180px,auto)]">
+          <div
+            data-testid="dashboard-cards-grid"
+            data-tour="dashboard"
+            role="grid"
+            aria-label="Dashboard cards"
+            className={`grid grid-cols-1 md:grid-cols-12 gap-4 auto-rows-[minmax(180px,auto)] ${showDragHint ? 'animate-shimmy' : ''}`}
+          >
             {localCards.map((card) => (
               <SortableCard
                 key={card.id}
@@ -868,6 +994,15 @@ export function Dashboard() {
                 registerExpandTrigger={(expand) => { expandTriggersRef.current.set(card.id, expand) }}
               />
             ))}
+
+            {/* Discover Cards Placeholder — intentional empty slot with card carousel */}
+            {!isCustomized && (
+              <DiscoverCardsPlaceholder
+                existingCardTypes={currentCardTypes}
+                onAddCard={handleAddSingleCard}
+                onOpenCatalog={openAddCardModal}
+              />
+            )}
           </div>
         </SortableContext>
 
@@ -887,6 +1022,10 @@ export function Dashboard() {
         onOpenTemplates={openTemplatesModal}
         onReset={reset}
         isCustomized={isCustomized}
+        onUndo={undo}
+        onRedo={redo}
+        canUndo={canUndo}
+        canRedo={canRedo}
         onExport={dashboard?.id ? async () => {
           try {
             const data = await exportDashboard(dashboard.id)
@@ -915,9 +1054,10 @@ export function Dashboard() {
       {/* Add Card Modal */}
       <AddCardModal
         isOpen={isAddCardModalOpen}
-        onClose={closeAddCardModal}
+        onClose={() => { closeAddCardModal(); setAddCardSearch('') }}
         onAddCards={handleAddCards}
         existingCardTypes={currentCardTypes}
+        initialSearch={addCardSearch}
       />
 
       {/* Configure Card Modal */}
@@ -925,7 +1065,7 @@ export function Dashboard() {
         isOpen={isConfigureCardOpen}
         card={selectedCard}
         onClose={() => {
-          setIsConfigureCardOpen(false)
+          closeConfigureCard()
           setSelectedCard(null)
         }}
         onSave={handleCardConfigured}
@@ -942,9 +1082,15 @@ export function Dashboard() {
       {/* Create Dashboard Modal */}
       <CreateDashboardModal
         isOpen={isCreateDashboardOpen}
-        onClose={() => setIsCreateDashboardOpen(false)}
+        onClose={closeCreateDashboard}
         onCreate={handleCreateDashboardConfirm}
         existingNames={dashboards.map(d => d.name)}
+      />
+
+      {/* Widget Export Modal — opened from nudge banner */}
+      <WidgetExportModal
+        isOpen={isWidgetExportOpen}
+        onClose={closeWidgetExport}
       />
 
       {/* Pre-deploy Confirmation Dialog */}
@@ -957,6 +1103,11 @@ export function Dashboard() {
         sourceCluster={pendingDeploy?.sourceCluster ?? ''}
         targetClusters={pendingDeploy?.targetClusters ?? []}
         groupName={pendingDeploy?.groupName}
+      />
+
+      <SidebarCustomizer
+        isOpen={isSidebarCustomizerOpen}
+        onClose={closeSidebarCustomizer}
       />
     </div>
   )

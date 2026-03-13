@@ -4,6 +4,7 @@ import { CardComponentProps } from './cardRegistry'
 import { useCardExpanded } from './CardWrapper'
 import { useReportCardDataState } from './CardDataContext'
 import { useTranslation } from 'react-i18next'
+import { emitGameStarted, emitGameEnded } from '../../lib/analytics'
 
 type Difficulty = 'easy' | 'medium' | 'hard'
 
@@ -139,14 +140,14 @@ const NUMBER_COLORS = [
   'text-red-400',
   'text-purple-400',
   'text-yellow-400',
-  'text-pink-400',
+  'text-purple-400',
   'text-cyan-400',
   'text-white',
 ]
 
 export function PodSweeper(_props: CardComponentProps) {
   const { t: _t } = useTranslation()
-  useReportCardDataState({ hasData: true, isFailed: false, consecutiveFailures: 0 })
+  useReportCardDataState({ hasData: true, isFailed: false, consecutiveFailures: 0, isDemoData: false })
   const { isExpanded } = useCardExpanded()
 
   const [difficulty, setDifficulty] = useState<Difficulty>('easy')
@@ -199,6 +200,7 @@ export function PodSweeper(_props: CardComponentProps) {
       newGrid = initializeGrid(config.rows, config.cols, config.mines, row, col)
       setGameStarted(true)
       setStartTime(Date.now())
+      emitGameStarted('pod_sweeper')
     } else {
       newGrid = cloneGrid(grid)
     }
@@ -216,6 +218,7 @@ export function PodSweeper(_props: CardComponentProps) {
       setGrid(newGrid)
       setGameOver(true)
       setWon(false)
+      emitGameEnded('pod_sweeper', 'loss', elapsed)
       return
     }
 
@@ -226,6 +229,7 @@ export function PodSweeper(_props: CardComponentProps) {
     if (checkWin(newGrid)) {
       setGameOver(true)
       setWon(true)
+      emitGameEnded('pod_sweeper', 'win', elapsed)
     }
   }, [grid, gameStarted, gameOver, config])
 
@@ -313,7 +317,7 @@ export function PodSweeper(_props: CardComponentProps) {
                     bgClass = 'bg-red-900'
                     content = <Bomb className="w-3 h-3 text-red-400" />
                   } else {
-                    bgClass = 'bg-zinc-800'
+                    bgClass = 'bg-gray-800'
                     if (cell.adjacentMines > 0) {
                       content = (
                         <span className={`font-bold ${NUMBER_COLORS[cell.adjacentMines]}`}>

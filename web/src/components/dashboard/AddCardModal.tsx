@@ -1,13 +1,15 @@
-import { useState, useRef, useEffect, ReactNode } from 'react'
+import { useState, useRef, useEffect, useMemo, ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Sparkles, Plus, Loader2, LayoutGrid, Search, Wand2, Activity } from 'lucide-react'
 import { BaseModal } from '../../lib/modals'
+import { useModalState } from '../../lib/modals'
 import { CardFactoryModal } from './CardFactoryModal'
 import { StatBlockFactoryModal } from './StatBlockFactoryModal'
 import { getAllDynamicCards, onRegistryChange } from '../../lib/dynamic-cards'
 import { TechnicalAcronym } from '../shared/TechnicalAcronym'
 import { useToast } from '../ui/Toast'
 import { FOCUS_DELAY_MS, RETRY_DELAY_MS } from '../../lib/constants/network'
+import { emitAddCardModalOpened, emitAddCardModalAbandoned, emitCardCategoryBrowsed, emitRecommendedCardShown } from '../../lib/analytics'
 
 // Helper function to wrap technical abbreviations in text with tooltips
 function wrapAbbreviations(text: string): ReactNode {
@@ -88,6 +90,14 @@ const CARD_CATALOG = {
     { type: 'deployment_missions', title: 'Deployment Missions', description: 'Track deployment missions with per-cluster rollout progress', visualization: 'status' },
     { type: 'resource_marshall', title: 'Resource Marshall', description: 'Explore workload dependency trees — ConfigMaps, Secrets, RBAC, Services, and more', visualization: 'table' },
     { type: 'workload_monitor', title: 'Workload Monitor', description: 'Monitor all resources for a workload with health status, alerts, and AI diagnose/repair', visualization: 'status' },
+    { type: 'statefulset_status', title: 'StatefulSet Status', description: 'StatefulSets across clusters with replica counts and update status', visualization: 'table' },
+    { type: 'daemonset_status', title: 'DaemonSet Status', description: 'DaemonSets across clusters with scheduling and readiness', visualization: 'table' },
+    { type: 'job_status', title: 'Job Status', description: 'Kubernetes Jobs with completion status and duration', visualization: 'table' },
+    { type: 'cronjob_status', title: 'CronJob Status', description: 'CronJobs with schedules, last run, and active jobs', visualization: 'table' },
+    { type: 'replicaset_status', title: 'ReplicaSet Status', description: 'ReplicaSets with desired vs ready replica counts', visualization: 'table' },
+    { type: 'hpa_status', title: 'HPA Status', description: 'Horizontal Pod Autoscalers with scaling targets and metrics', visualization: 'table' },
+    { type: 'configmap_status', title: 'ConfigMap Status', description: 'ConfigMaps across clusters with data key counts', visualization: 'table' },
+    { type: 'secret_status', title: 'Secret Status', description: 'Secrets across clusters with types and key counts', visualization: 'table' },
   ],
   'Compute': [
     { type: 'compute_overview', title: 'Compute Overview', description: 'CPU, memory, and GPU summary with live data', visualization: 'status' },
@@ -99,10 +109,12 @@ const CARD_CATALOG = {
     { type: 'gpu_workloads', title: 'GPU Workloads', description: 'Pods running on GPU nodes or in NVIDIA namespaces', visualization: 'table' },
     { type: 'gpu_usage_trend', title: 'GPU Usage Trend', description: 'GPU used vs available over time with stacked area chart', visualization: 'timeseries' },
     { type: 'gpu_node_health', title: 'GPU Node Health Monitor', description: 'Proactive health monitoring for GPU nodes — checks node readiness, GPU operator pods, stuck pods, and GPU reset events', visualization: 'status' },
+    { type: 'node_status', title: 'Node Status', description: 'Kubernetes node status with conditions, roles, CPU, and memory capacity', visualization: 'table' },
   ],
   'Storage': [
     { type: 'storage_overview', title: 'Storage Overview', description: 'Total storage capacity and PVC summary', visualization: 'status' },
     { type: 'pvc_status', title: 'PVC Status', description: 'Persistent Volume Claims with status breakdown', visualization: 'table' },
+    { type: 'pv_status', title: 'Persistent Volumes', description: 'Persistent Volumes with capacity, access modes, and reclaim policy', visualization: 'table' },
   ],
   'Network': [
     { type: 'network_overview', title: 'Network Overview', description: 'Services breakdown by type and namespace', visualization: 'status' },
@@ -112,7 +124,8 @@ const CARD_CATALOG = {
     { type: 'service_imports', title: 'Service Imports (MCS)', description: 'Multi-cluster service imports receiving cross-cluster traffic', visualization: 'table' },
     { type: 'gateway_status', title: 'Gateway API', description: 'Kubernetes Gateway API resources and HTTPRoutes', visualization: 'status' },
     { type: 'service_topology', title: 'Service Topology', description: 'Animated service mesh visualization with cross-cluster traffic', visualization: 'status' },
-    { type: 'contour_status', title: 'Contour', description: 'Contour ingress proxy status, HTTPProxy resources', visualization: 'status' },
+    { type: 'ingress_status', title: 'Ingress Status', description: 'Ingress resources with hosts, paths, and backend services', visualization: 'table' },
+    { type: 'network_policy_status', title: 'Network Policy Status', description: 'NetworkPolicy resources with pod selectors and rules', visualization: 'table' },
   ],
   'GitOps': [
     { type: 'helm_release_status', title: 'Helm Releases', description: 'Helm release status and versions', visualization: 'status' },
@@ -132,6 +145,7 @@ const CARD_CATALOG = {
     { type: 'operator_status', title: 'OLM Operators', description: 'Operator Lifecycle Manager status', visualization: 'status' },
     { type: 'operator_subscriptions', title: 'Operator Subscriptions', description: 'Subscriptions and pending upgrades', visualization: 'table' },
     { type: 'crd_health', title: 'CRD Health', description: 'Custom resource definitions status', visualization: 'status' },
+    { type: 'operator_subscription_status', title: 'Operator Subscription Status', description: 'OLM subscriptions with install plans and approval status', visualization: 'table' },
   ],
   'Namespaces': [
     { type: 'namespace_monitor', title: 'Namespace Monitor', description: 'Real-time resource monitoring with change detection and animations', visualization: 'table' },
@@ -139,6 +153,10 @@ const CARD_CATALOG = {
     { type: 'namespace_quotas', title: 'Namespace Quotas', description: 'Resource quota usage', visualization: 'gauge' },
     { type: 'namespace_rbac', title: 'Namespace RBAC', description: 'Roles, bindings, service accounts', visualization: 'table' },
     { type: 'namespace_events', title: 'Namespace Events', description: 'Events in namespace', visualization: 'events' },
+    { type: 'namespace_status', title: 'Namespace Status', description: 'Namespaces across clusters with status and age', visualization: 'table' },
+    { type: 'resource_quota_status', title: 'Resource Quotas', description: 'Resource quota definitions with hard limits per namespace', visualization: 'table' },
+    { type: 'limit_range_status', title: 'Limit Ranges', description: 'LimitRange defaults and constraints per namespace', visualization: 'table' },
+    { type: 'service_account_status', title: 'Service Accounts', description: 'Service accounts across clusters and namespaces', visualization: 'table' },
   ],
   'Crossplane': [
     {
@@ -155,6 +173,8 @@ const CARD_CATALOG = {
     { type: 'warning_events', title: 'Warning Events', description: 'Warning-level events that may need attention', visualization: 'events' },
     { type: 'recent_events', title: 'Recent Events', description: 'Most recent events across all clusters', visualization: 'events' },
     { type: 'user_management', title: 'User Management', description: 'Console users and Kubernetes RBAC', visualization: 'table' },
+    { type: 'role_status', title: 'Roles', description: 'Kubernetes Roles across clusters and namespaces', visualization: 'table' },
+    { type: 'role_binding_status', title: 'Role Bindings', description: 'RoleBindings linking subjects to roles', visualization: 'table' },
   ],
   'Live Trends': [
     { type: 'events_timeline', title: 'Events Timeline', description: 'Warning vs normal events over time with live data', visualization: 'timeseries' },
@@ -195,6 +215,10 @@ const CARD_CATALOG = {
     { type: 'kubescape_scan', title: 'Kubescape', description: 'Security posture management and NSA/CISA hardening compliance', visualization: 'status' },
     { type: 'policy_violations', title: 'Policy Violations', description: 'Aggregated policy violations across all enforcement tools', visualization: 'table' },
     { type: 'compliance_score', title: 'Compliance Score', description: 'Overall compliance posture with drill-down by framework (CIS, NSA, PCI-DSS)', visualization: 'gauge' },
+    { type: 'recommended_policies', title: 'Recommended Policies', description: 'AI-powered policy gap analysis with one-click fleet-wide deployment', visualization: 'status' },
+    { type: 'fleet_compliance_heatmap', title: 'Fleet Compliance Heatmap', description: 'Cross-cluster compliance grid showing tool status per cluster', visualization: 'status' },
+    { type: 'compliance_drift', title: 'Compliance Drift', description: 'Detect clusters deviating from fleet compliance baseline', visualization: 'status' },
+    { type: 'cross_cluster_policy_comparison', title: 'Cross-Cluster Policy Comparison', description: 'Compare Kyverno policy deployment across clusters', visualization: 'table' },
   ],
   'Data Compliance': [
     { type: 'vault_secrets', title: 'HashiCorp Vault', description: 'Secrets management, dynamic credentials, and encryption-as-a-service', visualization: 'status' },
@@ -237,6 +261,7 @@ const CARD_CATALOG = {
     { type: 'kube_galaga', title: 'Kube Galaga', description: 'Space shooter with enemy waves and power-ups', visualization: 'status' },
     { type: 'kube_craft', title: 'KubeCraft 2D', description: '2D Minecraft-style block builder with terrain generation', visualization: 'status' },
     { type: 'kube_craft_3d', title: 'KubeCraft 3D', description: 'Full 3D Minecraft-style game with first-person controls', visualization: 'status' },
+    { type: 'kube_bert', title: 'Kube Bert', description: 'Q*bert-style pyramid hopper — change every tile while dodging enemies', visualization: 'status' },
     { type: 'kube_doom', title: 'Kube Doom', description: 'Raycasting FPS - eliminate rogue CrashPods, OOMKillers, and ZombieDeploys', visualization: 'status' },
     { type: 'pod_crosser', title: 'Pod Crosser', description: 'Frogger-style game - guide your pod across traffic and rivers', visualization: 'status' },
   ],
@@ -248,18 +273,26 @@ const CARD_CATALOG = {
   ],
   'Misc': [
     { type: 'buildpacks_status', title: 'Buildpacks Status', description: 'Cloud Native Buildpacks detection, builders, and image build status', visualization: 'status' },
-    { type: 'flatcar_status', title: 'Flatcar Container Linux', description: 'Flatcar node OS versions, update status, and version distribution', visualization: 'status' },
-    { type: 'thanos_status', title: 'Thanos', description: 'Thanos global view metrics, store gateway status, and target health', visualization: 'status' },
     { type: 'weather', title: 'Weather', description: 'Weather conditions with multi-day forecasts and animated backgrounds', visualization: 'status' },
     { type: 'github_activity', title: 'GitHub Activity', description: 'Monitor GitHub repository activity - PRs, issues, releases, and contributors', visualization: 'table' },
     { type: 'kubectl', title: 'Kubectl', description: 'Interactive kubectl terminal with AI assistance, YAML editor, and command history', visualization: 'table' },
     { type: 'stock_market_ticker', title: 'Stock Market Ticker', description: 'Track multiple stocks with real-time sparkline charts and iPhone-style design', visualization: 'timeseries' },
   ],
-  'Runtime': [
-    { type: 'wasmcloud_status', title: 'WasmCloud Status', description: 'wasmCloud host status, actor inventory.', visualization: 'status' },
-    { type: 'crio_status', title: 'CRI-O', description: 'CRI-O container runtime metrics, image pulls, and pod sandbox status', visualization: 'status' },
-  ]
 } as const
+
+/**
+ * Popularity-ordered card types for the "Recommended for you" section.
+ * Based on GA4 data — these are the most useful cards for new users.
+ */
+const RECOMMENDED_CARD_TYPES = [
+  'cluster_health', 'resource_usage', 'pod_issues',
+  'deployment_status', 'event_stream', 'gpu_overview',
+  'cluster_metrics', 'security_issues', 'node_status',
+  'helm_release_status', 'namespace_monitor', 'active_alerts',
+] as const
+
+/** Maximum recommended cards shown in the "Recommended for you" section */
+const MAX_RECOMMENDED_CARDS = 5
 
 // Maps CARD_CATALOG category names to i18n keys in cards:categories.*
 const CATEGORY_LOCALE_KEYS: Record<string, string> = {
@@ -301,6 +334,7 @@ interface AddCardModalProps {
   onClose: () => void
   onAddCards: (cards: CardSuggestion[]) => void
   existingCardTypes?: string[]
+  initialSearch?: string
 }
 
 // Simulated AI response - in production this would call Claude API
@@ -796,7 +830,7 @@ function CardPreview({ card }: { card: HoveredCard }) {
                 <circle cx="18" cy="18" r="15" fill="none" stroke="currentColor" strokeWidth="3" className="text-secondary" />
                 <circle cx="18" cy="18" r="15" fill="none" stroke="currentColor" strokeWidth="3" className="text-purple-400" strokeDasharray="70 30" strokeLinecap="round" />
               </svg>
-              <span className="absolute inset-0 flex items-center justify-center text-[10px] font-medium">70%</span>
+              <span className="absolute inset-0 flex items-center justify-center text-2xs font-medium">70%</span>
             </div>
           </div>
         )
@@ -926,14 +960,14 @@ function CardPreview({ card }: { card: HoveredCard }) {
   )
 }
 
-export function AddCardModal({ isOpen, onClose, onAddCards, existingCardTypes = [] }: AddCardModalProps) {
+export function AddCardModal({ isOpen, onClose, onAddCards, existingCardTypes = [], initialSearch = '' }: AddCardModalProps) {
   const { t } = useTranslation()
   // Cross-namespace lookup for dynamic card keys (template literals can't be statically typed)
   const tCard = t as (key: string, defaultValue?: string) => string
   const { showToast } = useToast()
   const [activeTab, setActiveTab] = useState<'ai' | 'browse'>('browse')
-  const [isCardFactoryOpen, setIsCardFactoryOpen] = useState(false)
-  const [isStatFactoryOpen, setIsStatFactoryOpen] = useState(false)
+  const { isOpen: isCardFactoryOpen, open: openCardFactory, close: closeCardFactory } = useModalState()
+  const { isOpen: isStatFactoryOpen, open: openStatFactory, close: closeStatFactory } = useModalState()
   const [query, setQuery] = useState('')
   const [suggestions, setSuggestions] = useState<CardSuggestion[]>([])
   const [selectedCards, setSelectedCards] = useState<Set<number>>(new Set())
@@ -951,9 +985,50 @@ export function AddCardModal({ isOpen, onClose, onAddCards, existingCardTypes = 
     return unsub
   }, [])
 
+  // Compute recommended cards — popular cards not already on the dashboard
+  const recommendedCards = useMemo(() => {
+    const existing = new Set(existingCardTypes || [])
+    const allCards = Object.values(CARD_CATALOG).flat()
+    return (RECOMMENDED_CARD_TYPES as readonly string[])
+      .filter(type => !existing.has(type))
+      .map(type => allCards.find(c => c.type === type))
+      .filter((c): c is NonNullable<typeof c> => c != null)
+      .slice(0, MAX_RECOMMENDED_CARDS)
+  }, [existingCardTypes])
+
+  // Track whether cards were added during this modal session
+  const didAddCards = useRef(false)
+  // Guard: only fire "abandoned" after the modal has actually been opened
+  const wasOpened = useRef(false)
+
+  // Pre-fill browse search when opening with initialSearch from global search
+  useEffect(() => {
+    if (isOpen && initialSearch) {
+      setBrowseSearch(initialSearch)
+      setActiveTab('browse')
+    }
+  }, [isOpen, initialSearch])
+
+  useEffect(() => {
+    if (isOpen) {
+      didAddCards.current = false
+      wasOpened.current = true
+      emitAddCardModalOpened()
+      if (recommendedCards.length > 0) {
+        emitRecommendedCardShown(recommendedCards.map(c => c.type))
+      }
+    } else if (wasOpened.current) {
+      // Modal just closed — if no cards were added, it was abandoned
+      wasOpened.current = false
+      if (!didAddCards.current) {
+        emitAddCardModalAbandoned()
+      }
+    }
+  }, [isOpen])
+
+  // Auto-focus search input when browse tab is active
   useEffect(() => {
     if (isOpen && activeTab === 'browse') {
-      // Delay slightly to ensure modal is rendered
       const timer = setTimeout(() => searchInputRef.current?.focus(), FOCUS_DELAY_MS)
       return () => clearTimeout(timer)
     }
@@ -1002,6 +1077,7 @@ export function AddCardModal({ isOpen, onClose, onAddCards, existingCardTypes = 
       newExpanded.delete(category)
     } else {
       newExpanded.add(category)
+      emitCardCategoryBrowsed(category)
     }
     setExpandedCategories(newExpanded)
   }
@@ -1043,6 +1119,7 @@ export function AddCardModal({ isOpen, onClose, onAddCards, existingCardTypes = 
 
   const handleAddCards = () => {
     const cardsToAdd = suggestions.filter((_, i) => selectedCards.has(i))
+    didAddCards.current = cardsToAdd.length > 0
     onAddCards(cardsToAdd)
     onClose()
     setQuery('')
@@ -1086,6 +1163,7 @@ export function AddCardModal({ isOpen, onClose, onAddCards, existingCardTypes = 
       }
     }
     try {
+      didAddCards.current = cardsToAdd.length > 0
       onAddCards(cardsToAdd)
     } catch (error) {
       console.error('Error adding cards:', error)
@@ -1138,20 +1216,54 @@ export function AddCardModal({ isOpen, onClose, onAddCards, existingCardTypes = 
                     />
                   </div>
                   <button
-                    onClick={() => setIsCardFactoryOpen(true)}
+                    onClick={() => openCardFactory()}
                     className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 transition-colors text-sm font-medium whitespace-nowrap shrink-0"
                   >
                     <Wand2 className="w-4 h-4" />
                     {t('dashboard.addCard.createCustom')}
                   </button>
                   <button
-                    onClick={() => setIsStatFactoryOpen(true)}
+                    onClick={() => openStatFactory()}
                     className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 transition-colors text-sm font-medium whitespace-nowrap shrink-0"
                   >
                     <Activity className="w-4 h-4" />
                     {t('dashboard.addCard.createStats')}
                   </button>
                 </div>
+
+                {/* Recommended for you — shown at top of browse tab when no search active */}
+                {!browseSearch.trim() && recommendedCards.length > 0 && (
+                  <div className="mb-4 rounded-xl border border-purple-500/20 bg-purple-500/5 p-3">
+                    <h4 className="text-xs font-medium text-purple-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      {t('dashboard.addCard.recommended', 'Recommended for you')}
+                    </h4>
+                    <div className="flex flex-wrap gap-2">
+                      {recommendedCards.map(card => {
+                        const isSelected = selectedBrowseCards.has(card.type)
+                        return (
+                          <button
+                            key={card.type}
+                            onClick={() => toggleBrowseCard(card.type)}
+                            onMouseEnter={() => setHoveredCard({ type: card.type, title: card.title, description: card.description, visualization: card.visualization })}
+                            onMouseLeave={() => setHoveredCard(null)}
+                            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all ${
+                              isSelected
+                                ? 'bg-purple-500/20 border border-purple-500 text-foreground ring-1 ring-purple-500/50'
+                                : 'bg-secondary/50 border border-border/50 hover:border-purple-500/30 hover:bg-secondary text-foreground'
+                            }`}
+                          >
+                            <Activity className="w-3.5 h-3.5 text-purple-400" />
+                            <span className="font-medium text-xs">{card.title}</span>
+                            {!isSelected && <Plus className="w-3 h-3 text-purple-400" />}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Recommended Dashboards section removed — too noisy in the Add Cards modal */}
 
                 {/* Card catalog */}
                 <div className="max-h-[40vh] overflow-y-auto space-y-3">
@@ -1271,7 +1383,7 @@ export function AddCardModal({ isOpen, onClose, onAddCards, existingCardTypes = 
               <div className="w-64 border-l border-border pl-4 flex-shrink-0">
                 {hoveredCard ? (
                   <div>
-                    <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-2">{t('dashboard.addCard.preview')}</div>
+                    <div className="text-2xs text-muted-foreground uppercase tracking-wide mb-2">{t('dashboard.addCard.preview')}</div>
 
                     {/* Card preview - looks like actual card */}
                     <CardPreview card={hoveredCard} />
@@ -1440,7 +1552,7 @@ export function AddCardModal({ isOpen, onClose, onAddCards, existingCardTypes = 
       {/* Card Factory Modal */}
       <CardFactoryModal
         isOpen={isCardFactoryOpen}
-        onClose={() => setIsCardFactoryOpen(false)}
+        onClose={closeCardFactory}
         onCardCreated={(cardId) => {
           // Add the newly created dynamic card to the dashboard
           onAddCards([{
@@ -1456,7 +1568,7 @@ export function AddCardModal({ isOpen, onClose, onAddCards, existingCardTypes = 
       {/* Stat Block Factory Modal */}
       <StatBlockFactoryModal
         isOpen={isStatFactoryOpen}
-        onClose={() => setIsStatFactoryOpen(false)}
+        onClose={closeStatFactory}
       />
     </>
   )

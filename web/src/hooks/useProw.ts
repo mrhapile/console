@@ -1,9 +1,12 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { kubectlProxy } from '../lib/kubectlProxy'
 import { useDemoMode } from './useDemoMode'
+import { KUBECTL_EXTENDED_TIMEOUT_MS } from '../lib/constants/network'
 
 // Refresh interval for automatic polling (2 minutes)
-const REFRESH_INTERVAL_MS = 120000
+const REFRESH_INTERVAL_MS = 120_000
+/** Maximum number of ProwJobs to display */
+const MAX_PROW_JOBS = 100
 
 // ProwJob types
 export interface ProwJob {
@@ -109,7 +112,6 @@ export function useProwJobs(prowCluster = 'prow', namespace = 'prow') {
   const initialLoadDone = useRef(false)
 
   const refetch = useCallback(async (silent = false) => {
-    console.log(`[useProwJobs] refetch called, silent=${silent}, cluster=${prowCluster}`)
     if (!silent) {
       setIsRefreshing(true)
       if (!initialLoadDone.current) {
@@ -118,13 +120,10 @@ export function useProwJobs(prowCluster = 'prow', namespace = 'prow') {
     }
 
     try {
-      console.log('[useProwJobs] About to call kubectlProxy.exec...')
       const response = await kubectlProxy.exec(
         ['get', 'prowjobs', '-n', namespace, '-o', 'json', '--sort-by=.metadata.creationTimestamp'],
-        { context: prowCluster, timeout: 30000 }
+        { context: prowCluster, timeout: KUBECTL_EXTENDED_TIMEOUT_MS }
       )
-      console.log('[useProwJobs] kubectlProxy.exec returned:', { exitCode: response.exitCode, outputLength: response.output?.length })
-
       if (response.exitCode !== 0) {
         throw new Error(response.error || 'Failed to get ProwJobs')
       }
@@ -132,7 +131,7 @@ export function useProwJobs(prowCluster = 'prow', namespace = 'prow') {
       const data = JSON.parse(response.output)
       const prowJobs: ProwJob[] = (data.items || [])
         .reverse() // Most recent first
-        .slice(0, 100) // Limit to 100 jobs
+        .slice(0, MAX_PROW_JOBS)
         .map((pj: ProwJobResource) => {
           const jobName = pj.metadata.labels?.['prow.k8s.io/job'] || pj.spec.job || pj.metadata.name
           const jobType = (pj.metadata.labels?.['prow.k8s.io/type'] || pj.spec.type || 'unknown') as ProwJob['type']
@@ -155,7 +154,6 @@ export function useProwJobs(prowCluster = 'prow', namespace = 'prow') {
           }
         })
 
-      console.log(`[useProwJobs] Loaded ${prowJobs.length} jobs`)
       setJobs(prowJobs)
       setError(null)
       setConsecutiveFailures(0)

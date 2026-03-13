@@ -5,6 +5,7 @@ import { Save, Download, Trash2, Grid, Sun, Moon } from 'lucide-react'
 import { useCardExpanded } from './CardWrapper'
 import { useReportCardDataState } from './CardDataContext'
 import { useTranslation } from 'react-i18next'
+import { emitGameStarted } from '../../lib/analytics'
 
 // Game constants
 const CANVAS_WIDTH = 400
@@ -37,7 +38,7 @@ const BLOCK_TYPES: BlockType[] = ['dirt', 'grass', 'stone', 'wood', 'leaves', 'w
 
 export function KubeCraft() {
   const { t: _t } = useTranslation()
-  useReportCardDataState({ hasData: true, isFailed: false, consecutiveFailures: 0 })
+  useReportCardDataState({ hasData: true, isFailed: false, consecutiveFailures: 0, isDemoData: false })
   const { isExpanded } = useCardExpanded()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [selectedBlock, setSelectedBlock] = useState<BlockType>('grass')
@@ -316,6 +317,7 @@ export function KubeCraft() {
     const newWorld = generateWorld()
     setWorld(newWorld)
     localStorage.removeItem('kubeCraftWorld')
+    emitGameStarted('kube_craft')
   }, [])
 
   // Clear world

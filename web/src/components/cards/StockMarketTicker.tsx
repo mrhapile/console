@@ -567,7 +567,7 @@ export function StockMarketTicker({ config }: StockMarketTickerProps) {
     },
   })
 
-  useCardLoadingState({ isLoading: isLoadingData, hasAnyData: stockData.length > 0 })
+  useCardLoadingState({ isLoading: isLoadingData, hasAnyData: stockData.length > 0, isDemoData: false })
 
   // Update saved stocks when data changes
   useEffect(() => {
@@ -590,6 +590,8 @@ export function StockMarketTicker({ config }: StockMarketTickerProps) {
     itemsPerPage,
     setItemsPerPage,
     sorting,
+    containerRef,
+    containerStyle,
   } = useCardData<StockData, SortByOption>(stockData, {
     filter: {
       searchFields: ['symbol', 'name'] as (keyof StockData)[],
@@ -832,7 +834,7 @@ export function StockMarketTicker({ config }: StockMarketTickerProps) {
           <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto border border-border/30 rounded-lg">
+        <div ref={containerRef} className="flex-1 overflow-y-auto border border-border/30 rounded-lg" style={containerStyle}>
           {stocks.map(stock => (
             <StockRow
               key={stock.symbol}

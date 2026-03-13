@@ -21,19 +21,19 @@ import {
   User,
   LayoutDashboard,
   GripVertical,
+  X,
+  Search,
 } from 'lucide-react'
 import { BaseModal } from '../../lib/modals'
 import {
   useGPUNodes,
   useResourceQuotas,
   useClusters,
-  useNamespaces,
-  createOrUpdateResourceQuota,
-  COMMON_RESOURCE_TYPES,
 } from '../../hooks/useMCP'
-import type { GPUNode } from '../../hooks/useMCP'
+import { ReservationFormModal, type GPUClusterInfo } from './ReservationFormModal'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
-import { useDemoMode } from '../../hooks/useDemoMode'
+import { useDemoMode, hasRealToken } from '../../hooks/useDemoMode'
+import { useBackendHealth } from '../../hooks/useBackendHealth'
 import { useAuth } from '../../lib/auth'
 import { useToast } from '../ui/Toast'
 import { DonutChart } from '../charts/PieChart'
@@ -43,8 +43,12 @@ import { cn } from '../../lib/cn'
 import { TechnicalAcronym } from '../shared/TechnicalAcronym'
 import { getChartColor, getChartColorByName } from '../../lib/chartColors'
 import { useGPUReservations } from '../../hooks/useGPUReservations'
+import { useGPUUtilizations } from '../../hooks/useGPUUtilizations'
+import type { GPUUtilizationSnapshot } from '../../hooks/useGPUUtilizations'
+import { Sparkline } from '../charts/Sparkline'
 import type { GPUReservation, CreateGPUReservationInput, UpdateGPUReservationInput } from '../../hooks/useGPUReservations'
 import { CARD_COMPONENTS, getDefaultCardWidth } from '../cards/cardRegistry'
+import { StatusBadge } from '../ui/StatusBadge'
 import { CardWrapper, CARD_TITLES } from '../cards/CardWrapper'
 import { AddCardModal } from '../dashboard/AddCardModal'
 import { safeGetJSON, safeSetJSON } from '../../lib/utils/localStorage'
@@ -71,6 +75,11 @@ import { CSS } from '@dnd-kit/utilities'
 const UTILIZATION_HIGH_THRESHOLD = 80
 const UTILIZATION_MEDIUM_THRESHOLD = 50
 
+// Sparkline utilization color thresholds
+const SPARKLINE_HIGH_UTIL_PCT = 70    // Green: well-utilized
+const SPARKLINE_LOW_UTIL_PCT = 30     // Red: underutilized
+const SPARKLINE_HEIGHT_PX = 28        // Height of sparkline chart
+
 // Display settings
 const MAX_NAME_DISPLAY_LENGTH = 12 // Maximum characters to display before truncating cluster names
 
@@ -79,13 +88,29 @@ type ViewTab = 'overview' | 'calendar' | 'quotas' | 'inventory' | 'dashboard'
 // GPU resource keys used to identify GPU quotas
 const GPU_KEYS = ['nvidia.com/gpu', 'amd.com/gpu', 'gpu.intel.com/i915']
 
-// GPU cluster info for dropdown
-interface GPUClusterInfo {
-  name: string
-  totalGPUs: number
-  allocatedGPUs: number
-  availableGPUs: number
-  gpuTypes: string[]
+/** Get sparkline color based on average utilization */
+function getUtilizationColor(avgPct: number): string {
+  if (avgPct >= SPARKLINE_HIGH_UTIL_PCT) return '#22c55e' // green-500
+  if (avgPct >= SPARKLINE_LOW_UTIL_PCT) return '#eab308'  // yellow-500
+  return '#ef4444' // red-500
+}
+
+/** Count unique days where GPUs were actively used */
+function countActiveDays(snapshots: GPUUtilizationSnapshot[]): number {
+  const activeDates = new Set<string>()
+  for (const snap of snapshots) {
+    if (snap.active_gpu_count > 0) {
+      activeDates.add(snap.timestamp.split('T')[0])
+    }
+  }
+  return activeDates.size
+}
+
+/** Compute average GPU utilization across all snapshots */
+function computeAvgUtilization(snapshots: GPUUtilizationSnapshot[]): number {
+  if (snapshots.length === 0) return 0
+  const sum = snapshots.reduce((acc, s) => acc + s.gpu_utilization_pct, 0)
+  return Math.round(sum / snapshots.length)
 }
 
 // Dashboard card type persisted to localStorage
@@ -100,6 +125,7 @@ const SortableGpuCard = memo(function SortableGpuCard({
   onWidthChange,
   onRefresh,
   isRefreshing,
+  forceLive,
 }: {
   id: string
   card: GpuDashCard
@@ -108,6 +134,7 @@ const SortableGpuCard = memo(function SortableGpuCard({
   onWidthChange: (w: number) => void
   onRefresh?: () => void
   isRefreshing?: boolean
+  forceLive?: boolean
 }) {
   const {
     attributes,
@@ -137,6 +164,7 @@ const SortableGpuCard = memo(function SortableGpuCard({
           title={CARD_TITLES[card.type] ?? card.type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
           cardType={card.type}
           cardWidth={card.width}
+          forceLive={forceLive}
           onRemove={onRemove}
           onWidthChange={onWidthChange}
           onRefresh={onRefresh}
@@ -171,7 +199,6 @@ const STATUS_COLORS: Record<string, string> = {
 export function GPUReservations() {
   const { t } = useTranslation(['cards', 'common'])
   const { nodes: rawNodes, isLoading: nodesLoading, refetch: refetchGPUNodes } = useGPUNodes()
-  const { resourceQuotas } = useResourceQuotas()
   const { refetch: refetchClusters } = useClusters()
 
   // Refresh indicator for dashboard tab — refreshes GPU nodes + clusters
@@ -182,7 +209,16 @@ export function GPUReservations() {
   const { showIndicator: isRefreshingDashboard, triggerRefresh } = useRefreshIndicator(refetchAll)
   const { selectedClusters, isAllClustersSelected } = useGlobalFilters()
   const { isDemoMode: demoMode } = useDemoMode()
-  const { user } = useAuth()
+  const { isInClusterMode } = useBackendHealth()
+  const { user, isAuthenticated } = useAuth()
+
+  // GPU Reservations bypasses demo mode when running in-cluster with a real OAuth token.
+  // Other pages can remain in demo mode — this exception ensures authenticated users
+  // on cluster deployments always get live GPU reservation data.
+  const gpuLiveMode = isInClusterMode && isAuthenticated && hasRealToken()
+  const effectiveDemoMode = demoMode && !gpuLiveMode
+
+  const { resourceQuotas } = useResourceQuotas(undefined, undefined, gpuLiveMode)
   const { showToast } = useToast()
   const [activeTab, setActiveTab] = useState<ViewTab>('overview')
   const [currentMonth, setCurrentMonth] = useState(new Date())
@@ -192,6 +228,7 @@ export function GPUReservations() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [showOnlyMine, setShowOnlyMine] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
   const [prefillDate, setPrefillDate] = useState<string | null>(null)
   const [showAddCardModal, setShowAddCardModal] = useState(false)
 
@@ -281,7 +318,7 @@ export function GPUReservations() {
     return filtered.filter(q => q.cluster && selectedClusters.some(c => q.cluster!.startsWith(c)))
   }, [resourceQuotas, selectedClusters, isAllClustersSelected])
 
-  // Filtered reservations respecting "My Reservations" toggle and cluster selection
+  // Filtered reservations respecting "My Reservations" toggle, cluster selection, and keyword search
   const filteredReservations = useMemo(() => {
     let filtered = allReservations || []
     // Filter by cluster selection
@@ -293,8 +330,29 @@ export function GPUReservations() {
       const login = user.github_login?.toLowerCase()
       filtered = filtered.filter(r => r.user_name.toLowerCase() === login)
     }
+    // Filter by keyword search
+    if (searchTerm.trim()) {
+      const term = searchTerm.trim().toLowerCase()
+      filtered = filtered.filter(r =>
+        r.title.toLowerCase().includes(term) ||
+        r.namespace.toLowerCase().includes(term) ||
+        r.user_name.toLowerCase().includes(term) ||
+        r.cluster.toLowerCase().includes(term) ||
+        r.status.toLowerCase().includes(term) ||
+        (r.gpu_type && r.gpu_type.toLowerCase().includes(term)) ||
+        (r.description && r.description.toLowerCase().includes(term)) ||
+        (r.notes && r.notes.toLowerCase().includes(term))
+      )
+    }
     return filtered
-  }, [allReservations, showOnlyMine, user, selectedClusters, isAllClustersSelected])
+  }, [allReservations, showOnlyMine, user, selectedClusters, isAllClustersSelected, searchTerm])
+
+  // Fetch utilization data for visible reservations
+  const visibleReservationIds = useMemo(
+    () => (filteredReservations || []).map(r => r.id),
+    [filteredReservations]
+  )
+  const { utilizations } = useGPUUtilizations(visibleReservationIds)
 
   // Clusters with GPU info for the dropdown
   const gpuClusters = useMemo((): GPUClusterInfo[] => {
@@ -567,11 +625,10 @@ export function GPUReservations() {
       <div className="mb-6">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-bold text-foreground">{t('gpuReservations.title')}</h1>
-          {demoMode && (
-            <span className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-full bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
-              <FlaskConical className="w-3 h-3" />
+          {effectiveDemoMode && (
+            <StatusBadge color="yellow" variant="outline" rounded="full" icon={<FlaskConical className="w-3 h-3" />}>
               {t('gpuReservations.demo')}
-            </span>
+            </StatusBadge>
           )}
         </div>
         <div className="text-muted-foreground">{t('gpuReservations.subtitle')}</div>
@@ -613,9 +670,9 @@ export function GPUReservations() {
               <Icon className="w-4 h-4" aria-hidden="true" />
               {tab.label}
               {tab.count !== undefined && tab.count > 0 && (
-                <span className="px-1.5 py-0.5 text-xs rounded-full bg-purple-500/20 text-purple-400">
+                <StatusBadge color="purple" rounded="full">
                   {tab.count}
-                </span>
+                </StatusBadge>
               )}
             </button>
           )
@@ -635,7 +692,11 @@ export function GPUReservations() {
               <input
                 type="checkbox"
                 checked={showOnlyMine}
-                onChange={() => setShowOnlyMine(!showOnlyMine)}
+                onChange={() => {
+                  setShowOnlyMine(!showOnlyMine)
+                  // Switch to Reservations tab so filtered results are visible
+                  if (!showOnlyMine) setActiveTab('quotas')
+                }}
                 className="sr-only"
               />
               {showOnlyMine ? <User className="w-4 h-4" /> : <Filter className="w-4 h-4" />}
@@ -657,7 +718,7 @@ export function GPUReservations() {
         <div className="space-y-6">
           {/* Quick Stats */}
           <div className="grid grid-cols-4 gap-4">
-            <div className={cn('glass p-4 rounded-lg', demoMode && 'border-2 border-yellow-500/50')}>
+            <div className={cn('glass p-4 rounded-lg', effectiveDemoMode && 'border-2 border-yellow-500/50')}>
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-lg bg-purple-500/20">
                   <Zap className="w-5 h-5 text-purple-400" />
@@ -668,7 +729,7 @@ export function GPUReservations() {
                 </div>
               </div>
             </div>
-            <div className={cn('glass p-4 rounded-lg', demoMode && 'border-2 border-yellow-500/50')}>
+            <div className={cn('glass p-4 rounded-lg', effectiveDemoMode && 'border-2 border-yellow-500/50')}>
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-lg bg-green-500/20">
                   <CheckCircle2 className="w-5 h-5 text-green-400" />
@@ -679,7 +740,7 @@ export function GPUReservations() {
                 </div>
               </div>
             </div>
-            <div className={cn('glass p-4 rounded-lg', demoMode && 'border-2 border-yellow-500/50')}>
+            <div className={cn('glass p-4 rounded-lg', effectiveDemoMode && 'border-2 border-yellow-500/50')}>
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-lg bg-blue-500/20">
                   <Settings2 className="w-5 h-5 text-blue-400" />
@@ -690,7 +751,7 @@ export function GPUReservations() {
                 </div>
               </div>
             </div>
-            <div className={cn('glass p-4 rounded-lg', demoMode && 'border-2 border-yellow-500/50')}>
+            <div className={cn('glass p-4 rounded-lg', effectiveDemoMode && 'border-2 border-yellow-500/50')}>
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-lg bg-yellow-500/20">
                   <AlertTriangle className="w-5 h-5 text-yellow-400" />
@@ -706,7 +767,7 @@ export function GPUReservations() {
           {/* Charts Row */}
           <div className="grid grid-cols-3 gap-4">
             {/* Utilization */}
-            <div className={cn('glass p-4 rounded-lg', demoMode && 'border-2 border-yellow-500/50')}>
+            <div className={cn('glass p-4 rounded-lg', effectiveDemoMode && 'border-2 border-yellow-500/50')}>
               <h3 className="text-sm font-medium text-muted-foreground mb-4">{t('gpuReservations.charts.gpuUtilization')}</h3>
               <div className="flex items-center justify-center">
                 <div className="relative w-32 h-32">
@@ -732,7 +793,7 @@ export function GPUReservations() {
             </div>
 
             {/* GPU Types */}
-            <div className={cn('glass p-4 rounded-lg', demoMode && 'border-2 border-yellow-500/50')}>
+            <div className={cn('glass p-4 rounded-lg', effectiveDemoMode && 'border-2 border-yellow-500/50')}>
               <h3 className="text-sm font-medium text-muted-foreground mb-4">{t('common:common.gpuTypes')}</h3>
               {stats.typeChartData.length > 0 ? (
                 <DonutChart data={stats.typeChartData} size={150} thickness={20} showLegend={true} />
@@ -742,7 +803,7 @@ export function GPUReservations() {
             </div>
 
             {/* Usage by Namespace */}
-            <div className={cn('glass p-4 rounded-lg', demoMode && 'border-2 border-yellow-500/50')}>
+            <div className={cn('glass p-4 rounded-lg', effectiveDemoMode && 'border-2 border-yellow-500/50')}>
               <h3 className="text-sm font-medium text-muted-foreground mb-4">{t('gpuReservations.charts.gpuUsageByNamespace')}</h3>
               {stats.usageByNamespace.length > 0 ? (
                 <DonutChart data={stats.usageByNamespace} size={150} thickness={20} showLegend={true} />
@@ -754,45 +815,78 @@ export function GPUReservations() {
 
           {/* Cluster Allocation */}
           {stats.clusterUsage.length > 0 && (
-            <div className={cn('glass p-4 rounded-lg', demoMode && 'border-2 border-yellow-500/50')}>
+            <div className={cn('glass p-4 rounded-lg', effectiveDemoMode && 'border-2 border-yellow-500/50')}>
               <h3 className="text-sm font-medium text-muted-foreground mb-4">{t('gpuReservations.charts.gpuAllocationByCluster')}</h3>
               <BarChart data={stats.clusterUsage} height={200} color={getChartColorByName('primary')} showGrid={true} />
             </div>
           )}
 
           {/* Active Reservations */}
-          <div className={cn('glass p-4 rounded-lg', demoMode && 'border-2 border-yellow-500/50')}>
+          <div className={cn('glass p-4 rounded-lg', effectiveDemoMode && 'border-2 border-yellow-500/50')}>
             <h3 className="text-sm font-medium text-muted-foreground mb-4">
               {showOnlyMine ? t('gpuReservations.overview.myGpuReservations') : t('gpuReservations.overview.activeGpuReservations')}
             </h3>
             <div className="space-y-3">
-              {filteredReservations.slice(0, 5).map(r => (
+              {filteredReservations.slice(0, 5).map(r => {
+                const snapshots = (utilizations || {})[r.id] || []
+                const avgUtil = computeAvgUtilization(snapshots)
+                const activeDays = countActiveDays(snapshots)
+                const sparkColor = snapshots.length > 0 ? getUtilizationColor(avgUtil) : '#9333ea'
+                return (
                 <div key={r.id}
-                  className="flex items-center justify-between p-3 rounded-lg bg-purple-500/10 border border-purple-500/20"
+                  className="p-3 rounded-lg bg-purple-500/10 border border-purple-500/20"
                 >
-                  <div className="flex items-center gap-4">
-                    <div className="p-2 rounded-lg bg-purple-500/20">
-                      <Zap className="w-4 h-4 text-purple-400" />
-                    </div>
-                    <div>
-                      <div className="font-medium text-foreground">{r.title}</div>
-                      <div className="text-sm text-muted-foreground">
-                        {r.namespace} · {r.user_name}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="p-2 rounded-lg bg-purple-500/20">
+                        <Zap className="w-4 h-4 text-purple-400" />
+                      </div>
+                      <div>
+                        <div className="font-medium text-foreground">{r.title}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {r.namespace} · {r.user_name}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <div className="text-right">
-                      <div className="font-medium text-foreground">{r.gpu_count} <TechnicalAcronym term="GPU">{t('common:common.gpus')}</TechnicalAcronym></div>
-                      <div className="text-sm text-muted-foreground">{t('gpuReservations.overview.durationHours', { hours: r.duration_hours })}</div>
+                    <div className="flex items-center gap-4">
+                      <div className="text-right">
+                        <div className="font-medium text-foreground">{r.gpu_count} <TechnicalAcronym term="GPU">{t('common:common.gpus')}</TechnicalAcronym></div>
+                        <div className="text-sm text-muted-foreground">{t('gpuReservations.overview.durationHours', { hours: r.duration_hours })}</div>
+                      </div>
+                      <span className={cn('px-2 py-0.5 text-xs rounded-full border', STATUS_COLORS[r.status] || STATUS_COLORS.pending)}>
+                        {r.status}
+                      </span>
+                      <ClusterBadge cluster={r.cluster} size="sm" />
                     </div>
-                    <span className={cn('px-2 py-0.5 text-xs rounded-full border', STATUS_COLORS[r.status] || STATUS_COLORS.pending)}>
-                      {r.status}
-                    </span>
-                    <ClusterBadge cluster={r.cluster} size="sm" />
                   </div>
+                  {/* GPU Utilization Sparkline */}
+                  {snapshots.length > 0 ? (
+                    <div className="mt-2 pt-2 border-t border-purple-500/10">
+                      <Sparkline
+                        data={snapshots.map(s => s.gpu_utilization_pct)}
+                        color={sparkColor}
+                        height={SPARKLINE_HEIGHT_PX}
+                        fill
+                      />
+                      <div className="flex items-center justify-between text-xs mt-1">
+                        <span style={{ color: sparkColor }}>
+                          {t('gpuReservations.utilization.avgGpu', `Avg {{pct}}% GPU`, { pct: avgUtil })}
+                        </span>
+                        <span className="text-muted-foreground">
+                          {t('gpuReservations.utilization.activeDays', `{{count}} active days`, { count: activeDays })}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-2 pt-2 border-t border-purple-500/10">
+                      <div className="text-xs text-muted-foreground text-center py-1">
+                        {t('gpuReservations.utilization.noData', 'No usage data yet')}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              ))}
+                )
+              })}
               {filteredReservations.length === 0 && (
                 <div className="text-center py-4 text-muted-foreground">
                   {showOnlyMine ? t('gpuReservations.overview.noReservationsUser') : t('gpuReservations.overview.noReservationsYet')}
@@ -806,7 +900,7 @@ export function GPUReservations() {
       {/* Calendar Tab */}
       {activeTab === 'calendar' && (
         <div className="space-y-6">
-          <div className={cn('glass p-4 rounded-lg', demoMode && 'border-2 border-yellow-500/50')}>
+          <div className={cn('glass p-4 rounded-lg', effectiveDemoMode && 'border-2 border-yellow-500/50')}>
             <div className="flex items-center justify-center gap-4 mb-4">
               {(['prev', 'heading', 'next'] as const).map(item => {
                 if (item === 'heading') return (
@@ -861,7 +955,7 @@ export function GPUReservations() {
                             <div className="flex items-center justify-between">
                               <span className={cn('text-sm font-medium', isToday ? 'text-purple-400' : 'text-foreground')}>{day}</span>
                               {gpuCount > 0 && (
-                                <span className="text-[10px] font-medium text-muted-foreground">{t('gpuReservations.calendar.gpusCount', { count: gpuCount })}</span>
+                                <span className="text-2xs font-medium text-muted-foreground">{t('gpuReservations.calendar.gpusCount', { count: gpuCount })}</span>
                               )}
                             </div>
                           </div>
@@ -948,6 +1042,33 @@ export function GPUReservations() {
       {/* Reservations Tab */}
       {activeTab === 'quotas' && (
         <div className="space-y-6">
+          {/* Search input */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder={t('gpuReservations.searchPlaceholder', 'Search reservations...')}
+              className="w-full pl-10 pr-4 py-2 rounded-lg bg-secondary/50 border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+            />
+          </div>
+          {/* Filter banner when showing only user's reservations */}
+          {showOnlyMine && (
+            <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-purple-500/10 border border-purple-500/30">
+              <div className="flex items-center gap-2 text-sm text-purple-300">
+                <Filter className="w-4 h-4" />
+                <span>{t('gpuReservations.filteringByUser', `Showing reservations for {{user}}`, { user: user?.github_login || 'you' })}</span>
+              </div>
+              <button
+                onClick={() => setShowOnlyMine(false)}
+                className="flex items-center gap-1 px-2 py-1 rounded text-xs text-purple-400 hover:text-purple-300 hover:bg-purple-500/20 transition-colors"
+              >
+                <X className="w-3 h-3" />
+                {t('common:common.clearFilter', 'Clear filter')}
+              </button>
+            </div>
+          )}
           {filteredReservations.length === 0 && !reservationsLoading && (
             <div className={'glass p-8 rounded-lg text-center'}>
               <Settings2 className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-50" />
@@ -966,7 +1087,7 @@ export function GPUReservations() {
             {filteredReservations.map(r => {
               const isExpanded = expandedReservationId === r.id
               return (
-                <div key={r.id} className={cn('glass p-4 rounded-lg', demoMode && 'border-2 border-yellow-500/50')}>
+                <div key={r.id} className={cn('glass p-4 rounded-lg', effectiveDemoMode && 'border-2 border-yellow-500/50')}>
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-3">
                       <div className="p-2 rounded-lg bg-purple-500/20">
@@ -1028,6 +1149,39 @@ export function GPUReservations() {
                       <div className="text-sm font-medium text-foreground">{r.duration_hours}h</div>
                     </div>
                   </div>
+
+                  {/* GPU Utilization Sparkline */}
+                  {(() => {
+                    const snaps = (utilizations || {})[r.id] || []
+                    if (snaps.length === 0) return (
+                      <div className="mt-3 pt-3 border-t border-border/50">
+                        <div className="text-xs text-muted-foreground text-center py-1">
+                          {t('gpuReservations.utilization.noData', 'No usage data yet')}
+                        </div>
+                      </div>
+                    )
+                    const avg = computeAvgUtilization(snaps)
+                    const days = countActiveDays(snaps)
+                    const color = getUtilizationColor(avg)
+                    return (
+                      <div className="mt-3 pt-3 border-t border-border/50">
+                        <Sparkline
+                          data={snaps.map(s => s.gpu_utilization_pct)}
+                          color={color}
+                          height={SPARKLINE_HEIGHT_PX}
+                          fill
+                        />
+                        <div className="flex items-center justify-between text-xs mt-1">
+                          <span style={{ color }}>
+                            {t('gpuReservations.utilization.avgGpu', `Avg {{pct}}% GPU`, { pct: avg })}
+                          </span>
+                          <span className="text-muted-foreground">
+                            {t('gpuReservations.utilization.activeDays', `{{count}} active days`, { count: days })}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })()}
 
                   {/* Description and notes */}
                   {(r.description || r.notes) && (
@@ -1107,6 +1261,12 @@ export function GPUReservations() {
       {/* Inventory Tab */}
       {activeTab === 'inventory' && (
         <div className="space-y-6">
+          {nodesLoading && gpuClusters.length === 0 && (
+            <div className="glass p-8 rounded-lg text-center">
+              <Loader2 className="w-12 h-12 mx-auto mb-3 text-muted-foreground animate-spin" />
+              <div className="text-muted-foreground">{t('gpuReservations.inventory.loading', 'Loading GPU inventory...')}</div>
+            </div>
+          )}
           {gpuClusters.length === 0 && !nodesLoading && (
             <div className={'glass p-8 rounded-lg text-center'}>
               <Server className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-50" />
@@ -1116,7 +1276,7 @@ export function GPUReservations() {
           {gpuClusters.map(cluster => {
             const clusterNodes = nodes.filter(n => n.cluster === cluster.name)
             return (
-              <div key={cluster.name} className={cn('glass p-4 rounded-lg', demoMode && 'border-2 border-yellow-500/50')}>
+              <div key={cluster.name} className={cn('glass p-4 rounded-lg', effectiveDemoMode && 'border-2 border-yellow-500/50')}>
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-3">
                     <ClusterBadge cluster={cluster.name} size="sm" />
@@ -1200,6 +1360,7 @@ export function GPUReservations() {
                     id={dashCardIds[index]}
                     card={card}
                     index={index}
+                    forceLive={gpuLiveMode}
                     onRemove={() => handleRemoveDashboardCard(index)}
                     onWidthChange={(newWidth) => handleDashCardWidthChange(index, newWidth)}
                     onRefresh={triggerRefresh}
@@ -1241,6 +1402,7 @@ export function GPUReservations() {
         allNodes={rawNodes}
         user={user}
         prefillDate={prefillDate}
+        forceLive={gpuLiveMode}
         onSave={async (input) => {
           if (editingReservation) {
             await apiUpdateReservation(editingReservation.id, input as UpdateGPUReservationInput)
@@ -1285,445 +1447,4 @@ export function GPUReservations() {
   )
 }
 
-// Reservation Form Modal
-function ReservationFormModal({
-  isOpen,
-  onClose,
-  editingReservation,
-  gpuClusters,
-  allNodes,
-  user,
-  prefillDate,
-  onSave,
-  onActivate,
-  onSaved,
-  onError,
-}: {
-  isOpen: boolean
-  onClose: () => void
-  editingReservation: GPUReservation | null
-  gpuClusters: GPUClusterInfo[]
-  allNodes: GPUNode[]
-  user: { github_login: string; email?: string } | null
-  prefillDate?: string | null
-  onSave: (input: CreateGPUReservationInput | UpdateGPUReservationInput) => Promise<string | void>
-  onActivate: (id: string) => Promise<void>
-  onSaved: () => void
-  onError: (msg: string) => void
-}) {
-  const { t } = useTranslation(['cards', 'common'])
-  const [cluster, setCluster] = useState(editingReservation?.cluster || '')
-  const [namespace, setNamespace] = useState(editingReservation?.namespace || '')
-  const [isNewNamespace, setIsNewNamespace] = useState(false)
-  const [title, setTitle] = useState(editingReservation?.title || '')
-  const [description, setDescription] = useState(editingReservation?.description || '')
-  const [gpuCount, setGpuCount] = useState(editingReservation ? String(editingReservation.gpu_count) : '')
-  const [gpuPreference, setGpuPreference] = useState(editingReservation?.gpu_type || '')
-  const [startDate, setStartDate] = useState(editingReservation?.start_date || prefillDate || new Date().toISOString().split('T')[0])
-  const [durationHours, setDurationHours] = useState(editingReservation ? String(editingReservation.duration_hours) : '')
-  const [notes, setNotes] = useState(editingReservation?.notes || '')
-  const enforceQuota = true
-  const [extraResources, setExtraResources] = useState<Array<{ key: string; value: string }>>([])
-  const [isSaving, setIsSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
-  const handleClose = () => {
-    const hasChanges = title.trim() !== '' || description.trim() !== ''
-    if (hasChanges && !window.confirm(t('common:common.discardUnsavedChanges', 'Discard unsaved changes?'))) {
-      return
-    }
-    onClose()
-  }
-
-  const { namespaces: rawNamespaces } = useNamespaces(cluster || undefined)
-
-  // Filter out system namespaces from the dropdown
-  const FILTERED_NS_PREFIXES = ['openshift-', 'kube-']
-  const FILTERED_NS_EXACT = ['default', 'kube-system', 'kube-public', 'kube-node-lease']
-  const clusterNamespaces = useMemo(() =>
-    rawNamespaces.filter(ns =>
-      !FILTERED_NS_PREFIXES.some(prefix => ns.startsWith(prefix)) &&
-      !FILTERED_NS_EXACT.includes(ns)
-    ),
-  [rawNamespaces])
-
-  // Get the selected cluster's GPU info
-  const selectedClusterInfo = gpuClusters.find(c => c.name === cluster)
-  const maxGPUs = selectedClusterInfo?.availableGPUs ?? 0
-
-  // Auto-detect GPU resource key from cluster's GPU types
-  const gpuResourceKey = useMemo(() => {
-    if (!cluster) return 'limits.nvidia.com/gpu'
-    const clusterNodes = allNodes.filter(n => n.cluster === cluster)
-    const hasAMD = clusterNodes.some(n => n.gpuType.toLowerCase().includes('amd') || n.manufacturer?.toLowerCase().includes('amd'))
-    const hasIntel = clusterNodes.some(n => n.gpuType.toLowerCase().includes('intel') || n.manufacturer?.toLowerCase().includes('intel'))
-    if (hasAMD) return 'limits.amd.com/gpu'
-    if (hasIntel) return 'gpu.intel.com/i915'
-    return 'limits.nvidia.com/gpu'
-  }, [cluster, allNodes])
-
-  // GPU types available on selected cluster with per-type counts
-  const clusterGPUTypes = useMemo(() => {
-    if (!cluster) return [] as Array<{ type: string; total: number; available: number }>
-    const typeMap: Record<string, { total: number; allocated: number }> = {}
-    for (const n of allNodes.filter(n => n.cluster === cluster)) {
-      if (!typeMap[n.gpuType]) typeMap[n.gpuType] = { total: 0, allocated: 0 }
-      typeMap[n.gpuType].total += n.gpuCount
-      typeMap[n.gpuType].allocated += n.gpuAllocated
-    }
-    return Object.entries(typeMap).map(([type, d]) => ({
-      type,
-      total: d.total,
-      available: d.total - d.allocated,
-    }))
-  }, [cluster, allNodes])
-
-  // Auto-generate quota name from title
-  const quotaName = title
-    ? `gpu-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40)}`
-    : ''
-
-  const handleSave = async () => {
-    const count = parseInt(gpuCount)
-    const validationError = !cluster
-      ? t('gpuReservations.form.errors.selectCluster')
-      : !namespace
-      ? t('gpuReservations.form.errors.selectNamespace')
-      : !title
-      ? t('gpuReservations.form.errors.titleRequired')
-      : !count || count < 1
-      ? t('gpuReservations.form.errors.gpuCountMin')
-      : count > maxGPUs && !editingReservation
-      ? t('gpuReservations.form.errors.gpuCountMax', { max: maxGPUs, cluster })
-      : null
-    setError(validationError)
-    if (validationError) return
-
-    setIsSaving(true)
-    try {
-      let reservationId: string | void
-      if (editingReservation) {
-        // Partial update
-        const input: UpdateGPUReservationInput = {
-          title,
-          description,
-          cluster,
-          namespace,
-          gpu_count: count,
-          gpu_type: gpuPreference || clusterGPUTypes[0]?.type || '',
-          start_date: startDate,
-          duration_hours: parseInt(durationHours) || 24,
-          notes,
-          quota_enforced: enforceQuota,
-          quota_name: enforceQuota ? quotaName : '',
-          max_cluster_gpus: selectedClusterInfo?.totalGPUs,
-        }
-        reservationId = await onSave(input)
-      } else {
-        // Create
-        const input: CreateGPUReservationInput = {
-          title,
-          description,
-          cluster,
-          namespace,
-          gpu_count: count,
-          gpu_type: gpuPreference || clusterGPUTypes[0]?.type || '',
-          start_date: startDate,
-          duration_hours: parseInt(durationHours) || 24,
-          notes,
-          quota_enforced: enforceQuota,
-          quota_name: enforceQuota ? quotaName : '',
-          max_cluster_gpus: selectedClusterInfo?.totalGPUs,
-        }
-        reservationId = await onSave(input)
-      }
-
-      // Create K8s ResourceQuota (auto-creates namespace if needed)
-      if (enforceQuota) {
-        try {
-          const hard: Record<string, string> = {
-            [gpuResourceKey]: String(count),
-          }
-          for (const r of extraResources) {
-            if (r.key && r.value) hard[r.key] = r.value
-          }
-          await createOrUpdateResourceQuota({ cluster, namespace, name: quotaName, hard, ensure_namespace: isNewNamespace })
-          // Quota enforced successfully — activate the reservation
-          const id = reservationId || editingReservation?.id
-          if (id) {
-            try { await onActivate(id) } catch { /* non-fatal */ }
-          }
-        } catch {
-          // Non-fatal: reservation is saved, but quota enforcement failed — stays pending
-          onError(t('gpuReservations.form.errors.quotaFailed'))
-        }
-      }
-
-      onSaved()
-      onClose()
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : t('gpuReservations.form.errors.saveFailed')
-      setError(msg)
-      onError(msg)
-    } finally {
-      setIsSaving(false)
-    }
-  }
-
-  return (
-    <BaseModal isOpen={isOpen} onClose={handleClose} size="lg" closeOnBackdrop={false} closeOnEscape={true}>
-      <BaseModal.Header
-        title={editingReservation ? t('gpuReservations.form.editTitle') : t('gpuReservations.form.createTitle')}
-        icon={Calendar}
-        onClose={handleClose}
-        showBack={false}
-      />
-
-      <BaseModal.Content className="max-h-[70vh]">
-        <div className="space-y-4">
-          {error && (
-            <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">{error}</div>
-          )}
-
-          {/* Title */}
-          <div>
-            <label className="block text-sm font-medium text-muted-foreground mb-1">{t('gpuReservations.form.fields.titleLabel')}</label>
-            <input type="text" value={title} onChange={e => setTitle(e.target.value)}
-              placeholder={t('gpuReservations.form.fields.titlePlaceholder')}
-              className="w-full px-3 py-2 rounded-lg bg-secondary border border-border text-foreground placeholder:text-muted-foreground" />
-          </div>
-
-          {/* User info (read-only from auth) */}
-          {user && (
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-muted-foreground mb-1">{t('gpuReservations.form.fields.userName')}</label>
-                <input type="text" value={user.email || user.github_login} readOnly
-                  className="w-full px-3 py-2 rounded-lg bg-secondary/50 border border-border text-muted-foreground" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-muted-foreground mb-1">{t('gpuReservations.form.fields.githubHandle')}</label>
-                <input type="text" value={user.github_login} readOnly
-                  className="w-full px-3 py-2 rounded-lg bg-secondary/50 border border-border text-muted-foreground" />
-              </div>
-            </div>
-          )}
-
-          {/* Description */}
-          <div>
-            <label className="block text-sm font-medium text-muted-foreground mb-1">{t('common:common.description')}</label>
-            <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2}
-              placeholder={t('gpuReservations.form.fields.descriptionPlaceholder')}
-              className="w-full px-3 py-2 rounded-lg bg-secondary border border-border text-foreground placeholder:text-muted-foreground" />
-          </div>
-
-          {/* Cluster (GPU-only, with counts) */}
-          <div>
-            <label className="block text-sm font-medium text-muted-foreground mb-1">{t('gpuReservations.form.fields.clusterLabel')}</label>
-            <select value={cluster} onChange={e => { setCluster(e.target.value); setNamespace(''); setIsNewNamespace(false); setGpuPreference('') }}
-              disabled={!!editingReservation}
-              className="w-full px-3 py-2 rounded-lg bg-secondary border border-border text-foreground disabled:opacity-50">
-              <option value="">{t('gpuReservations.form.fields.selectCluster')}</option>
-              {gpuClusters.map(c => (
-                <option key={c.name} value={c.name}>
-                  {t('gpuReservations.form.fields.clusterOption', { name: c.name, available: c.availableGPUs, total: c.totalGPUs })}
-                </option>
-              ))}
-            </select>
-            {gpuClusters.length === 0 && (
-              <div className="text-xs text-yellow-400 mt-1">{t('gpuReservations.form.fields.noClustersWithGpus')}</div>
-            )}
-          </div>
-
-          {/* Namespace */}
-          <div>
-            <label className="block text-sm font-medium text-muted-foreground mb-1">{t('gpuReservations.form.fields.namespaceLabel')}</label>
-            {!isNewNamespace ? (
-              <select
-                value={namespace}
-                onChange={e => {
-                  if (e.target.value === '__new__' || e.target.value === '__new_bottom__') {
-                    setIsNewNamespace(true)
-                    setNamespace('')
-                    setTimeout(() => document.getElementById('new-ns-input')?.focus(), 0)
-                  } else {
-                    setNamespace(e.target.value)
-                  }
-                }}
-                disabled={!!editingReservation || !cluster}
-                className="w-full px-3 py-2 rounded-lg bg-secondary border border-border text-foreground disabled:opacity-50"
-              >
-                <option value="">{t('gpuReservations.form.fields.selectNamespace')}</option>
-                <option value="__new__">{t('gpuReservations.form.fields.newNamespace')}</option>
-                {clusterNamespaces.map(ns => (
-                  <option key={ns} value={ns}>{ns}</option>
-                ))}
-                <option value="__new_bottom__">{t('gpuReservations.form.fields.newNamespace')}</option>
-              </select>
-            ) : (
-              <div className="flex gap-2">
-                <input
-                  id="new-ns-input"
-                  type="text"
-                  value={namespace}
-                  onChange={e => setNamespace(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-                  placeholder={t('gpuReservations.form.fields.enterNamespace')}
-                  disabled={!!editingReservation}
-                  className="flex-1 px-3 py-2 rounded-lg bg-secondary border border-border text-foreground placeholder:text-muted-foreground disabled:opacity-50"
-                  autoFocus
-                />
-                <button
-                  type="button"
-                  onClick={() => { setIsNewNamespace(false); setNamespace('') }}
-                  className="px-3 py-2 rounded-lg bg-secondary border border-border text-muted-foreground hover:text-foreground"
-                  title={t('gpuReservations.form.fields.backToList')}
-                  aria-label={t('gpuReservations.form.fields.backToList')}
-                >
-                  &times;
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* GPU Count */}
-          <div>
-            <label className="block text-sm font-medium text-muted-foreground mb-1">
-              {t('gpuReservations.form.fields.gpuCountLabel')}
-              {selectedClusterInfo && (
-                <span className="text-xs text-green-400 ml-2">
-                  {t('gpuReservations.form.fields.maxAvailable', { count: selectedClusterInfo.availableGPUs })}
-                </span>
-              )}
-            </label>
-            <input type="number" value={gpuCount} onChange={e => setGpuCount(e.target.value)}
-              min="1" max={maxGPUs || undefined}
-              placeholder={t('gpuReservations.form.fields.gpuCountPlaceholder')}
-              className="w-full px-3 py-2 rounded-lg bg-secondary border border-border text-foreground placeholder:text-muted-foreground" />
-          </div>
-
-          {/* GPU Type Selection (only when cluster has multiple types) */}
-          {clusterGPUTypes.length > 1 && (
-            <div>
-              <label className="block text-sm font-medium text-muted-foreground mb-2">{t('gpuReservations.form.fields.gpuTypeLabel')}</label>
-              <div className="flex flex-wrap gap-2">
-                {clusterGPUTypes.map(gt => (
-                  <button key={gt.type} type="button"
-                    onClick={() => setGpuPreference(gt.type)}
-                    className={cn(
-                      'flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm transition-colors',
-                      gpuPreference === gt.type
-                        ? 'border-purple-500 bg-purple-500/10 text-purple-400'
-                        : 'border-border bg-secondary text-muted-foreground hover:text-foreground'
-                    )}>
-                    <Zap className="w-3.5 h-3.5" />
-                    {gt.type}
-                    <span className="text-xs opacity-70">{t('gpuReservations.form.fields.gpuTypeAvailability', { available: gt.available, total: gt.total })}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-          {/* Single GPU type — show as info */}
-          {clusterGPUTypes.length === 1 && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Zap className="w-3.5 h-3.5 text-purple-400" />
-              {clusterGPUTypes[0].type}
-              <span className="text-xs">{t('gpuReservations.form.fields.singleGpuType', { available: clusterGPUTypes[0].available, total: clusterGPUTypes[0].total })}</span>
-            </div>
-          )}
-
-          {/* Start Date and Duration */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-muted-foreground mb-1">{t('gpuReservations.form.fields.startDateLabel')}</label>
-              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-secondary border border-border text-foreground" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-muted-foreground mb-1">{t('gpuReservations.form.fields.durationLabel')}</label>
-              <input type="number" value={durationHours} onChange={e => setDurationHours(e.target.value)}
-                min="1" placeholder={t('gpuReservations.form.fields.durationPlaceholder')}
-                className="w-full px-3 py-2 rounded-lg bg-secondary border border-border text-foreground placeholder:text-muted-foreground" />
-            </div>
-          </div>
-
-          {/* Additional Resource Limits */}
-          {enforceQuota && (
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-medium text-muted-foreground">{t('gpuReservations.form.fields.additionalLimits')}</label>
-                <button onClick={() => setExtraResources([...extraResources, { key: '', value: '' }])}
-                  className="flex items-center gap-1 px-2 py-1 text-xs rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500/30">
-                  <Plus className="w-3 h-3" /> {t('gpuReservations.form.fields.add')}
-                </button>
-              </div>
-              {extraResources.map((r, i) => (
-                <div key={i} className="flex items-center gap-2 mb-2">
-                  <select value={r.key} onChange={e => {
-                    const updated = [...extraResources]
-                    updated[i].key = e.target.value
-                    setExtraResources(updated)
-                  }} className="flex-1 px-2 py-1.5 rounded bg-secondary border border-border text-sm text-foreground">
-                    <option value="">{t('gpuReservations.form.fields.selectResource')}</option>
-                    {COMMON_RESOURCE_TYPES.filter(rt => !GPU_KEYS.some(gk => rt.key.includes(gk))).map(rt => (
-                      <option key={rt.key} value={rt.key}>{rt.label}</option>
-                    ))}
-                  </select>
-                  <input type="text" value={r.value} onChange={e => {
-                    const updated = [...extraResources]
-                    updated[i].value = e.target.value
-                    setExtraResources(updated)
-                  }} placeholder={t('gpuReservations.form.fields.resourcePlaceholder')} className="w-24 px-2 py-1.5 rounded bg-secondary border border-border text-sm text-foreground" />
-                  <button onClick={() => setExtraResources(extraResources.filter((_, j) => j !== i))}
-                    className="p-1 hover:bg-secondary rounded text-muted-foreground hover:text-red-400"
-                    aria-label="Remove resource limit">
-                    <Trash2 className="w-4 h-4" aria-hidden="true" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Notes */}
-          <div>
-            <label className="block text-sm font-medium text-muted-foreground mb-1">{t('gpuReservations.form.fields.notesLabel')}</label>
-            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
-              placeholder={t('gpuReservations.form.fields.notesPlaceholder')}
-              className="w-full px-3 py-2 rounded-lg bg-secondary border border-border text-foreground placeholder:text-muted-foreground" />
-          </div>
-
-          {/* Preview */}
-          <div className="p-3 rounded-lg bg-purple-500/5 border border-purple-500/20">
-            <div className="text-xs font-medium text-purple-400 mb-1">{t('gpuReservations.form.fields.preview')}</div>
-            <div className="text-xs text-muted-foreground space-y-0.5">
-              <div>{t('gpuReservations.form.fields.previewFields.title')} <span className="text-foreground">{title || '...'}</span></div>
-              <div>{t('gpuReservations.form.fields.previewFields.cluster')} <span className="text-foreground">{cluster || '...'}</span></div>
-              <div>{t('gpuReservations.form.fields.previewFields.namespace')} <span className="text-foreground">{namespace || '...'}</span></div>
-              <div>{t('gpuReservations.form.fields.previewFields.gpus')} <span className="text-foreground">{gpuCount || '...'}</span></div>
-              <div>{t('gpuReservations.form.fields.previewFields.start')} <span className="text-foreground">{startDate || '...'}</span></div>
-              <div>{t('gpuReservations.form.fields.previewFields.duration')} <span className="text-foreground">{durationHours || '24'}h</span></div>
-              {enforceQuota && (
-                <div>{t('gpuReservations.form.fields.previewFields.k8sQuota')} <span className="text-foreground">{quotaName || '...'} ({gpuResourceKey})</span></div>
-              )}
-            </div>
-          </div>
-        </div>
-      </BaseModal.Content>
-
-      <BaseModal.Footer>
-        <div className="flex-1" />
-        <div className="flex gap-3">
-          {([
-            { key: 'cancel', label: t('gpuReservations.form.buttons.cancel'), onClick: handleClose, disabled: false, className: 'px-4 py-2 rounded-lg bg-secondary text-muted-foreground hover:text-foreground transition-colors' },
-            { key: 'save', label: editingReservation ? t('gpuReservations.form.buttons.update') : t('gpuReservations.form.buttons.create'), onClick: handleSave, disabled: isSaving, className: 'flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-500 text-white hover:bg-purple-600 disabled:opacity-50 transition-colors' },
-          ] as const).map(({ key, label, onClick, disabled, className }) => (
-            <button key={key} onClick={onClick} disabled={disabled} className={className}>
-              {key === 'save' && isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
-              {label}
-            </button>
-          ))}
-        </div>
-      </BaseModal.Footer>
-    </BaseModal>
-  )
-}

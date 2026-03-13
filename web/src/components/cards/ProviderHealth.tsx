@@ -9,6 +9,8 @@ import { cn } from '../../lib/cn'
 import { useCardLoadingState } from './CardDataContext'
 import { ROUTES } from '../../config/routes'
 import { useTranslation } from 'react-i18next'
+import { StatusBadge } from '../ui/StatusBadge'
+import { useDemoMode } from '../../hooks/useDemoMode'
 
 const STATUS_COLORS: Record<ProviderHealthInfo['status'], string> = {
   operational: 'bg-green-500',
@@ -17,12 +19,12 @@ const STATUS_COLORS: Record<ProviderHealthInfo['status'], string> = {
   unknown: 'bg-gray-400',
 }
 
-const STATUS_LABEL_KEYS: Record<ProviderHealthInfo['status'], string> = {
+const STATUS_LABEL_KEYS = {
   operational: 'providerHealth.operational',
   degraded: 'providerHealth.degraded',
   down: 'providerHealth.down',
-  unknown: 'common.unknown',
-}
+  unknown: 'common:common.unknown',
+} as const satisfies Record<ProviderHealthInfo['status'], string>
 
 function ProviderRow({ provider, onConfigure }: { provider: ProviderHealthInfo; onConfigure?: () => void }) {
   const { t } = useTranslation(['cards', 'common'])
@@ -48,12 +50,11 @@ function ProviderRow({ provider, onConfigure }: { provider: ProviderHealthInfo; 
       {/* Status dot + label */}
       <div className="flex items-center gap-1.5 shrink-0">
         <div className={cn('w-2 h-2 rounded-full', STATUS_COLORS[provider.status])} />
-        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-        <span className="text-xs text-muted-foreground">{String(t(STATUS_LABEL_KEYS[provider.status] as any))}</span>
+        <span className="text-xs text-muted-foreground">{String(t(STATUS_LABEL_KEYS[provider.status]))}</span>
         {!provider.configured && (
-          <span className="text-[10px] text-yellow-500 bg-yellow-500/10 px-1.5 py-0.5 rounded-full font-medium">
+          <StatusBadge color="yellow" size="xs" rounded="full">
             {t('providerHealth.noKey')}
-          </span>
+          </StatusBadge>
         )}
       </div>
 
@@ -89,11 +90,13 @@ export function ProviderHealth() {
   const { t } = useTranslation(['cards', 'common'])
   const { aiProviders, cloudProviders, isLoading } = useProviderHealth()
   const navigate = useNavigate()
+  const { isDemoMode } = useDemoMode()
 
   // Report loading state to CardWrapper for skeleton/refresh behavior
   useCardLoadingState({
     isLoading,
     hasAnyData: aiProviders.length > 0 || cloudProviders.length > 0,
+    isDemoData: isDemoMode,
   })
 
   const goToSettings = () => navigate(ROUTES.SETTINGS)

@@ -18,7 +18,8 @@ FROM node:20-alpine AS frontend-builder
 
 WORKDIR /app
 
-# Build arg for commit hash
+# Build args for version and commit hash
+ARG APP_VERSION=0.0.0
 ARG COMMIT_HASH=unknown
 
 # Copy package files
@@ -28,7 +29,8 @@ RUN npm ci
 # Copy source
 COPY web/ ./
 
-# Build with commit hash
+# Build with version and commit hash baked into the JS bundle
+ENV VITE_APP_VERSION=${APP_VERSION}
 ENV VITE_COMMIT_HASH=${COMMIT_HASH}
 RUN npm run build
 
@@ -46,14 +48,29 @@ COPY --from=backend-builder /app/console .
 # Copy frontend build
 COPY --from=frontend-builder /app/dist ./web/dist
 
+# Create non-root user for container security
+RUN addgroup -g 1001 -S appgroup && adduser -u 1001 -S appuser -G appgroup
+
 # Create data and settings directories
-RUN mkdir -p /app/data /app/.kc
+RUN mkdir -p /app/data /app/.kc && chown -R appuser:appgroup /app/data /app/.kc
+
+# Copy entrypoint script for watchdog + backend
+COPY entrypoint.sh .
+RUN chmod +x entrypoint.sh
 
 # Environment variables
 ENV PORT=8080
+ENV BACKEND_PORT=8081
 ENV DATABASE_PATH=/app/data/console.db
 ENV HOME=/app
 
 EXPOSE 8080
 
-ENTRYPOINT ["./console"]
+# Health check hits the watchdog, which always responds
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget -qO- http://localhost:8080/watchdog/health || exit 1
+
+# Run as non-root user
+USER appuser
+
+ENTRYPOINT ["./entrypoint.sh"]

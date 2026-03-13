@@ -1,8 +1,9 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Sparkles, Loader2, RefreshCw, ToggleLeft, Box } from 'lucide-react'
 import { cn } from '../../lib/cn'
 import { BaseModal } from '../../lib/modals'
+import { Button } from '../ui/Button'
 import { CARD_CONFIGS } from '../../config/cards'
 import { NAV_AFTER_ANIMATION_MS } from '../../lib/constants/network'
 
@@ -42,6 +43,11 @@ export function ReplaceCardModal({ isOpen, card, onClose, onReplace }: ReplaceCa
     config: Record<string, unknown>
     explanation: string
   } | null>(null)
+  const isMountedRef = useRef(true)
+
+  useEffect(() => {
+    return () => { isMountedRef.current = false }
+  }, [])
 
   // Build card type list from CARD_CONFIGS, excluding current card
   const cardTypes = useMemo(() => {
@@ -90,6 +96,8 @@ export function ReplaceCardModal({ isOpen, card, onClose, onReplace }: ReplaceCa
 
     // Simulate AI processing
     await new Promise((resolve) => setTimeout(resolve, NAV_AFTER_ANIMATION_MS))
+
+    if (!isMountedRef.current) return
 
     // Parse the natural language and suggest a card type
     const prompt = nlPrompt.toLowerCase()
@@ -214,7 +222,7 @@ export function ReplaceCardModal({ isOpen, card, onClose, onReplace }: ReplaceCa
                       <span className="font-medium text-foreground text-sm truncate">{cardType.name}</span>
                     </div>
                     <p className="text-xs text-muted-foreground line-clamp-2">{cardType.description}</p>
-                    <span className="inline-block mt-1 text-[10px] text-muted-foreground bg-secondary/50 px-1.5 py-0.5 rounded">{cardType.category}</span>
+                    <span className="inline-block mt-1 text-2xs text-muted-foreground bg-secondary/50 px-1.5 py-0.5 rounded">{cardType.category}</span>
                   </button>
                 ))}
                 {filteredCards.length === 0 && (
@@ -323,12 +331,13 @@ export function ReplaceCardModal({ isOpen, card, onClose, onReplace }: ReplaceCa
         <BaseModal.Footer showKeyboardHints>
           <div className="flex-1" />
           <div className="flex items-center gap-3">
-            <button
+            <Button
+              variant="ghost"
+              size="lg"
               onClick={onClose}
-              className="px-4 py-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/50"
             >
               {t('actions.cancel')}
-            </button>
+            </Button>
             {activeTab === 'select' && (
               <button
                 onClick={handleSelectReplace}

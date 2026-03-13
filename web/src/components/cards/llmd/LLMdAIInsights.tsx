@@ -7,6 +7,7 @@
 import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Brain, Lightbulb, AlertTriangle, TrendingUp, Gauge, MessageSquare, ChevronRight, Sparkles, Settings2, Zap } from 'lucide-react'
+import { StatusBadge } from '../../../components/ui/StatusBadge'
 import { useOptionalStack } from '../../../contexts/StackContext'
 import { useCardDemoState, useReportCardDataState } from '../CardDataContext'
 import { generateAIInsights, type AIInsight } from '../../../lib/llmd/mockData'
@@ -23,7 +24,7 @@ const INSIGHT_ICONS = {
 
 const SEVERITY_COLORS = {
   info: { bg: 'bg-blue-950', border: 'border-blue-500/30', text: 'text-blue-400', icon: 'text-blue-400' },
-  warning: { bg: 'bg-amber-950', border: 'border-amber-500/30', text: 'text-amber-400', icon: 'text-amber-400' },
+  warning: { bg: 'bg-yellow-950', border: 'border-yellow-500/30', text: 'text-yellow-400', icon: 'text-yellow-400' },
   critical: { bg: 'bg-red-950', border: 'border-red-500/30', text: 'text-red-400', icon: 'text-red-400' },
 }
 
@@ -76,7 +77,7 @@ function InsightCard({ insight, isExpanded, onToggle }: InsightCardProps) {
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="mt-3 pt-3 border-t border-slate-700/50"
+              className="mt-3 pt-3 border-t border-border/50"
             >
               {/* Recommendation */}
               <div className="mb-3">
@@ -88,7 +89,7 @@ function InsightCard({ insight, isExpanded, onToggle }: InsightCardProps) {
               {insight.metrics && (
                 <div className="grid grid-cols-3 gap-2">
                   {Object.entries(insight.metrics).map(([key, value]) => (
-                    <div key={key} className="bg-slate-800 rounded p-2 text-center">
+                    <div key={key} className="bg-secondary rounded p-2 text-center">
                       <div className="text-xs text-muted-foreground truncate">{key}</div>
                       <div className="text-sm font-mono text-white">{value}</div>
                     </div>
@@ -418,15 +419,14 @@ export function LLMdAIInsights() {
 
         <div className="flex items-center gap-2">
           {selectedStack && !shouldUseDemoData && (
-            <span className="px-2 py-0.5 bg-purple-500/20 text-purple-400 text-xs rounded truncate max-w-[100px]" title={selectedStack.name}>
+            <StatusBadge color="purple" className="truncate max-w-[100px]" title={selectedStack.name}>
               {selectedStack.name}
-            </span>
+            </StatusBadge>
           )}
           {showDemoBadge && (
-            <span className="px-2 py-0.5 bg-amber-500/20 text-amber-400 text-xs rounded flex items-center gap-1">
-              <Sparkles size={10} />
+            <StatusBadge color="yellow" icon={<Sparkles size={10} />}>
               {t('common:common.demo')}
-            </span>
+            </StatusBadge>
           )}
         </div>
       </div>
@@ -438,7 +438,7 @@ export function LLMdAIInsights() {
           <span className="text-white font-mono">{insightCounts.total}</span>
         </div>
         {insightCounts.warning > 0 && (
-          <div className="flex items-center gap-1 text-amber-400">
+          <div className="flex items-center gap-1 text-yellow-400">
             <AlertTriangle size={12} />
             <span className="font-mono">{insightCounts.warning}</span>
           </div>
@@ -475,7 +475,7 @@ export function LLMdAIInsights() {
       </div>
 
       {/* Chat interface */}
-      <div className="border-t border-slate-700 pt-3">
+      <div className="border-t border-border pt-3">
         <div className="flex items-center gap-2 mb-2 text-xs text-muted-foreground">
           <MessageSquare size={12} />
           <span>{t('llmdAIInsights.askAboutStack')}</span>
@@ -489,7 +489,7 @@ export function LLMdAIInsights() {
                 key={i}
                 className={`text-xs p-2 rounded ${
                   msg.role === 'user'
-                    ? 'bg-slate-800 text-white ml-8'
+                    ? 'bg-secondary text-white ml-8'
                     : 'bg-purple-500/10 text-purple-200 mr-8'
                 }`}
               >
@@ -505,7 +505,7 @@ export function LLMdAIInsights() {
             value={chatInput}
             onChange={e => setChatInput(e.target.value)}
             placeholder={t('llmdAIInsights.scalePlaceholder')}
-            className="flex-1 bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-white placeholder:text-muted-foreground focus:outline-none focus:border-purple-500"
+            className="flex-1 bg-secondary border border-border rounded px-3 py-2 text-sm text-white placeholder:text-muted-foreground focus:outline-none focus:border-purple-500"
           />
           <button
             type="submit"

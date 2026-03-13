@@ -22,6 +22,7 @@ import {
   type ScalingPoint,
 } from '../../../lib/llmd/benchmarkDataUtils'
 import { useTranslation } from 'react-i18next'
+import { StatusBadge } from '../../ui/StatusBadge'
 
 type MetricTab = 'ttftP50Ms' | 'tpotP50Ms' | 'p99LatencyMs' | 'itlP50Ms' | 'requestLatencyMs'
 
@@ -47,13 +48,13 @@ function CustomTooltip({ active, payload, label, unit }: {
   if (!active || !payload?.length) return null
   const sorted = [...payload].filter(p => p.value !== undefined).sort((a, b) => (a.value ?? 0) - (b.value ?? 0))
   return (
-    <div className="bg-slate-900 backdrop-blur-sm border border-slate-700 rounded-lg p-3 shadow-xl text-xs max-w-xs">
+    <div className="bg-background backdrop-blur-sm border border-border rounded-lg p-3 shadow-xl text-xs max-w-xs">
       <div className="text-white font-medium mb-2">QPS: {label}</div>
       {sorted.map(p => (
         <div key={p.name} className="flex items-center justify-between gap-4 py-0.5">
           <div className="flex items-center gap-1.5 min-w-0">
             <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: p.color }} />
-            <span className="text-slate-300 truncate">{p.name}</span>
+            <span className="text-foreground truncate">{p.name}</span>
           </div>
           <span className="font-mono text-white shrink-0">{p.value.toFixed(1)} {unit}</span>
         </div>
@@ -63,7 +64,7 @@ function CustomTooltip({ active, payload, label, unit }: {
 }
 
 export function LatencyBreakdown() {
-  const { t: _t } = useTranslation()
+  const { t } = useTranslation()
   const { data: liveReports, isDemoFallback, isFailed, consecutiveFailures, isLoading, isRefreshing } = useCachedBenchmarkReports()
   const effectiveReports = useMemo(
     () => isDemoFallback ? generateBenchmarkReports() : (liveReports ?? []),
@@ -132,28 +133,28 @@ export function LatencyBreakdown() {
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <Clock size={14} className="text-amber-400" />
+          <Clock size={14} className="text-yellow-400" />
           <span className="text-sm font-medium text-white">Latency Under Load</span>
           {degradationWarning && (
-            <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-500/15 text-red-400">
+            <StatusBadge color="red" size="xs" rounded="full">
               <AlertTriangle size={10} />
               {degradationWarning.variant}: +{degradationWarning.increase.toFixed(0)}% at peak
-            </span>
+            </StatusBadge>
           )}
         </div>
         <div className="flex items-center gap-2">
           <select
             value={category}
             onChange={e => setCategory(e.target.value)}
-            className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-[11px] text-white"
+            className="bg-secondary border border-border rounded px-2 py-1 text-[11px] text-white"
           >
-            <option value="all">All Categories</option>
+            <option value="all">{t('selectors.allCategories')}</option>
             {filterOpts.categories.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
           <select
             value={islFilter}
             onChange={e => setIslFilter(Number(e.target.value))}
-            className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-[11px] text-white"
+            className="bg-secondary border border-border rounded px-2 py-1 text-[11px] text-white"
           >
             <option value={0}>All ISL</option>
             {filterOpts.islValues.map(v => <option key={v} value={v}>ISL {v}</option>)}
@@ -161,7 +162,7 @@ export function LatencyBreakdown() {
           <select
             value={oslFilter}
             onChange={e => setOslFilter(Number(e.target.value))}
-            className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-[11px] text-white"
+            className="bg-secondary border border-border rounded px-2 py-1 text-[11px] text-white"
           >
             <option value={0}>All OSL</option>
             {filterOpts.oslValues.map(v => <option key={v} value={v}>OSL {v}</option>)}
@@ -170,13 +171,13 @@ export function LatencyBreakdown() {
       </div>
 
       {/* Metric tabs */}
-      <div className="flex gap-1 mb-3 bg-slate-800/80 rounded-lg p-0.5 w-fit">
+      <div className="flex gap-1 mb-3 bg-secondary/80 rounded-lg p-0.5 w-fit">
         {TABS.map(t => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
             className={`px-3 py-1 text-xs rounded-md font-medium transition-colors ${
-              tab === t.key ? 'bg-amber-500/20 text-amber-400' : 'text-slate-400 hover:text-white'
+              tab === t.key ? 'bg-yellow-500/20 text-yellow-400' : 'text-muted-foreground hover:text-white'
             }`}
           >
             {t.label}
@@ -246,18 +247,18 @@ export function LatencyBreakdown() {
             </ComposedChart>
           </ResponsiveContainer>
         ) : (
-          <div className="h-full flex items-center justify-center text-slate-500 text-sm">
+          <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
             No data available for selected filters
           </div>
         )}
       </div>
 
       {/* Legend */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-[10px]">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-2xs">
         {groups.map(g => (
           <div key={g.shortVariant} className="flex items-center gap-1.5">
             <div className="w-3 h-0.5 rounded-full" style={{ backgroundColor: g.color }} />
-            <span className="text-slate-400">{g.shortVariant}</span>
+            <span className="text-muted-foreground">{g.shortVariant}</span>
           </div>
         ))}
       </div>

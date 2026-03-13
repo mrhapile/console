@@ -1,24 +1,10 @@
 import { useEffect, useState, useRef } from 'react'
-import { X, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react'
+import { X, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useTour, TourStep } from '../../hooks/useTour'
-import { useMissions } from '../../hooks/useMissions'
 import { cn } from '../../lib/cn'
 import { useTranslation } from 'react-i18next'
-import { TOOLTIP_POSITION_DELAY_MS, SHORT_DELAY_MS } from '../../lib/constants/network'
-
-// KubeStellar logo with AI sparkle effect
-function KubeStellarAIIcon({ className }: { className?: string }) {
-  return (
-    <div className={cn('relative', className)}>
-      <img
-        src="/kubestellar-logo.svg"
-        alt=""
-        className="w-full h-full"
-      />
-      <Sparkles className="absolute -top-1 -right-1 w-3 h-3 text-purple-400 animate-pulse" />
-    </div>
-  )
-}
+import { TOOLTIP_POSITION_DELAY_MS } from '../../lib/constants/network'
+import { LogoWithStar } from '../ui/LogoWithStar'
 
 interface TooltipPosition {
   top?: number
@@ -242,8 +228,6 @@ export function TourOverlay() {
     prevStep,
     skipTour,
   } = useTour()
-  const { openSidebar: openMissionSidebar, closeSidebar: closeMissionSidebar } = useMissions()
-
   const [tooltipPosition, setTooltipPosition] = useState<TooltipPosition>({})
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null)
   const tooltipRef = useRef<HTMLDivElement>(null)
@@ -296,12 +280,6 @@ export function TourOverlay() {
       }
     }, 100))
 
-    // For steps that may have layout shifts (e.g., after sidebar closes),
-    // reposition after a longer delay to catch the final layout
-    if (currentStep.id === 'add-card' || currentStep.id === 'templates') {
-      timeoutIds.push(setTimeout(positionTooltip, SHORT_DELAY_MS))
-    }
-
     // Reposition on window resize
     const handleResize = () => positionTooltip()
     window.addEventListener('resize', handleResize)
@@ -330,22 +308,6 @@ export function TourOverlay() {
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isActive, nextStep, prevStep, skipTour])
-
-  // Open mission sidebar when on the AI Missions step
-  useEffect(() => {
-    if (!isActive || !currentStep) return
-
-    if (currentStep.id === 'ai-missions') {
-      openMissionSidebar()
-    }
-
-    return () => {
-      // Close sidebar when leaving the AI Missions step
-      if (currentStep.id === 'ai-missions') {
-        closeMissionSidebar()
-      }
-    }
-  }, [isActive, currentStep, openMissionSidebar, closeMissionSidebar])
 
   if (!isActive || !currentStep) return null
 
@@ -392,7 +354,7 @@ export function TourOverlay() {
         <div className="flex items-start justify-between mb-3">
           <div className="flex items-center gap-2">
             <div className="p-1.5 rounded-lg bg-purple-500/20">
-              <KubeStellarAIIcon className="w-5 h-5" />
+              <LogoWithStar className="w-5 h-5" />
             </div>
             <h3 className="font-semibold text-foreground">{currentStep.title}</h3>
           </div>
@@ -480,63 +442,15 @@ export function TourTrigger() {
       )}
       title="Take a tour"
     >
-      <KubeStellarAIIcon className="w-5 h-5" />
+      <LogoWithStar className="w-5 h-5" />
       {!hasCompletedTour && <span>Take the tour</span>}
     </button>
   )
 }
 
-// Delay (in ms) before auto-starting the tour for first-time users.
-// Gives the welcome card time to be visible as a cue before the tour begins.
-const TOUR_AUTO_START_DELAY_MS = 3000
-
-// Auto-start tour prompt for new users
+// Tour prompt removed — auto-starting the tour had a 2.5% completion rate
+// and annoyed 97.5% of users. The tour is now opt-in only via TourTrigger
+// button in the navbar. Feature hints + Getting Started banner handle onboarding.
 export function TourPrompt() {
-  const { hasCompletedTour, isActive, startTour, skipTour } = useTour()
-  const [dismissed, setDismissed] = useState(false)
-
-  // Auto-start the tour after a short delay for users who haven't seen it yet.
-  // If the user clicks "Skip" before the timer fires, hasCompletedTour or
-  // dismissed will flip and the effect cleans up.
-  useEffect(() => {
-    if (hasCompletedTour || isActive || dismissed) return
-    const timer = setTimeout(() => startTour(), TOUR_AUTO_START_DELAY_MS)
-    return () => clearTimeout(timer)
-  }, [hasCompletedTour, isActive, dismissed, startTour])
-
-  // Don't show if tour completed, dismissed, or already active
-  if (hasCompletedTour || dismissed || isActive) return null
-
-  return (
-    <div className="fixed bottom-4 left-4 z-50 w-80 p-4 glass rounded-lg border border-purple-500/30 shadow-xl animate-fade-in-up">
-      <div className="flex items-start gap-3">
-        <div className="p-2 rounded-lg bg-purple-500/20 flex-shrink-0">
-          <KubeStellarAIIcon className="w-6 h-6" />
-        </div>
-        <div className="flex-1">
-          <h3 className="font-semibold text-foreground mb-1">Welcome!</h3>
-          <p className="text-sm text-muted-foreground mb-3">
-            Would you like a quick tour of the console? Learn about AI features, drill-down navigation, and more.
-          </p>
-          <div className="flex gap-2">
-            <button
-              onClick={startTour}
-              className="px-3 py-1.5 rounded-lg bg-purple-500 hover:bg-purple-600 text-foreground text-sm font-medium transition-colors"
-            >
-              Start Tour
-            </button>
-            <button
-              onClick={() => {
-                setDismissed(true)
-                skipTour()
-              }}
-              className="px-3 py-1.5 rounded-lg bg-secondary hover:bg-secondary/80 text-muted-foreground hover:text-foreground text-sm transition-colors"
-            >
-              Skip
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
+  return null
 }

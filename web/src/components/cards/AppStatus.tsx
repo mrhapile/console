@@ -158,6 +158,8 @@ export function AppStatus(_props: AppStatusProps) {
       sortDirection,
       setSortDirection,
     },
+    containerRef,
+    containerStyle,
   } = useCardData<AppData, SortByOption>(preFilteredApps, {
     filter: {
       searchFields: ['name', 'namespace'],
@@ -233,7 +235,7 @@ export function AppStatus(_props: AppStatusProps) {
         className="mb-3"
       />
 
-      <div className="flex-1 space-y-3 overflow-y-auto">
+      <div ref={containerRef} className="flex-1 space-y-3 overflow-y-auto" style={containerStyle}>
       {apps.length === 0 ? (
         <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
           No workloads found

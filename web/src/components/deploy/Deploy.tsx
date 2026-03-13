@@ -390,13 +390,15 @@ export function Deploy() {
     }
   }, [pendingDeploy, publishCardEvent, deployWorkload, shouldPersist, createManagedWorkload, createWorkloadDeployment, showToast])
 
-  // Handle addCard URL param - open modal and clear param
+  // Handle addCard URL param - open modal and clear param.
+  // Guard: KeepAlive keeps hidden dashboards mounted; only process on active route.
   useEffect(() => {
+    if (location.pathname !== '/deploy') return
     if (searchParams.get('addCard') === 'true') {
       setShowAddCard(true)
       setSearchParams({}, { replace: true })
     }
-  }, [searchParams, setSearchParams, setShowAddCard])
+  }, [searchParams, setSearchParams, setShowAddCard, location.pathname])
 
   // Track location for any navigation effects
   useEffect(() => {
@@ -414,8 +416,8 @@ export function Deploy() {
   }, [removeCard])
 
   const handleConfigureCard = useCallback((cardId: string) => {
-    openConfigureCard(cardId, cards)
-  }, [openConfigureCard, cards])
+    openConfigureCard(cardId)
+  }, [openConfigureCard])
 
   const handleSaveCardConfig = useCallback((cardId: string, config: Record<string, unknown>) => {
     configureCard(cardId, config)

@@ -1,11 +1,12 @@
 import { useState } from 'react'
-import { X, Server, ChevronDown, ChevronUp, Wrench, Sparkles } from 'lucide-react'
+import { X, Server, ChevronDown, ChevronUp, Wrench } from 'lucide-react'
 import { NodeInfo } from '../../hooks/useMCP'
 import { ConditionBadges, hasConditionIssues, getConditionIssuesSummary } from '../shared/ConditionBadges'
 import { useMissions } from '../../hooks/useMissions'
 import { cn } from '../../lib/cn'
 import { formatK8sMemory, formatK8sStorage } from '../../lib/formatters'
 import { useTranslation } from 'react-i18next'
+import { StatusBadge } from '../ui/StatusBadge'
 
 interface NodeDetailPanelProps {
   node: NodeInfo
@@ -75,9 +76,7 @@ Please proceed step by step and ask for confirmation before making any changes.`
       {/* Header */}
       <div className="p-3 flex items-center justify-between border-b border-border/30">
         <div className="flex items-center gap-2">
-          <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400 font-medium">
-            <Server className="w-3 h-3" />Node
-          </span>
+          <StatusBadge color="cyan" icon={<Server className="w-3 h-3" />}>Node</StatusBadge>
           <span className="font-medium text-foreground">{node.name}</span>
           {node.roles.map(role => (
             <span key={role} className="text-xs px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">
@@ -147,9 +146,9 @@ Please proceed step by step and ask for confirmation before making any changes.`
             <span className="text-muted-foreground">Taints:</span>
             <div className="flex flex-wrap gap-2 mt-1">
               {node.taints.map((taint, i) => (
-                <span key={i} className="text-xs px-2 py-1 rounded bg-yellow-500/20 text-yellow-400">
+                <StatusBadge key={i} color="yellow" size="md">
                   {taint}
-                </span>
+                </StatusBadge>
               ))}
             </div>
           </div>
@@ -175,9 +174,9 @@ Please proceed step by step and ask for confirmation before making any changes.`
             </div>
             <div className="flex flex-wrap gap-2 mt-1">
               {displayedLabels.map(([k, v]) => (
-                <span key={k} className="text-xs px-2 py-1 rounded bg-blue-500/10 text-blue-400 font-mono">
+                <StatusBadge key={k} color="blue" size="md" className="font-mono">
                   {k}={v}
-                </span>
+                </StatusBadge>
               ))}
             </div>
           </div>
@@ -194,10 +193,7 @@ Please proceed step by step and ask for confirmation before making any changes.`
               : 'bg-secondary/30 text-muted-foreground cursor-not-allowed'
           )}
         >
-          <div className="relative">
-            <Wrench className="w-3.5 h-3.5" />
-            <Sparkles className="absolute -top-0.5 -right-0.5 w-2 h-2 text-purple-400 animate-pulse" />
-          </div>
+          <Wrench className="w-3.5 h-3.5" />
           Repair
         </button>
       </div>

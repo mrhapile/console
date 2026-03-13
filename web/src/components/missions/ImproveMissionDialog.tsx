@@ -103,12 +103,12 @@ export function ImproveMissionDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-2xl">
       <div className="w-full max-w-lg mx-4 bg-background border border-border rounded-xl shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border">
           <div className="flex items-center gap-2">
-            <MessageSquarePlus className="w-5 h-5 text-amber-400" />
+            <MessageSquarePlus className="w-5 h-5 text-yellow-400" />
             <h3 className="text-base font-semibold text-foreground">
               Improve this AI Mission
             </h3>
@@ -224,7 +224,7 @@ export function ImproveMissionDialog({
             </button>
             <button
               onClick={handleSubmit}
-              className="flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium rounded-lg bg-amber-600 hover:bg-amber-500 text-white transition-colors"
+              className="flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium rounded-lg bg-yellow-600 hover:bg-yellow-500 text-white transition-colors"
             >
               <ExternalLink className="w-3.5 h-3.5" />
               Open Issue

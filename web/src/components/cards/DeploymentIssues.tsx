@@ -6,6 +6,7 @@ import type { DeploymentIssue } from '../../hooks/useMCP'
 import { useDrillDownActions } from '../../hooks/useDrillDown'
 import { ClusterBadge } from '../ui/ClusterBadge'
 import { LimitedAccessWarning } from '../ui/LimitedAccessWarning'
+import { StatusBadge } from '../ui/StatusBadge'
 import { useCardLoadingState } from './CardDataContext'
 import { DynamicCardErrorBoundary } from './DynamicCardErrorBoundary'
 import {
@@ -91,6 +92,8 @@ function DeploymentIssuesInternal({ config }: DeploymentIssuesProps) {
       sortDirection,
       setSortDirection,
     },
+    containerRef,
+    containerStyle,
   } = useCardData<DeploymentIssue, SortByOption>(rawIssues, {
     filter: {
       searchFields: ['name', 'namespace', 'cluster', 'reason', 'message'],
@@ -151,9 +154,9 @@ function DeploymentIssuesInternal({ config }: DeploymentIssuesProps) {
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <span className="text-xs px-1.5 py-0.5 rounded bg-red-500/20 text-red-400" title={t('deploymentIssues.issuesTitle', { count: rawIssues.length })}>
+          <StatusBadge color="red" title={t('deploymentIssues.issuesTitle', { count: rawIssues.length })}>
             {t('deploymentIssues.nIssues', { count: rawIssues.length })}
-          </span>
+          </StatusBadge>
         </div>
         <CardControlsRow
           clusterIndicator={{
@@ -191,7 +194,7 @@ function DeploymentIssuesInternal({ config }: DeploymentIssuesProps) {
       />
 
       {/* Issues list */}
-      <div className="flex-1 space-y-3 overflow-y-auto min-h-card-content">
+      <div ref={containerRef} className="flex-1 space-y-3 overflow-y-auto min-h-card-content" style={containerStyle}>
         {issues.map((issue, idx) => {
           const { icon: Icon, tooltip: iconTooltip } = getIssueIcon(issue.reason || '', t)
 
@@ -214,9 +217,9 @@ function DeploymentIssuesInternal({ config }: DeploymentIssuesProps) {
                   </div>
                   <p className="text-sm font-medium text-foreground truncate" title={issue.name}>{issue.name}</p>
                   <div className="flex items-center gap-2 mt-2 flex-wrap">
-                    <span className="text-xs px-2 py-0.5 rounded bg-red-500/20 text-red-400" title={`Issue: ${issue.reason || 'Unknown'}`}>
+                    <StatusBadge color="red" size="md" title={`Issue: ${issue.reason || 'Unknown'}`}>
                       {issue.reason || 'Issue'}
-                    </span>
+                    </StatusBadge>
                     <span className="text-xs text-muted-foreground" title={t('deploymentIssues.replicasReady', { ready: issue.readyReplicas, total: issue.replicas })}>
                       {issue.readyReplicas}/{issue.replicas} {t('common:common.ready')}
                     </span>

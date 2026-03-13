@@ -13,6 +13,7 @@ import {
   Package,
 } from 'lucide-react'
 import { cn } from '../../lib/cn'
+import { StatusBadge } from '../ui/StatusBadge'
 import { ClusterBadge, getClusterInfo } from '../ui/ClusterBadge'
 import { useDeployMissions } from '../../hooks/useDeployMissions'
 import { useClusters } from '../../hooks/useMCP'
@@ -116,7 +117,7 @@ const CLUSTER_STATUS_CONFIG: Record<DeployClusterStatus['status'], {
   barColor: string
   label: string
 }> = {
-  pending: { color: 'text-gray-400', bg: 'bg-gray-500/20', barColor: 'bg-gray-500', label: 'Pending' },
+  pending: { color: 'text-muted-foreground', bg: 'bg-gray-500/20', barColor: 'bg-gray-500', label: 'Pending' },
   applying: { color: 'text-yellow-400', bg: 'bg-yellow-500/20', barColor: 'bg-yellow-500', label: 'Applying' },
   running: { color: 'text-green-400', bg: 'bg-green-500/20', barColor: 'bg-green-500', label: 'Running' },
   failed: { color: 'text-red-400', bg: 'bg-red-500/20', barColor: 'bg-red-500', label: 'Failed' },
@@ -162,6 +163,7 @@ export function Missions(_props: MissionsProps) {
   useCardLoadingState({
     isLoading,
     hasAnyData: missions.length > 0 || deduplicatedClusters.length > 0,
+    isDemoData: demoMode,
   })
 
   // Manual cluster filter — filters by target clusters (not source).
@@ -331,6 +333,8 @@ Please:
       sortDirection,
       setSortDirection,
     },
+    containerRef,
+    containerStyle,
   } = useCardData<DeployMission, SortByOption>(rawMissions, {
     filter: {
       searchFields: ['workload', 'namespace', 'sourceCluster', 'groupName'],
@@ -358,11 +362,11 @@ Please:
       <div className="flex items-center justify-between mb-2 shrink-0">
         <div className="flex items-center gap-2">
           {activeMissions.length > 0 ? (
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 font-medium">
+            <StatusBadge color="blue" size="xs">
               {activeMissions.length} active
-            </span>
+            </StatusBadge>
           ) : (
-            <span className="text-[10px] text-muted-foreground">No active</span>
+            <span className="text-2xs text-muted-foreground">No active</span>
           )}
         </div>
         <CardControlsRow
@@ -393,7 +397,7 @@ Please:
             completedMissions.length > 0 ? (
               <button
                 onClick={() => setHideCompleted(!hideCompleted)}
-                className="text-[10px] text-muted-foreground hover:text-foreground transition-colors whitespace-nowrap"
+                className="text-2xs text-muted-foreground hover:text-foreground transition-colors whitespace-nowrap"
               >
                 {hideCompleted ? `Show done (${completedMissions.length})` : 'Hide done'}
               </button>
@@ -421,7 +425,7 @@ Please:
             : 'Deploy a workload to start a mission'}
         />
       ) : (
-        <div className="flex-1 min-h-0 overflow-auto scroll-enhanced space-y-2">
+        <div ref={containerRef} className="flex-1 min-h-0 overflow-auto scroll-enhanced space-y-2" style={containerStyle}>
           {visibleMissions.map(mission => {
             const isActive = mission.status === 'launching' || mission.status === 'deploying'
             return (
@@ -451,7 +455,7 @@ Please:
 
       {/* Status legend — pinned to bottom */}
       <div className="pt-2 border-t border-border shrink-0">
-        <div className="flex items-center justify-center gap-3 text-[10px] text-muted-foreground/70">
+        <div className="flex items-center justify-center gap-3 text-2xs text-muted-foreground/70">
           <span className="flex items-center gap-1">
             <Rocket className="w-2.5 h-2.5 text-blue-400" /> Launch
           </span>
@@ -544,12 +548,12 @@ function MissionRow({ mission, isExpanded, onToggle, isActive, onDiagnose, onRep
               {mission.workload}
             </span>
             {mission.groupName && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+              <span className="text-2xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
                 {mission.groupName}
               </span>
             )}
           </div>
-          <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+          <div className="flex items-center gap-2 text-2xs text-muted-foreground">
             <span>{mission.namespace}</span>
             <span>&middot;</span>
             <span>{totalClusters} cluster{totalClusters !== 1 ? 's' : ''}</span>
@@ -571,7 +575,7 @@ function MissionRow({ mission, isExpanded, onToggle, isActive, onDiagnose, onRep
             <Terminal className="w-3 h-3" />
           </button>
           <span className={cn(
-            'text-[10px] px-1.5 py-0.5 rounded font-medium',
+            'text-2xs px-1.5 py-0.5 rounded font-medium',
             config.bg, config.color,
           )}>
             {config.label}
@@ -611,7 +615,7 @@ function MissionRow({ mission, isExpanded, onToggle, isActive, onDiagnose, onRep
         <div className="px-3 pb-2 flex items-center gap-2">
           <button
             onClick={() => onDiagnose(mission)}
-            className="flex items-center gap-1.5 text-[10px] px-2 py-1 rounded bg-purple-500/15 text-purple-400 hover:bg-purple-500/25 border border-purple-500/20 transition-colors"
+            className="flex items-center gap-1.5 text-2xs px-2 py-1 rounded bg-purple-500/15 text-purple-400 hover:bg-purple-500/25 border border-purple-500/20 transition-colors"
             title="AI will analyze pod events, logs, and resource limits to diagnose the failure"
           >
             <Stethoscope className="w-3 h-3" />
@@ -619,7 +623,7 @@ function MissionRow({ mission, isExpanded, onToggle, isActive, onDiagnose, onRep
           </button>
           <button
             onClick={() => onRepair(mission)}
-            className="flex items-center gap-1.5 text-[10px] px-2 py-1 rounded bg-blue-500/15 text-blue-400 hover:bg-blue-500/25 border border-blue-500/20 transition-colors"
+            className="flex items-center gap-1.5 text-2xs px-2 py-1 rounded bg-blue-500/15 text-blue-400 hover:bg-blue-500/25 border border-blue-500/20 transition-colors"
             title="AI will attempt to fix the issue (restart pods, adjust resources, etc.)"
           >
             <Wrench className="w-3 h-3" />
@@ -634,7 +638,7 @@ function MissionRow({ mission, isExpanded, onToggle, isActive, onDiagnose, onRep
           <div className="rounded bg-muted/50 border border-border/50 overflow-hidden">
             <div className="px-2 py-1 border-b border-border/50 flex items-center gap-1.5">
               <Terminal className="w-2.5 h-2.5 text-green-600 dark:text-green-400" />
-              <span className="text-[10px] text-green-600 dark:text-green-400 font-medium">Deploy Events</span>
+              <span className="text-2xs text-green-600 dark:text-green-400 font-medium">Deploy Events</span>
             </div>
             <div className="px-2 py-1.5 max-h-32 overflow-y-auto">
               {hasLogs ? (
@@ -652,7 +656,7 @@ function MissionRow({ mission, isExpanded, onToggle, isActive, onDiagnose, onRep
                         {cs.logs!.map((line, i) => (
                           <div
                             key={i}
-                            className="text-[10px] font-mono text-muted-foreground leading-relaxed truncate flex items-start gap-1.5"
+                            className="text-2xs font-mono text-muted-foreground leading-relaxed truncate flex items-start gap-1.5"
                           >
                             <span className={cn('inline-block w-1.5 h-1.5 rounded-full mt-[5px] shrink-0', clusterInfo.colors.bg, clusterInfo.colors.border, 'border')} />
                             {line}
@@ -662,7 +666,7 @@ function MissionRow({ mission, isExpanded, onToggle, isActive, onDiagnose, onRep
                     )
                   })
               ) : (
-                <div className="text-[10px] text-muted-foreground/70 italic py-1">
+                <div className="text-2xs text-muted-foreground/70 italic py-1">
                   {(mission.status === 'orbit' || mission.status === 'abort')
                     ? 'No recent events — K8s events expire after ~1 hour'
                     : 'Waiting for events...'}
@@ -677,7 +681,7 @@ function MissionRow({ mission, isExpanded, onToggle, isActive, onDiagnose, onRep
       {isExpanded && (
         <div className="px-3 pb-2.5 pt-1 border-t border-border/50 space-y-1.5">
           {mission.deployedBy && (
-            <div className="text-[10px] text-muted-foreground/70">
+            <div className="text-2xs text-muted-foreground/70">
               Deployed by: <span className="text-muted-foreground">{mission.deployedBy}</span>
             </div>
           )}
@@ -694,7 +698,7 @@ function MissionRow({ mission, isExpanded, onToggle, isActive, onDiagnose, onRep
           {mission.warnings && mission.warnings.length > 0 && (
             <div className="mt-1.5 space-y-0.5">
               {mission.warnings.map((w, i) => (
-                <div key={i} className="text-[10px] text-yellow-500/80 flex items-start gap-1">
+                <div key={i} className="text-2xs text-yellow-500/80 flex items-start gap-1">
                   <AlertTriangle className="w-2.5 h-2.5 mt-[2px] shrink-0" />
                   <span>{w}</span>
                 </div>
@@ -736,12 +740,12 @@ function ClusterStatusRow({ status }: ClusterStatusRowProps) {
       </div>
 
       {/* Replica count */}
-      <span className={cn('text-[10px] font-mono tabular-nums shrink-0', config.color)}>
+      <span className={cn('text-2xs font-mono tabular-nums shrink-0', config.color)}>
         {status.readyReplicas}/{status.replicas}
       </span>
 
       {/* Status label */}
-      <span className={cn('text-[10px] shrink-0', config.color)}>
+      <span className={cn('text-2xs shrink-0', config.color)}>
         {config.label}
       </span>
     </div>
@@ -755,7 +759,7 @@ function ClusterStatusRow({ status }: ClusterStatusRowProps) {
 const DEP_ACTION_STYLES: Record<string, { color: string; label: string }> = {
   created: { color: 'text-green-400', label: 'Created' },
   updated: { color: 'text-blue-400', label: 'Updated' },
-  skipped: { color: 'text-gray-500', label: 'Skipped' },
+  skipped: { color: 'text-muted-foreground', label: 'Skipped' },
   failed: { color: 'text-red-400', label: 'Failed' },
 }
 
@@ -775,7 +779,7 @@ function DependencySummary({ dependencies }: { dependencies: DeployedDep[] }) {
     <div className="mt-1.5">
       <button
         onClick={() => setShowAll(!showAll)}
-        className="flex items-center gap-1.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+        className="flex items-center gap-1.5 text-2xs text-muted-foreground hover:text-foreground transition-colors"
       >
         <Package className="w-2.5 h-2.5" />
         <span>Deployed {summary}</span>
@@ -788,7 +792,7 @@ function DependencySummary({ dependencies }: { dependencies: DeployedDep[] }) {
           {dependencies.map((dep, i) => {
             const style = DEP_ACTION_STYLES[dep.action] ?? DEP_ACTION_STYLES.created
             return (
-              <div key={i} className="flex items-center gap-2 text-[10px]">
+              <div key={i} className="flex items-center gap-2 text-2xs">
                 <span className="text-muted-foreground/70 w-28 truncate">{dep.kind}</span>
                 <span className="text-muted-foreground flex-1 truncate">{dep.name}</span>
                 <span className={cn('shrink-0', style.color)}>{style.label}</span>

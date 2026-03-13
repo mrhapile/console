@@ -4,6 +4,7 @@ import { useCardLoadingState } from '../CardDataContext'
 import { useCardData, commonComparators, CardSearchInput, CardControlsRow, CardPaginationFooter } from '../../../lib/cards'
 import { Skeleton } from '../../ui/Skeleton'
 import { useTranslation } from 'react-i18next'
+import { useDemoMode } from '../../../hooks/useDemoMode'
 
 interface KagentiAgentFleetProps {
   config?: { cluster?: string }
@@ -12,14 +13,14 @@ interface KagentiAgentFleetProps {
 function StatusBadge({ status }: { status: string }) {
   const classes =
     status === 'Running' || status === 'Ready'
-      ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20'
+      ? 'bg-green-500/15 text-green-400 border-green-500/20'
       : status === 'Pending'
-        ? 'bg-amber-500/15 text-amber-400 border-amber-500/20'
+        ? 'bg-yellow-500/15 text-yellow-400 border-yellow-500/20'
         : status === 'Failed'
           ? 'bg-red-500/15 text-red-400 border-red-500/20'
-          : 'bg-zinc-500/15 text-zinc-400 border-zinc-500/20'
+          : 'bg-gray-500/15 text-muted-foreground border-gray-500/20'
   return (
-    <span className={`inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded border ${classes}`}>
+    <span className={`inline-flex items-center px-1.5 py-0.5 text-2xs font-medium rounded border ${classes}`}>
       {status}
     </span>
   )
@@ -29,6 +30,7 @@ type SortField = 'name' | 'status' | 'framework' | 'cluster'
 
 export function KagentiAgentFleet({ config }: KagentiAgentFleetProps) {
   const { t: _t } = useTranslation()
+  const { isDemoMode } = useDemoMode()
   const {
     data: agents,
     isLoading,
@@ -40,6 +42,7 @@ export function KagentiAgentFleet({ config }: KagentiAgentFleetProps) {
     hasAnyData: agents.length > 0,
     isFailed: consecutiveFailures >= 3,
     consecutiveFailures,
+    isDemoData: isDemoMode,
   })
 
   const {
@@ -51,6 +54,8 @@ export function KagentiAgentFleet({ config }: KagentiAgentFleetProps) {
     goToPage,
     needsPagination,
     itemsPerPage,
+    containerRef,
+    containerStyle,
   } = useCardData(agents, {
     filter: {
       searchFields: ['name', 'namespace', 'framework', 'cluster', 'status'],
@@ -98,19 +103,19 @@ export function KagentiAgentFleet({ config }: KagentiAgentFleetProps) {
         }
       />
 
-      <div className="space-y-1">
+      <div ref={containerRef} className="space-y-1" style={containerStyle}>
         {paginatedItems.map(agent => (
           <div
             key={`${agent.cluster}-${agent.namespace}-${agent.name}`}
             className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-secondary transition-colors group"
           >
-            <Bot className="w-3.5 h-3.5 text-violet-400 shrink-0" />
+            <Bot className="w-3.5 h-3.5 text-purple-400 shrink-0" />
             <div className="min-w-0 flex-1">
               <div className="text-sm font-medium truncate">{agent.name}</div>
               <div className="text-xs text-muted-foreground flex items-center gap-1">
                 <Server className="w-2.5 h-2.5" />
                 {agent.cluster}
-                {agent.framework && <span className="text-violet-400/60">/ {agent.framework}</span>}
+                {agent.framework && <span className="text-purple-400/60">/ {agent.framework}</span>}
               </div>
             </div>
             <div className="text-xs text-muted-foreground">

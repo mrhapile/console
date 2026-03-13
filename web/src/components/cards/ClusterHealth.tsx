@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { CheckCircle, WifiOff, Cpu, Loader2, ExternalLink, AlertTriangle, KeyRound } from 'lucide-react'
-import { useClusters, useGPUNodes, ClusterInfo } from '../../hooks/useMCP'
+import { useClusters, ClusterInfo } from '../../hooks/useMCP'
+import { useCachedGPUNodes } from '../../hooks/useCachedData'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { useMobile } from '../../hooks/useMobile'
 import { Skeleton, SkeletonStats, SkeletonList } from '../ui/Skeleton'
@@ -9,8 +10,10 @@ import { CardSearchInput, CardControlsRow, CardPaginationFooter, CardAIActions }
 import { ClusterDetailModal } from '../clusters/ClusterDetailModal'
 import { CloudProviderIcon, detectCloudProvider, getProviderLabel, CloudProvider } from '../ui/CloudProviderIcon'
 import { isClusterUnreachable, isClusterTokenExpired } from '../clusters/utils'
+import { StatusBadge } from '../ui/StatusBadge'
 import { useCardLoadingState } from './CardDataContext'
 import { useTranslation } from 'react-i18next'
+import { useDemoMode } from '../../hooks/useDemoMode'
 
 // Console URL generation for cloud providers
 function getConsoleUrl(provider: CloudProvider, clusterName: string, apiServerUrl?: string): string | null {
@@ -83,9 +86,10 @@ export function ClusterHealth() {
     error,
     lastRefresh,
   } = useClusters()
-  const { nodes: gpuNodes } = useGPUNodes()
+  const { nodes: gpuNodes, isDemoFallback } = useCachedGPUNodes()
   const { selectedClusters, isAllClustersSelected } = useGlobalFilters()
   const { isMobile } = useMobile()
+  const { isDemoMode } = useDemoMode()
   const [selectedCluster, setSelectedCluster] = useState<string | null>(null)
 
   // Use shared card data hook for filtering, sorting, and pagination
@@ -115,6 +119,8 @@ export function ClusterHealth() {
       sortDirection,
       setSortDirection,
     },
+    containerRef,
+    containerStyle,
   } = useCardData<ClusterInfo, SortByOption>(rawClusters, {
     filter: {
       searchFields: ['name', 'context', 'server'],
@@ -139,6 +145,7 @@ export function ClusterHealth() {
     hasAnyData: hasData,
     isFailed: !!error && !hasData,
     consecutiveFailures: error ? 1 : 0,
+    isDemoData: isDemoMode || isDemoFallback,
   })
   const isLoading = showSkeleton
 
@@ -233,9 +240,9 @@ export function ClusterHealth() {
       {/* Header with controls */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <span className="text-xs px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400" title={t('clusterHealth.totalClustersTitle', { count: rawClusters.length })}>
+          <StatusBadge color="purple" title={t('clusterHealth.totalClustersTitle', { count: rawClusters.length })}>
             {rawClusters.length} {t('clusterHealth.clustersLabel')}
-          </span>
+          </StatusBadge>
         </div>
         <CardControlsRow
           clusterIndicator={
@@ -307,7 +314,7 @@ export function ClusterHealth() {
       </div>
 
       {/* Cluster list */}
-      <div className="flex-1 space-y-2 overflow-y-auto">
+      <div ref={containerRef} className="flex-1 space-y-2 overflow-y-auto" style={containerStyle}>
         {clusters.map((cluster, idx) => {
           const clusterUnreachable = isClusterUnreachable(cluster)
           const clusterTokenExpired = isClusterTokenExpired(cluster)

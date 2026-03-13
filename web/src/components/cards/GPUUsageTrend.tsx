@@ -11,11 +11,13 @@ import {
   ResponsiveContainer,
   Legend,
 } from 'recharts'
-import { useGPUNodes, useClusters } from '../../hooks/useMCP'
+import { useClusters } from '../../hooks/useMCP'
+import { useCachedGPUNodes } from '../../hooks/useCachedData'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { Skeleton, SkeletonStats } from '../ui/Skeleton'
 import { useCardLoadingState } from './CardDataContext'
 import { useTranslation } from 'react-i18next'
+import { useDemoMode } from '../../hooks/useDemoMode'
 import {
   CHART_HEIGHT_STANDARD,
   CHART_GRID_STROKE,
@@ -53,8 +55,10 @@ export function GPUUsageTrend() {
   const {
     nodes: gpuNodes,
     isLoading: hookLoading,
-  } = useGPUNodes()
+    isDemoFallback,
+  } = useCachedGPUNodes()
   const { deduplicatedClusters: clusters } = useClusters()
+  const { isDemoMode } = useDemoMode()
 
   // Only show skeleton when no cached data exists
   const isLoading = hookLoading && gpuNodes.length === 0
@@ -64,6 +68,7 @@ export function GPUUsageTrend() {
   useCardLoadingState({
     isLoading: hookLoading,
     hasAnyData: gpuNodes.length > 0,
+    isDemoData: isDemoMode || isDemoFallback,
   })
   const [timeRange, setTimeRange] = useState<TimeRange>('1h')
   const [localClusterFilter, setLocalClusterFilter] = useState<string[]>([])

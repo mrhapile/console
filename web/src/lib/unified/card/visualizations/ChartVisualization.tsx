@@ -134,7 +134,7 @@ export function ChartVisualization({ content, data }: ChartVisualizationProps) {
 
     default:
       return (
-        <div className="flex items-center justify-center h-full text-gray-500 text-sm">
+        <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
           Unknown chart type: {chartType}
         </div>
       )
@@ -212,7 +212,7 @@ function LineChartRenderer({
           {showLegend && (
             <Legend
               wrapperStyle={{ paddingTop: 10 }}
-              formatter={(value) => <span className="text-gray-300 text-xs">{value}</span>}
+              formatter={(value) => <span className="text-foreground text-xs">{value}</span>}
             />
           )}
           {series.map((s, i) => (
@@ -282,7 +282,7 @@ function AreaChartRenderer({
           {showLegend && (
             <Legend
               wrapperStyle={{ paddingTop: 10 }}
-              formatter={(value) => <span className="text-gray-300 text-xs">{value}</span>}
+              formatter={(value) => <span className="text-foreground text-xs">{value}</span>}
             />
           )}
           {series.map((s, i) => {
@@ -354,7 +354,7 @@ function BarChartRenderer({
           {showLegend && (
             <Legend
               wrapperStyle={{ paddingTop: 10 }}
-              formatter={(value) => <span className="text-gray-300 text-xs">{value}</span>}
+              formatter={(value) => <span className="text-foreground text-xs">{value}</span>}
             />
           )}
           {series.map((s, i) => (
@@ -429,7 +429,7 @@ function DonutChartRenderer({
           />
           {showLegend && (
             <Legend
-              formatter={(value) => <span className="text-gray-300 text-xs">{value}</span>}
+              formatter={(value) => <span className="text-foreground text-xs">{value}</span>}
             />
           )}
         </PieChart>
@@ -484,7 +484,7 @@ function GaugeChartRenderer({
       </ResponsiveContainer>
       {/* Center label */}
       <div className="absolute inset-0 flex items-center justify-center pt-4">
-        <span className="text-2xl font-bold text-gray-200">{Math.round(value)}%</span>
+        <span className="text-2xl font-bold text-foreground">{Math.round(value)}%</span>
       </div>
     </div>
   )
@@ -499,7 +499,7 @@ function SparklineRenderer({
   height,
 }: Omit<ChartRendererProps, 'xAxis' | 'yAxis' | 'showLegend'>) {
   if (series.length === 0) {
-    return <div className="text-gray-500 text-sm">No series configured</div>
+    return <div className="text-muted-foreground text-sm">No series configured</div>
   }
 
   const primarySeries = series[0]

@@ -5,6 +5,7 @@ import { useCardLoadingState } from '../CardDataContext'
 import { useCardData, commonComparators, CardSearchInput, CardControlsRow, CardPaginationFooter } from '../../../lib/cards'
 import { Skeleton } from '../../ui/Skeleton'
 import { useTranslation } from 'react-i18next'
+import { useDemoMode } from '../../../hooks/useDemoMode'
 
 interface KagentiBuildPipelineProps {
   config?: { cluster?: string }
@@ -13,15 +14,15 @@ interface KagentiBuildPipelineProps {
 function BuildStatusIcon({ status }: { status: string }) {
   switch (status) {
     case 'Succeeded':
-      return <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+      return <CheckCircle className="w-3.5 h-3.5 text-green-400" />
     case 'Failed':
       return <XCircle className="w-3.5 h-3.5 text-red-400" />
     case 'Building':
       return <Hammer className="w-3.5 h-3.5 text-blue-400 animate-pulse" />
     case 'Pending':
-      return <Clock className="w-3.5 h-3.5 text-amber-400" />
+      return <Clock className="w-3.5 h-3.5 text-yellow-400" />
     default:
-      return <Clock className="w-3.5 h-3.5 text-zinc-400" />
+      return <Clock className="w-3.5 h-3.5 text-muted-foreground" />
   }
 }
 
@@ -38,6 +39,7 @@ type SortField = 'name' | 'status' | 'cluster'
 
 export function KagentiBuildPipeline({ config }: KagentiBuildPipelineProps) {
   const { t: _t } = useTranslation()
+  const { isDemoMode } = useDemoMode()
   const {
     data: builds,
     isLoading,
@@ -49,6 +51,7 @@ export function KagentiBuildPipeline({ config }: KagentiBuildPipelineProps) {
     hasAnyData: builds.length > 0,
     isFailed: consecutiveFailures >= 3,
     consecutiveFailures,
+    isDemoData: isDemoMode,
   })
 
   const stats = useMemo(() => ({
@@ -66,6 +69,8 @@ export function KagentiBuildPipeline({ config }: KagentiBuildPipelineProps) {
     goToPage,
     needsPagination,
     itemsPerPage,
+    containerRef,
+    containerStyle,
   } = useCardData(builds, {
     filter: {
       searchFields: ['name', 'namespace', 'source', 'pipeline', 'status', 'cluster'],
@@ -116,7 +121,7 @@ export function KagentiBuildPipeline({ config }: KagentiBuildPipelineProps) {
             <Hammer className="w-3 h-3 animate-pulse" /> {stats.active} active
           </div>
         )}
-        <div className="flex items-center gap-1 text-emerald-400">
+        <div className="flex items-center gap-1 text-green-400">
           <CheckCircle className="w-3 h-3" /> {stats.succeeded}
         </div>
         {stats.failed > 0 && (
@@ -134,7 +139,7 @@ export function KagentiBuildPipeline({ config }: KagentiBuildPipelineProps) {
         }
       />
 
-      <div className="space-y-1">
+      <div ref={containerRef} className="space-y-1" style={containerStyle}>
         {paginatedItems.map(build => (
           <div
             key={`${build.cluster}-${build.namespace}-${build.name}`}

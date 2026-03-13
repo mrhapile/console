@@ -3,6 +3,7 @@ import {
   AlertCircle, Play, Server
 } from 'lucide-react'
 import { Skeleton } from '../../ui/Skeleton'
+import { StatusBadge } from '../../ui/StatusBadge'
 import { CardClusterFilter, CardSearchInput } from '../../../lib/cards'
 import { Pagination } from '../../ui/Pagination'
 import { CardControls } from '../../ui/CardControls'
@@ -33,11 +34,15 @@ export function MLJobs({ config: _config }: MLJobsProps) {
   useCardLoadingState({
     isLoading,
     hasAnyData: jobs.length > 0,
+    isDemoData: true,
   })
 
   const statusOrder: Record<string, number> = { running: 0, queued: 1, completed: 2, failed: 3 }
 
-  const { items, totalItems, currentPage, totalPages, goToPage, needsPagination, itemsPerPage, setItemsPerPage, filters, sorting } = useCardData<MLJob, SortByOption>(jobs, {
+  const { items, totalItems, currentPage, totalPages, goToPage, needsPagination, itemsPerPage, setItemsPerPage, filters, sorting,
+    containerRef,
+    containerStyle,
+  } = useCardData<MLJob, SortByOption>(jobs, {
     filter: {
       searchFields: ['name', 'framework', 'status', 'cluster'] as (keyof MLJob)[],
       clusterField: 'cluster' as keyof MLJob,
@@ -59,15 +64,15 @@ export function MLJobs({ config: _config }: MLJobsProps) {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'running':
-        return <span className="text-xs px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 flex items-center gap-1"><Play className="w-2.5 h-2.5" /> Running</span>
+        return <StatusBadge color="green" icon={<Play className="w-2.5 h-2.5" />}>Running</StatusBadge>
       case 'queued':
-        return <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400 flex items-center gap-1"><Clock className="w-2.5 h-2.5" /> Queued</span>
+        return <StatusBadge color="yellow" icon={<Clock className="w-2.5 h-2.5" />}>Queued</StatusBadge>
       case 'completed':
-        return <span className="text-xs px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 flex items-center gap-1"><CheckCircle className="w-2.5 h-2.5" /> Done</span>
+        return <StatusBadge color="blue" icon={<CheckCircle className="w-2.5 h-2.5" />}>Done</StatusBadge>
       case 'failed':
-        return <span className="text-xs px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 flex items-center gap-1"><XCircle className="w-2.5 h-2.5" /> Failed</span>
+        return <StatusBadge color="red" icon={<XCircle className="w-2.5 h-2.5" />}>Failed</StatusBadge>
       default:
-        return <span className="text-xs px-1.5 py-0.5 rounded bg-gray-500/20 text-gray-400">{status}</span>
+        return <StatusBadge color="gray">{status}</StatusBadge>
     }
   }
 
@@ -92,9 +97,9 @@ export function MLJobs({ config: _config }: MLJobsProps) {
               {filters.localClusterFilter.length}/{filters.availableClusters.length}
             </span>
           )}
-          <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400">
+          <StatusBadge color="yellow">
             {jobs.filter(j => j.status === 'running').length} running
-          </span>
+          </StatusBadge>
         </div>
         <div className="flex items-center gap-2">
           <CardClusterFilter
@@ -134,7 +139,7 @@ export function MLJobs({ config: _config }: MLJobsProps) {
           <p className="text-yellow-400 font-medium">ML Job Detection</p>
           <p className="text-muted-foreground">
             Auto-detects Kubeflow, Ray, and custom ML training jobs.{' '}
-            <a href="https://www.kubeflow.org/docs/started/installing-kubeflow/" target="_blank" rel="noopener noreferrer" className="text-yellow-400 hover:underline">
+            <a href="https://www.kubeflow.org/docs/started/installing-kubeflow/" target="_blank" rel="noopener noreferrer" className="text-yellow-400 hover:underline inline-block py-2">
               Kubeflow docs <ExternalLink className="w-3 h-3 inline" />
             </a>
           </p>
@@ -142,7 +147,7 @@ export function MLJobs({ config: _config }: MLJobsProps) {
       </div>
 
       {/* Jobs list */}
-      <div className="flex-1 overflow-y-auto space-y-2">
+      <div ref={containerRef} className="flex-1 overflow-y-auto space-y-2" style={containerStyle}>
         {items.map((job, idx) => (
           <div key={idx} className="p-3 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors">
             <div className="flex items-center justify-between mb-2">

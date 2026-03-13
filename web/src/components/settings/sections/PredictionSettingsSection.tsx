@@ -4,7 +4,9 @@ import { TrendingUp, Save, RotateCcw, Sparkles, Clock, Percent, Layers, Info } f
 import type { PredictionSettings } from '../../../types/predictions'
 import { usePredictionFeedback } from '../../../hooks/usePredictionFeedback'
 import { CollapsibleSection } from '../../ui/CollapsibleSection'
+import { Button } from '../../ui/Button'
 import { UI_FEEDBACK_TIMEOUT_MS } from '../../../lib/constants/network'
+import { emitAIPredictionsToggled, emitConfidenceThresholdChanged, emitConsensusModeToggled } from '../../../lib/analytics'
 
 interface PredictionSettingsSectionProps {
   settings: PredictionSettings
@@ -34,12 +36,16 @@ export function PredictionSettingsSection({
   }
 
   const handleToggleAI = () => {
-    updateSettings({ aiEnabled: !settings.aiEnabled })
+    const newValue = !settings.aiEnabled
+    updateSettings({ aiEnabled: newValue })
+    emitAIPredictionsToggled(newValue)
     handleSave()
   }
 
   const handleToggleConsensus = () => {
-    updateSettings({ consensusMode: !settings.consensusMode })
+    const newValue = !settings.consensusMode
+    updateSettings({ consensusMode: newValue })
+    emitConsensusModeToggled(newValue)
     handleSave()
   }
 
@@ -48,7 +54,9 @@ export function PredictionSettingsSection({
   }
 
   const handleConfidenceChange = (value: number) => {
-    updateSettings({ minConfidence: Math.min(Math.max(value, 50), 90) })
+    const clamped = Math.min(Math.max(value, 50), 90)
+    updateSettings({ minConfidence: clamped })
+    emitConfidenceThresholdChanged(clamped)
   }
 
   const handleThresholdChange = (key: keyof PredictionSettings['thresholds'], value: number) => {
@@ -72,14 +80,15 @@ export function PredictionSettingsSection({
             <p className="text-sm text-muted-foreground">{t('settings.predictions.subtitle')}</p>
           </div>
         </div>
-        <button
+        <Button
+          variant="ghost"
+          size="md"
+          icon={<RotateCcw className="w-4 h-4" />}
           onClick={resetSettings}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-secondary/50"
           title="Reset to defaults"
         >
-          <RotateCcw className="w-4 h-4" />
           {t('settings.predictions.reset')}
-        </button>
+        </Button>
       </div>
 
       <div className="space-y-6">

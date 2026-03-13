@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react'
 import { GitPullRequest, GitBranch, Star, Users, Package, TrendingUp, AlertCircle, Clock, CheckCircle, XCircle, GitMerge, Settings, X, Plus, Check } from 'lucide-react'
 import { STORAGE_KEY_GITHUB_TOKEN, FETCH_EXTERNAL_TIMEOUT_MS } from '../../lib/constants'
+import { Button } from '../ui/Button'
 import { Skeleton } from '../ui/Skeleton'
 import { useDemoMode } from '../../hooks/useDemoMode'
 import { cn } from '../../lib/cn'
@@ -13,6 +14,7 @@ import {
 import { useCardLoadingState } from './CardDataContext'
 import type { SortDirection } from '../../lib/cards'
 import { useTranslation } from 'react-i18next'
+import { StatusBadge } from '../ui/StatusBadge'
 
 // Types for GitHub activity data
 interface GitHubPR {
@@ -540,8 +542,9 @@ export const GitHubActivity = forwardRef<GitHubActivityRef, { config?: GitHubAct
     openIssueCount,
     refetch,
   } = useGitHubActivity(effectiveConfig)
+  const { isDemoMode } = useDemoMode()
 
-  useCardLoadingState({ isLoading, hasAnyData: !!repoInfo })
+  useCardLoadingState({ isLoading, hasAnyData: !!repoInfo, isDemoData: isDemoMode })
 
   // Expose refresh method via ref for CardWrapper refresh button
   useImperativeHandle(ref, () => ({
@@ -637,6 +640,8 @@ export const GitHubActivity = forwardRef<GitHubActivityRef, { config?: GitHubAct
       setSearch: setSearchQuery,
     },
     sorting,
+    containerRef,
+    containerStyle,
   } = useCardData<GitHubItem, SortByOption>(preFilteredData, {
     filter: {
       searchFields: [] as (keyof GitHubItem)[],
@@ -713,9 +718,9 @@ export const GitHubActivity = forwardRef<GitHubActivityRef, { config?: GitHubAct
       <div className="h-full flex flex-col content-loaded">
         {/* Header with inline repo editor */}
         <div className="flex items-center justify-between mb-3">
-          <span className="px-2 py-0.5 text-xs rounded-full bg-red-500/20 text-red-400 border border-red-500/30">
+          <StatusBadge color="red" variant="outline" rounded="full">
             {t('common:common.error')}
-          </span>
+          </StatusBadge>
           <button
             onClick={() => setIsEditingRepos(!isEditingRepos)}
             className={cn(
@@ -823,12 +828,14 @@ export const GitHubActivity = forwardRef<GitHubActivityRef, { config?: GitHubAct
           <AlertCircle className="w-8 h-8 text-red-400 mb-3" />
           <p className="text-sm text-foreground mb-2">{t('cards:github.fetchError')}</p>
           <p className="text-xs text-muted-foreground mb-4 max-w-xs">{error}</p>
-          <button
+          <Button
+            variant="primary"
+            size="lg"
             onClick={refetch}
-            className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+            className="bg-primary hover:bg-primary/90 text-primary-foreground"
           >
             {t('common:common.retry')}
-          </button>
+          </Button>
           <p className="mt-4 text-xs text-muted-foreground/70 max-w-xs">
             {t('cards:github.configureToken')}
           </p>
@@ -1046,7 +1053,7 @@ export const GitHubActivity = forwardRef<GitHubActivityRef, { config?: GitHubAct
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto space-y-2 scrollbar-thin min-h-0">
+      <div ref={containerRef} className="flex-1 overflow-y-auto space-y-2 scrollbar-thin min-h-0" style={containerStyle}>
         {paginatedItems.length === 0 ? (
           <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">
             No {viewMode} found{searchQuery ? ' matching search' : ' for this time range'}
@@ -1130,10 +1137,10 @@ function PRItem({ pr }: { pr: GitHubPR }) {
               {statusText}
             </span>
             {pr.draft && (
-              <span className="text-xs px-2 py-0.5 rounded bg-gray-500/20 text-gray-400 shrink-0">{t('cards:github.draft')}</span>
+              <StatusBadge color="gray" size="md" className="shrink-0">{t('cards:github.draft')}</StatusBadge>
             )}
             {isStaleItem && (
-              <span className="text-xs px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-400 shrink-0">{t('cards:github.stale')}</span>
+              <StatusBadge color="yellow" size="md" className="shrink-0">{t('cards:github.stale')}</StatusBadge>
             )}
           </div>
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
@@ -1190,7 +1197,7 @@ function IssueItem({ issue }: { issue: GitHubIssue }) {
               {isOpen ? t('cards:github.open') : t('cards:github.closed')}
             </span>
             {isStaleItem && (
-              <span className="text-xs px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-400 shrink-0">{t('cards:github.stale')}</span>
+              <StatusBadge color="yellow" size="md" className="shrink-0">{t('cards:github.stale')}</StatusBadge>
             )}
           </div>
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
@@ -1229,7 +1236,7 @@ function ReleaseItem({ release }: { release: GitHubRelease }) {
           <div className="flex items-center gap-2 mb-1">
             <span className="text-sm font-medium">{release.name || release.tag_name}</span>
             {release.prerelease && (
-              <span className="text-xs px-2 py-0.5 rounded bg-orange-500/20 text-orange-400">{t('cards:github.preRelease')}</span>
+              <StatusBadge color="orange" size="md">{t('cards:github.preRelease')}</StatusBadge>
             )}
           </div>
           <div className="flex items-center gap-3 text-xs text-muted-foreground">

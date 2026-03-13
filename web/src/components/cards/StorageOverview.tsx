@@ -1,20 +1,23 @@
 import { useMemo } from 'react'
 import { HardDrive, Database, CheckCircle, AlertTriangle, Clock, Server } from 'lucide-react'
-import { useClusters, usePVCs } from '../../hooks/useMCP'
+import { useClusters } from '../../hooks/useMCP'
+import { useCachedPVCs } from '../../hooks/useCachedData'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { useDrillDownActions } from '../../hooks/useDrillDown'
 import { useCardLoadingState } from './CardDataContext'
 import { formatStat, formatStorageStat } from '../../lib/formatStats'
 import { useChartFilters, CardClusterFilter } from '../../lib/cards'
 import { useTranslation } from 'react-i18next'
+import { useDemoMode } from '../../hooks/useDemoMode'
 
 export function StorageOverview() {
   const { t } = useTranslation(['cards', 'common'])
   const { deduplicatedClusters: clusters, isLoading } = useClusters()
-  const { pvcs, isLoading: pvcsLoading, consecutiveFailures, isFailed } = usePVCs()
+  const { pvcs, isLoading: pvcsLoading, consecutiveFailures, isFailed, isDemoFallback } = useCachedPVCs()
 
   const { selectedClusters, isAllClustersSelected } = useGlobalFilters()
   const { drillToPVC } = useDrillDownActions()
+  const { isDemoMode } = useDemoMode()
 
   // Report card data state
   const combinedLoading = isLoading || pvcsLoading
@@ -23,6 +26,7 @@ export function StorageOverview() {
     hasAnyData: pvcs.length > 0,
     isFailed,
     consecutiveFailures,
+    isDemoData: isDemoFallback || isDemoMode,
   })
 
   // Local cluster filter

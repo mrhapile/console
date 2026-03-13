@@ -9,6 +9,7 @@ import {
   FileText, GitBranch, Clock, Package
 } from 'lucide-react'
 import { cn } from '../../../lib/cn'
+import { StatusBadge } from '../../ui/StatusBadge'
 import { LOCAL_AGENT_WS_URL } from '../../../lib/constants'
 import { ConsoleAIIcon } from '../../ui/ConsoleAIIcon'
 import {
@@ -39,7 +40,7 @@ const getStatusStyle = (status: string) => {
   if (lower === 'stalled' || lower === 'suspended') {
     return { bg: 'bg-yellow-500/20', text: 'text-yellow-400', border: 'border-yellow-500/30', icon: AlertTriangle }
   }
-  return { bg: 'bg-gray-500/20', text: 'text-gray-400', border: 'border-gray-500/30', icon: AlertTriangle }
+  return { bg: 'bg-secondary', text: 'text-muted-foreground', border: 'border-border', icon: AlertTriangle }
 }
 
 interface AppliedResource {
@@ -145,9 +146,13 @@ export function KustomizationDrillDown({ data }: Props) {
         }))
       }
       ws.onmessage = (event) => {
-        const msg = JSON.parse(event.data)
-        if (msg.id === requestId && msg.payload?.output) {
-          output = msg.payload.output
+        try {
+          const msg = JSON.parse(event.data)
+          if (msg.id === requestId && msg.payload?.output) {
+            output = msg.payload.output
+          }
+        } catch (e) {
+          console.error('Failed to parse WebSocket message:', e)
         }
         clearTimeout(timeout)
         ws.close()
@@ -292,7 +297,7 @@ Please:
               <Layers className="w-4 h-4 text-purple-400" />
               <span className="text-muted-foreground">{t('drilldown.fields.namespace')}</span>
               <span className="font-mono text-purple-400 group-hover:text-purple-300 transition-colors">{namespace}</span>
-              <svg className="w-3 h-3 text-purple-400/50 group-hover:text-purple-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-3 h-3 text-purple-400/70 group-hover:text-purple-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </button>
@@ -303,7 +308,7 @@ Please:
               <Server className="w-4 h-4 text-blue-400" />
               <span className="text-muted-foreground">{t('drilldown.fields.cluster')}</span>
               <ClusterBadge cluster={cluster.split('/').pop() || cluster} size="sm" />
-              <svg className="w-3 h-3 text-blue-400/50 group-hover:text-blue-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-3 h-3 text-blue-400/70 group-hover:text-blue-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </button>
@@ -312,9 +317,9 @@ Please:
           {/* Status badges */}
           <div className="flex items-center gap-2">
             {suspended && (
-              <span className="px-2.5 py-1 rounded-lg text-xs font-medium bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
+              <StatusBadge color="yellow" variant="outline">
                 Suspended
-              </span>
+              </StatusBadge>
             )}
             <span className={cn('px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1', statusStyle.bg, statusStyle.text, 'border', statusStyle.border)}>
               <StatusIcon className="w-3 h-3" />
@@ -364,9 +369,9 @@ Please:
         {activeTab === 'overview' && (
           <div className="space-y-6">
             {/* Kustomization Info Card */}
-            <div className="p-4 rounded-lg bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border border-indigo-500/20">
+            <div className="p-4 rounded-lg bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/20">
               <div className="flex items-start gap-3">
-                <Layers className="w-8 h-8 text-indigo-400 mt-1" />
+                <Layers className="w-8 h-8 text-blue-400 mt-1" />
                 <div className="flex-1 min-w-0">
                   <h3 className="text-lg font-semibold text-foreground">{kustomizationName}</h3>
                   <div className="flex flex-wrap gap-4 mt-2 text-sm text-muted-foreground">
@@ -459,7 +464,7 @@ Please:
                     )}
                   >
                     <div className="flex items-center gap-3">
-                      <Package className="w-4 h-4 text-indigo-400" />
+                      <Package className="w-4 h-4 text-blue-400" />
                       <div>
                         <span className="text-sm font-medium text-foreground">{resource.name}</span>
                         {resource.namespace && (

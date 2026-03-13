@@ -2,6 +2,10 @@ import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Search, X } from 'lucide-react'
 import { cn } from '../../lib/cn'
+import { Button } from './Button'
+
+/** Default debounce delay for search input in milliseconds */
+const DEFAULT_DEBOUNCE_MS = 300
 
 interface CardSearchProps {
   /** Current search value */
@@ -30,7 +34,7 @@ export function CardSearch({
   onChange,
   placeholder,
   className,
-  debounceMs = 300,
+  debounceMs = DEFAULT_DEBOUNCE_MS,
   defaultExpanded = false,
   size = 'sm',
 }: CardSearchProps) {
@@ -88,16 +92,13 @@ export function CardSearch({
 
   if (!isExpanded) {
     return (
-      <button
+      <Button
+        variant="ghost"
         onClick={() => setIsExpanded(true)}
-        className={cn(
-          'p-1.5 rounded-lg hover:bg-secondary/50 text-muted-foreground hover:text-foreground transition-colors',
-          className
-        )}
+        className={cn('p-1.5', className)}
         title={t('common.search')}
-      >
-        <Search className={iconSize} />
-      </button>
+        icon={<Search className={iconSize} />}
+      />
     )
   }
 

@@ -1,6 +1,11 @@
 import { useCallback, useSyncExternalStore } from 'react'
 import { FETCH_DEFAULT_TIMEOUT_MS } from '../lib/constants/network'
 
+/** Width of the collapsed sidebar in pixels (w-20 = 5rem = 80px) */
+export const SIDEBAR_COLLAPSED_WIDTH_PX = 80
+/** Default width of the expanded sidebar in pixels (w-64 = 16rem = 256px) */
+export const SIDEBAR_DEFAULT_WIDTH_PX = 256
+
 export interface SidebarItem {
   id: string
   name: string
@@ -21,6 +26,7 @@ export interface SidebarConfig {
   showClusterStatus: boolean
   collapsed: boolean
   isMobileOpen: boolean
+  width?: number
 }
 
 // Shared state store for sidebar config
@@ -40,38 +46,46 @@ function subscribe(listener: () => void): () => void {
   return () => listeners.delete(listener)
 }
 
+// Core dashboards shown in sidebar by default (reduced from 28 to 9 to cut clutter)
 const DEFAULT_PRIMARY_NAV: SidebarItem[] = [
-  // Priority dashboards at the top
   { id: 'dashboard', name: 'Dashboard', icon: 'LayoutDashboard', href: '/', type: 'link', order: 0 },
   { id: 'clusters', name: 'My Clusters', icon: 'Server', href: '/clusters', type: 'link', order: 1 },
   { id: 'cluster-admin', name: 'Cluster Admin', icon: 'ShieldAlert', href: '/cluster-admin', type: 'link', order: 2 },
+  { id: 'compliance', name: 'Compliance', icon: 'ClipboardCheck', href: '/compliance', type: 'link', order: 2.5 },
   { id: 'deploy', name: 'Deploy', icon: 'Rocket', href: '/deploy', type: 'link', order: 3 },
+  { id: 'insights', name: 'Insights', icon: 'Lightbulb', href: '/insights', type: 'link', order: 3.5 },
   { id: 'ai-ml', name: 'AI/ML', icon: 'Sparkles', href: '/ai-ml', type: 'link', order: 4 },
   { id: 'ai-agents', name: 'AI Agents', icon: 'Bot', href: '/ai-agents', type: 'link', order: 5 },
   { id: 'ci-cd', name: 'CI/CD', icon: 'GitMerge', href: '/ci-cd', type: 'link', order: 6 },
-  // All other dashboards (alphabetical)
   { id: 'alerts', name: 'Alerts', icon: 'Bell', href: '/alerts', type: 'link', order: 7 },
   { id: 'arcade', name: 'Arcade', icon: 'Gamepad2', href: '/arcade', type: 'link', order: 8 },
-  { id: 'compliance', name: 'Compliance', icon: 'ClipboardCheck', href: '/compliance', type: 'link', order: 9 },
-  { id: 'compute', name: 'Compute', icon: 'Monitor', href: '/compute', type: 'link', order: 10 },
-  { id: 'cost', name: 'Cost', icon: 'DollarSign', href: '/cost', type: 'link', order: 11 },
-  { id: 'data-compliance', name: 'Data Compliance', icon: 'Database', href: '/data-compliance', type: 'link', order: 12 },
-  { id: 'deployments', name: 'Deployments', icon: 'Layers', href: '/deployments', type: 'link', order: 13 },
-  { id: 'events', name: 'Events', icon: 'Activity', href: '/events', type: 'link', order: 14 },
-  { id: 'gitops', name: 'GitOps', icon: 'GitBranch', href: '/gitops', type: 'link', order: 15 },
-  { id: 'gpu-reservations', name: 'GPU Reservations', icon: 'Cpu', href: '/gpu-reservations', type: 'link', order: 16 },
-  { id: 'helm', name: 'Helm', icon: 'Package', href: '/helm', type: 'link', order: 17 },
-  { id: 'llm-d-benchmarks', name: 'llm-d Benchmarks', icon: 'TrendingUp', href: '/llm-d-benchmarks', type: 'link', order: 18 },
-  { id: 'logs', name: 'Logs', icon: 'FileText', href: '/logs', type: 'link', order: 19 },
-  { id: 'network', name: 'Network', icon: 'Globe', href: '/network', type: 'link', order: 20 },
-  { id: 'nodes', name: 'Nodes', icon: 'CircuitBoard', href: '/nodes', type: 'link', order: 21 },
-  { id: 'operators', name: 'Operators', icon: 'Cog', href: '/operators', type: 'link', order: 22 },
-  { id: 'pods', name: 'Pods', icon: 'Hexagon', href: '/pods', type: 'link', order: 23 },
-  { id: 'security', name: 'Security', icon: 'Shield', href: '/security', type: 'link', order: 24 },
-  { id: 'security-posture', name: 'Security Posture', icon: 'ShieldCheck', href: '/security-posture', type: 'link', order: 25 },
-  { id: 'services', name: 'Services', icon: 'Network', href: '/services', type: 'link', order: 26 },
-  { id: 'storage', name: 'Storage', icon: 'HardDrive', href: '/storage', type: 'link', order: 27 },
-  { id: 'workloads', name: 'Workloads', icon: 'Box', href: '/workloads', type: 'link', order: 28 },
+]
+
+/**
+ * Dashboards available for discovery but NOT shown in the sidebar by default.
+ * Surfaced in the "Recommended Dashboards" section of the customize modal.
+ * Users can add any of these to their sidebar via the customizer.
+ */
+export const DISCOVERABLE_DASHBOARDS: SidebarItem[] = [
+  { id: 'compute', name: 'Compute', icon: 'Monitor', href: '/compute', type: 'link', order: 0 },
+  { id: 'cost', name: 'Cost', icon: 'DollarSign', href: '/cost', type: 'link', order: 2 },
+  { id: 'data-compliance', name: 'Data Compliance', icon: 'Database', href: '/data-compliance', type: 'link', order: 3 },
+  { id: 'deployments', name: 'Deployments', icon: 'Layers', href: '/deployments', type: 'link', order: 4 },
+  { id: 'events', name: 'Events', icon: 'Activity', href: '/events', type: 'link', order: 5 },
+  { id: 'gitops', name: 'GitOps', icon: 'GitBranch', href: '/gitops', type: 'link', order: 6 },
+  { id: 'gpu-reservations', name: 'GPU Reservations', icon: 'Cpu', href: '/gpu-reservations', type: 'link', order: 7 },
+  { id: 'helm', name: 'Helm', icon: 'Package', href: '/helm', type: 'link', order: 8 },
+  { id: 'llm-d-benchmarks', name: 'llm-d Benchmarks', icon: 'TrendingUp', href: '/llm-d-benchmarks', type: 'link', order: 9 },
+  { id: 'logs', name: 'Logs', icon: 'FileText', href: '/logs', type: 'link', order: 10 },
+  { id: 'network', name: 'Network', icon: 'Globe', href: '/network', type: 'link', order: 11 },
+  { id: 'nodes', name: 'Nodes', icon: 'CircuitBoard', href: '/nodes', type: 'link', order: 12 },
+  { id: 'operators', name: 'Operators', icon: 'Cog', href: '/operators', type: 'link', order: 13 },
+  { id: 'pods', name: 'Pods', icon: 'Hexagon', href: '/pods', type: 'link', order: 14 },
+  { id: 'security', name: 'Security', icon: 'Shield', href: '/security', type: 'link', order: 15 },
+  { id: 'security-posture', name: 'Security Posture', icon: 'ShieldCheck', href: '/security-posture', type: 'link', order: 16 },
+  { id: 'services', name: 'Services', icon: 'Network', href: '/services', type: 'link', order: 17 },
+  { id: 'storage', name: 'Storage', icon: 'HardDrive', href: '/storage', type: 'link', order: 18 },
+  { id: 'workloads', name: 'Workloads', icon: 'Box', href: '/workloads', type: 'link', order: 19 },
 ]
 
 const DEFAULT_SECONDARY_NAV: SidebarItem[] = [
@@ -91,8 +105,8 @@ const DEFAULT_CONFIG: SidebarConfig = {
   isMobileOpen: false,
 }
 
-const STORAGE_KEY = 'kubestellar-sidebar-config-v10'
-const OLD_STORAGE_KEY = 'kubestellar-sidebar-config-v9'
+const STORAGE_KEY = 'kubestellar-sidebar-config-v11'
+const OLD_STORAGE_KEY = 'kubestellar-sidebar-config-v10'
 
 // Routes to remove during migration (deprecated/removed routes)
 const DEPRECATED_ROUTES = ['/apps']
@@ -112,7 +126,15 @@ export function getEnabledDashboardIds(): string[] | null {
 function applyDashboardFilter(config: SidebarConfig): SidebarConfig {
   if (!enabledDashboardIds) return config
   const enabledSet = new Set(enabledDashboardIds)
-  const filtered = config.primaryNav.filter(
+  const existingIds = new Set(config.primaryNav.map(item => item.id))
+
+  // Promote discoverable dashboards into primaryNav when ENABLED_DASHBOARDS includes them
+  const promoted = DISCOVERABLE_DASHBOARDS.filter(
+    item => enabledSet.has(item.id) && !existingIds.has(item.id)
+  )
+
+  const combined = [...config.primaryNav, ...promoted]
+  const filtered = combined.filter(
     item => item.isCustom || enabledSet.has(item.id)
   )
   // Sort filtered items to match the order specified in ENABLED_DASHBOARDS
@@ -366,6 +388,10 @@ export function useSidebarConfig() {
     setConfig((prev) => ({ ...prev, showClusterStatus: !prev.showClusterStatus }))
   }, [])
 
+  const setWidth = useCallback((width: number) => {
+    setConfig((prev) => ({ ...prev, width }))
+  }, [])
+
   const toggleCollapsed = useCallback(() => {
     setConfig((prev) => ({ ...prev, collapsed: !prev.collapsed }))
   }, [])
@@ -380,6 +406,19 @@ export function useSidebarConfig() {
 
   const toggleMobileSidebar = useCallback(() => {
     setConfig((prev) => ({ ...prev, isMobileOpen: !prev.isMobileOpen }))
+  }, [])
+
+  // Add a discoverable dashboard to the sidebar with its original ID (not a generated custom ID)
+  const restoreDashboard = useCallback((dashboard: SidebarItem) => {
+    setConfig((prev) => {
+      // Skip if already present
+      if (prev.primaryNav.some((item) => item.id === dashboard.id)) return prev
+      const newItem: SidebarItem = {
+        ...dashboard,
+        order: prev.primaryNav.length,
+      }
+      return { ...prev, primaryNav: [...prev.primaryNav, newItem] }
+    })
   }, [])
 
   const resetToDefault = useCallback(() => {
@@ -434,7 +473,9 @@ export function useSidebarConfig() {
     removeItem,
     updateItem,
     reorderItems,
+    restoreDashboard,
     toggleClusterStatus,
+    setWidth,
     toggleCollapsed,
     openMobileSidebar,
     closeMobileSidebar,
@@ -451,6 +492,6 @@ export const AVAILABLE_ICONS = [
   'Key', 'Users', 'Bell', 'AlertTriangle', 'CheckCircle', 'XCircle',
   'RefreshCw', 'Search', 'Filter', 'Layers', 'Globe', 'Terminal',
   'Code', 'Cpu', 'HardDrive', 'Wifi', 'Monitor', 'Folder', 'Gamepad2', 'Bot',
-  'Sparkles', 'GitMerge', 'Rocket', 'ShieldCheck', 'ClipboardCheck',
+  'Sparkles', 'GitMerge', 'Rocket', 'ShieldCheck', 'ClipboardCheck', 'Lightbulb',
   'DollarSign', 'Package', 'FileText', 'CircuitBoard', 'Cog', 'Hexagon', 'Network',
 ]

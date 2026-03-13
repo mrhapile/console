@@ -2,7 +2,15 @@ import { useState, useEffect, useCallback } from 'react'
 import { isDemoModeForced } from './useDemoMode'
 import { LOCAL_AGENT_HTTP_URL } from '../lib/constants'
 import { FETCH_DEFAULT_TIMEOUT_MS, TRANSITION_DELAY_MS } from '../lib/constants/network'
-import { emitAgentConnected, emitAgentDisconnected, emitConversionStep } from '../lib/analytics'
+import { emitAgentConnected, emitAgentDisconnected, emitAgentProvidersDetected, emitConversionStep } from '../lib/analytics'
+import { safeGetItem, safeSetItem } from '../lib/utils/localStorage'
+import { STORAGE_KEY_FIRST_AGENT_CONNECT } from '../lib/constants/storage'
+
+export interface ProviderSummary {
+  name: string
+  displayName: string
+  capabilities: number // bitmask: 1=chat, 2=toolExec
+}
 
 export interface AgentHealth {
   status: string
@@ -10,6 +18,7 @@ export interface AgentHealth {
   clusters: number
   hasClaude: boolean
   install_method?: string
+  availableProviders?: ProviderSummary[]
   claude?: {
     installed: boolean
     path?: string
@@ -226,6 +235,7 @@ class AgentManager {
             error: null,
           })
           emitAgentConnected(data.version || 'unknown', data.clusters || 0)
+          emitAgentProvidersDetected(data.availableProviders || [])
         } else if (wasConnecting) {
           // Initial connection - connect immediately on first success
           this.addEvent('connected', `Connected to local agent v${data.version || 'unknown'}`)
@@ -236,6 +246,11 @@ class AgentManager {
             error: null,
           })
           emitAgentConnected(data.version || 'unknown', data.clusters || 0)
+          emitAgentProvidersDetected(data.availableProviders || [])
+          // Stamp the first-ever agent connection for time-based nudges
+          if (!safeGetItem(STORAGE_KEY_FIRST_AGENT_CONNECT)) {
+            safeSetItem(STORAGE_KEY_FIRST_AGENT_CONNECT, String(Date.now()))
+          }
           emitConversionStep(3, 'agent', { agent_version: data.version || 'unknown' })
           if ((data.clusters || 0) > 0) {
             emitConversionStep(4, 'clusters', { cluster_count: String(data.clusters) })
@@ -447,12 +462,16 @@ export function useLocalAgent() {
       'To connect to your local kubeconfig and Claude Code, install the kc-agent on your machine.',
     steps: [
       {
-        title: 'Install via Homebrew (macOS)',
-        command: 'brew install kubestellar/tap/kc-agent && kc-agent',
+        title: 'Install via Homebrew (macOS / WSL)',
+        command: 'brew tap kubestellar/tap && brew install --head kc-agent && kc-agent',
       },
       {
-        title: 'Or build from source',
-        command: 'go install github.com/kubestellar/console/cmd/kc-agent@latest && kc-agent',
+        title: 'Build from source (Linux / WSL — recommended)',
+        command: 'git clone https://github.com/kubestellar/console.git && cd console && go build -o bin/kc-agent ./cmd/kc-agent && ./bin/kc-agent',
+      },
+      {
+        title: 'Install via Linuxbrew (Linux / WSL — alternative)',
+        command: '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" && eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)" && brew tap kubestellar/tap && brew install --head kc-agent && kc-agent',
       },
     ],
     benefits: [

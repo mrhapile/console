@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, lazy, Suspense } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Sun, Moon, Monitor, Menu, X, MoreVertical } from 'lucide-react'
@@ -7,11 +7,21 @@ import { useSidebarConfig } from '../../../hooks/useSidebarConfig'
 import { useTheme } from '../../../hooks/useTheme'
 import { useMobile } from '../../../hooks/useMobile'
 import { TourTrigger } from '../../onboarding/Tour'
+import { LogoWithStar } from '../../ui/LogoWithStar'
 import { UserProfileDropdown } from '../UserProfileDropdown'
 import { AlertBadge } from '../../ui/AlertBadge'
 import { FeatureRequestButton } from '../../feedback'
-import { AgentSelector } from '../../agent/AgentSelector'
-import { SearchDropdown } from './SearchDropdown'
+// Lazy-load SearchDropdown — it imports useSearchIndex which pulls in 5 MCP
+// modules (~135 KB). The search bar appears after the chunk loads (near-instant).
+const SearchDropdown = lazy(() =>
+  import('./SearchDropdown').then(m => ({ default: m.SearchDropdown }))
+)
+
+// Lazy-load AgentSelector — agent UI components (~41 KB) are only needed
+// when a local kc-agent is available (never on console.kubestellar.io).
+const AgentSelector = lazy(() =>
+  import('../../agent/AgentSelector').then(m => ({ default: m.AgentSelector }))
+)
 import { TokenUsageWidget } from './TokenUsageWidget'
 import { ClusterFilterPanel } from './ClusterFilterPanel'
 import { AgentStatusIndicator } from './AgentStatusIndicator'
@@ -57,18 +67,22 @@ export function Navbar() {
           className="flex items-center gap-2 md:gap-3 p-2 -m-2 min-w-[44px] min-h-[44px] hover:opacity-80 transition-opacity"
           aria-label={t('navbar.goHome')}
         >
-          <img
-            src="/kubestellar-logo.svg"
-            alt="KubeStellar"
-            className="w-8 h-8 md:w-9 md:h-9"
-          />
-          <span className="text-base md:text-lg font-semibold text-foreground hidden lg:inline">KubeStellar Console</span>
+          <LogoWithStar className="w-8 h-8 md:w-9 md:h-9" />
         </button>
+        <a
+          href="https://kubestellar.io/docs/console/readme"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="hidden lg:flex flex-col leading-tight hover:opacity-80 transition-opacity"
+        >
+          <span className="text-base md:text-lg font-semibold text-foreground">KubeStellar Console</span>
+          <span className="text-[10px] text-muted-foreground tracking-wide">multi-cluster first, saving time and tokens</span>
+        </a>
       </div>
 
       {/* Search - hidden on small mobile */}
       <div className="hidden sm:block flex-1 max-w-md mx-4">
-        <SearchDropdown />
+        <Suspense fallback={null}><SearchDropdown /></Suspense>
       </div>
 
       {/* Right side */}
@@ -80,7 +94,7 @@ export function Navbar() {
 
           {/* Agent Status + Selector — status (Demo/AI pill) on left, selector on right */}
           <AgentStatusIndicator />
-          <AgentSelector compact />
+          <Suspense fallback={null}><AgentSelector compact /></Suspense>
         </div>
 
         {/* Extended desktop items: lg+ (1024px) */}
@@ -132,7 +146,7 @@ export function Navbar() {
             <>
               {/* Backdrop */}
               <div
-                className="fixed inset-0 bg-black/50 z-40"
+                className="fixed inset-0 bg-black/60 backdrop-blur-2xl z-40"
                 onClick={() => setShowMobileMore(false)}
               />
               {/* Bottom sheet menu on mobile */}
@@ -146,7 +160,7 @@ export function Navbar() {
                 <div className={`${isMobile ? 'max-h-[calc(60vh-24px)]' : ''} overflow-y-auto py-2`}>
                   {/* Search on mobile */}
                   <div className="px-3 py-2 sm:hidden">
-                    <SearchDropdown />
+                    <Suspense fallback={null}><SearchDropdown /></Suspense>
                   </div>
                   <div className="border-t border-border my-2 sm:hidden" />
 
@@ -159,7 +173,7 @@ export function Navbar() {
                       <AgentStatusIndicator />
                     </div>
                     <div className="px-3 py-2">
-                      <AgentSelector compact />
+                      <Suspense fallback={null}><AgentSelector compact /></Suspense>
                     </div>
                     <div className="border-t border-border mx-3 my-1" />
                   </div>

@@ -80,6 +80,7 @@
     "snoozedCards": "Snoozed Cards",
     "noSnoozedCards": "No snoozed card swaps",
     "snoozeExpires": "Expires {{time}}",
+    "addMore": "Add more...",
     "removeFromSidebar": "Remove from sidebar",
     "doubleClickRename": "Double-click to rename",
     "snoozedItems": "Snoozed Items",
@@ -514,10 +515,17 @@
       "currentSHA": "Current Commit",
       "latestSHA": "Latest on main",
       "uncommittedWarning": "Uncommitted changes — auto-update paused",
+      "uncommittedAutoStash": "Local changes detected — they will be automatically stashed during updates and restored after",
       "agentRequired": "kc-agent required for auto-updates",
       "agentRequiredDesc": "Start kc-agent to enable automatic updates",
       "helmDisabled": "Auto-update not available for Helm installs",
       "helmDisabledDesc": "Use 'helm upgrade' to update your cluster deployment",
+      "helmSelfUpgradeHint": "Re-enable in-console upgrades: helm upgrade --set selfUpgrade.enabled=true",
+      "helmSelfUpgradeReady": "In-console upgrade available",
+      "helmSelfUpgradeDesc": "Self-upgrade is enabled — you can upgrade directly from this page",
+      "helmUpgradeNow": "Upgrade to {{tag}}",
+      "helmUpgradeWarning": "This will restart the console pod. All users will briefly lose connection.",
+      "upgrading": "Upgrading...",
       "updating": "Updating...",
       "startingUpdate": "Starting update — please wait...",
       "doNotNavigate": "Please do not navigate away while the update is in progress.",
@@ -674,11 +682,19 @@
       "addCard": "Add Card",
       "addCardTitle": "Add a new card",
       "closeMenu": "Close menu",
-      "dashboardActions": "Dashboard actions"
+      "dashboardActions": "Dashboard actions",
+      "undo": "Undo",
+      "redo": "Redo"
     },
     "welcome": {
-      "gettingStarted": "Getting Started",
-      "subtitle": "You're up and running — just a few optional steps left",
+      "gettingStarted": "Welcome to KubeStellar Console!",
+      "subtitle": "You're up and running — let's get your first cluster connected",
+      "noClustersHero": "No active clusters detected yet",
+      "noClustersHint": "Create a new test cluster or connect an existing one to start managing your multi-cluster workloads.",
+      "createCluster": "Create a Test Cluster",
+      "createClusterDesc": "Spin up a local kind/k3d cluster for testing",
+      "connectCluster": "Connect Existing Cluster",
+      "connectClusterDesc": "Configure kubeconfig path in Settings",
       "dismiss": "Dismiss",
       "step1Title": "Console is running",
       "step1Desc": "Your KubeStellar Console is up and ready.",
@@ -690,7 +706,7 @@
       "documentation": "Documentation"
     },
     "missions": {
-      "actions": "Actions:",
+      "actions": "Recommended Actions for your clusters",
       "repair": "Repair",
       "repairTitle": "AI Repair - automatically fix this issue",
       "snoozeTitle": "Snooze for 24 hours",
@@ -739,7 +755,7 @@
       "addCard": "Add \"{{title}}\" card to dashboard",
       "showRealTimeData": "Show real-time cluster data",
       "addressCriticalIssues": "Address critical issues faster",
-      "ai": "AI:",
+      "ai": "Recommended Cards for your clusters",
       "adding": "Adding...",
       "snooze": "Snooze",
       "dismiss": "Dismiss",
@@ -843,6 +859,15 @@
       "exampleNamespaceQuotas": "Namespace quotas and RBAC",
       "exampleOperatorStatus": "Operator status and CRDs",
       "exampleKustomizeGitOps": "Kustomize and GitOps status"
+    },
+    "smartSuggestions": {
+      "title": "Smart Suggestions",
+      "clustersConnected": "clusters connected",
+      "addAll": "Add all"
+    },
+    "discover": {
+      "addThis": "Add this card",
+      "browseCatalog": "Browse all"
     },
     "dropZone": {
       "moveToDashboard": "Move to Dashboard",
@@ -1492,7 +1517,9 @@
     "envVariableNote": "Key is set via environment variable. Modify the environment to change it.",
     "keysSavedTo": "Keys saved to",
     "securityNote": "API keys are stored securely on your local machine and never sent to our servers.",
-    "selectAgent": "Select AI agent"
+    "selectAgent": "Select AI agent",
+    "installViaHomebrewMacOS": "# Install via Homebrew (macOS / WSL)",
+    "installLinuxBuildFromSource": "# Linux / WSL: build from source (requires Go 1.24+)"
   },
   "navbar": {
     "closeMenu": "Close menu",
@@ -1969,7 +1996,14 @@
     "selectNamespace": "Select namespace...",
     "selectRelease": "Select release...",
     "allGpuTypes": "All GPU Types",
-    "allTypes": "All Types"
+    "allTypes": "All Types",
+    "allStates": "All States",
+    "allCategories": "All Categories",
+    "allModels": "All Models",
+    "allStatus": "All Status",
+    "selectBase": "Select base...",
+    "selectOverlay": "Select overlay...",
+    "custom": "Custom..."
   },
   "weather": {
     "hourlyForecast": "Hourly Forecast",
@@ -1988,6 +2022,16 @@
     "periodic": "Periodic",
     "presubmit": "Presubmit",
     "postsubmit": "Postsubmit"
+  },
+  "kubedle": {
+    "guessInstructions": "Guess the Kubernetes word in 6 tries!",
+    "letterInstructions": "Each guess must be a 5-letter word.",
+    "correctSpot": "Correct letter, correct spot",
+    "wrongSpot": "Correct letter, wrong spot",
+    "notInWord": "Letter not in word"
+  },
+  "deploymentProgress": {
+    "allSatisfied": "All deployments are fully satisfied"
   },
   "cloudProviders": {
     "awsEks": "AWS EKS",
@@ -2424,7 +2468,16 @@
     "nClusters_other": "{{count}} clusters",
     "allClusters": "All clusters",
     "allNamespaces": "All namespaces",
-    "warnings": "Warnings"
+    "warnings": "Warnings",
+    "failure": "Failure",
+    "missing": "Missing",
+    "noStackData": "No stack data",
+    "rbac": "RBAC",
+    "config": "Config",
+    "networking": "Networking",
+    "scaling": "Scaling",
+    "crds": "CRDs",
+    "admission": "Admission"
   },
   "namespaces": {
     "createNamespace": "Create Namespace",
@@ -2788,7 +2841,11 @@
     "installFromSettings": "You can install the agent anytime from Settings.",
     "dontShowAgain": "Don't show again",
     "continueWithDemoData": "Continue with Demo Data",
-    "remindMeLater": "Remind Me Later"
+    "remindMeLater": "Remind Me Later",
+    "quickInstallMacOS": "Quick Install — macOS / WSL (Homebrew)",
+    "linuxInstructions": "Linux / WSL installation instructions",
+    "linuxBuildDesc": "Build from source (recommended for Linux / WSL). Requires Go 1.24+ only:",
+    "linuxBrewAlternative": "Alternative: install Homebrew for Linux / WSL first (https://docs.brew.sh/Homebrew-on-Linux), then: brew tap kubestellar/tap && brew install --head kc-agent"
   },
   "agentStatus": {
     "connectingToAgent": "Connecting to local agent...",
@@ -2881,6 +2938,18 @@
       "featureConfigurationModal": "<strong>Configuration modal</strong> - Both have settings to show/hide stats",
       "featureDemoIndicator": "<strong>Demo indicator</strong> - Both show demo badge when data.isDemo=true",
       "gapConfigSource": "<strong>Config source</strong> - Unified uses converted configs, legacy uses raw definitions"
+    }
+  },
+  "nudge": {
+    "customize": {
+      "title": "Make it yours",
+      "description": "Drag cards to rearrange, click + to add new ones, or try a template.",
+      "action": "Add a card"
+    },
+    "pwa": {
+      "title": "Quick access",
+      "description": "Install the KubeStellar widget for instant cluster status from your desktop.",
+      "action": "Install widget"
     }
   }
 }

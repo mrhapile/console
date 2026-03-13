@@ -12,64 +12,7 @@ import { K8S_DOCS } from '../../config/externalApis'
 import type { ServiceExport, ServiceExportStatus } from '../../types/mcs'
 import { useCardLoadingState } from './CardDataContext'
 import { useTranslation } from 'react-i18next'
-
-// Demo data for MCS ServiceExports
-const DEMO_EXPORTS: ServiceExport[] = [
-  {
-    name: 'api-gateway',
-    namespace: 'production',
-    cluster: 'us-east-1',
-    serviceName: 'api-gateway',
-    status: 'Ready',
-    targetClusters: ['us-west-2', 'eu-central-1'],
-    createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    name: 'auth-service',
-    namespace: 'production',
-    cluster: 'us-east-1',
-    serviceName: 'auth-service',
-    status: 'Ready',
-    targetClusters: ['us-west-2', 'eu-central-1', 'ap-southeast-1'],
-    createdAt: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    name: 'cache-redis',
-    namespace: 'infrastructure',
-    cluster: 'us-west-2',
-    serviceName: 'redis-master',
-    status: 'Ready',
-    targetClusters: ['us-east-1'],
-    createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    name: 'payment-processor',
-    namespace: 'payments',
-    cluster: 'eu-central-1',
-    serviceName: 'payment-processor',
-    status: 'Pending',
-    message: 'Waiting for endpoints to become ready',
-    createdAt: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    name: 'legacy-backend',
-    namespace: 'legacy',
-    cluster: 'on-prem-dc1',
-    serviceName: 'backend-v1',
-    status: 'Failed',
-    message: 'Service not found in cluster',
-    createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-]
-
-const DEMO_STATS = {
-  totalExports: 12,
-  readyCount: 9,
-  pendingCount: 2,
-  failedCount: 1,
-  clustersWithMCS: 4,
-  totalClusters: 5,
-}
+import { useServiceExports } from '../../hooks/useServiceExports'
 
 const getStatusIcon = (status: ServiceExportStatus) => {
   switch (status) {
@@ -93,16 +36,16 @@ const getStatusColors = (status: ServiceExportStatus) => {
     case 'Failed':
       return { bg: 'bg-red-500/20', text: 'text-red-400', border: 'border-red-500/20', iconBg: 'bg-red-500/20' }
     default:
-      return { bg: 'bg-gray-500/20', text: 'text-gray-400', border: 'border-gray-500/20', iconBg: 'bg-gray-500/20' }
+      return { bg: 'bg-gray-500/20', text: 'text-muted-foreground', border: 'border-gray-500/20', iconBg: 'bg-gray-500/20' }
   }
 }
 
 type SortByOption = 'name' | 'status' | 'cluster'
 
 const SORT_OPTIONS_KEYS = [
-  { value: 'name' as const, labelKey: 'common.name' },
-  { value: 'status' as const, labelKey: 'common.status' },
-  { value: 'cluster' as const, labelKey: 'common.cluster' },
+  { value: 'name' as const, labelKey: 'common:common.name' as const },
+  { value: 'status' as const, labelKey: 'common:common.status' as const },
+  { value: 'cluster' as const, labelKey: 'common:common.cluster' as const },
 ]
 
 const statusOrder: Record<string, number> = { Failed: 0, Pending: 1, Ready: 2 }
@@ -119,19 +62,17 @@ interface ServiceExportsProps {
 
 export function ServiceExports({ config: _config }: ServiceExportsProps) {
   const { t } = useTranslation(['cards', 'common'])
+  const { exports: allExports, isLoading, isDemoData } = useServiceExports()
   const SORT_OPTIONS = useMemo(() =>
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    SORT_OPTIONS_KEYS.map(opt => ({ value: opt.value, label: String(t(opt.labelKey as any)) })),
+    SORT_OPTIONS_KEYS.map(opt => ({ value: opt.value, label: String(t(opt.labelKey)) })),
     [t]
   )
-  // Demo data - always available, never loading/erroring
-  const isLoading = false
-  const hasError = false
 
   // Report loading state to CardWrapper for skeleton/refresh behavior
-  useCardLoadingState({
+  const { showSkeleton } = useCardLoadingState({
     isLoading,
-    hasAnyData: DEMO_EXPORTS.length > 0,
+    hasAnyData: allExports.length > 0,
+    isDemoData,
   })
 
   const {
@@ -160,7 +101,9 @@ export function ServiceExports({ config: _config }: ServiceExportsProps) {
       sortDirection,
       setSortDirection,
     },
-  } = useCardData<ServiceExport, SortByOption>(DEMO_EXPORTS, {
+    containerRef,
+    containerStyle,
+  } = useCardData<ServiceExport, SortByOption>(allExports, {
     filter: {
       searchFields: ['name', 'namespace', 'cluster', 'serviceName', 'status'],
       clusterField: 'cluster',
@@ -174,8 +117,12 @@ export function ServiceExports({ config: _config }: ServiceExportsProps) {
     defaultLimit: 5,
   })
 
+  // Compute stats from the data
+  const readyCount = allExports.filter(e => e.status === 'Ready').length
+  const pendingCount = allExports.filter(e => e.status === 'Pending').length
+
   // Show skeleton while loading
-  if (isLoading) {
+  if (showSkeleton) {
     return (
       <div className="h-full flex flex-col min-h-card">
         <div className="flex items-center justify-between mb-3">
@@ -187,22 +134,6 @@ export function ServiceExports({ config: _config }: ServiceExportsProps) {
           <Skeleton variant="rounded" height={50} />
           <Skeleton variant="rounded" height={50} />
         </div>
-      </div>
-    )
-  }
-
-  // Show error state if data fetch failed
-  if (hasError) {
-    return (
-      <div className="h-full flex flex-col items-center justify-center min-h-card p-6">
-        <AlertCircle className="w-12 h-12 text-red-400 mb-4" />
-        <p className="text-sm text-muted-foreground mb-4">{t('serviceExports.loadFailed')}</p>
-        <button
-          onClick={() => window.location.reload()}
-          className="px-4 py-2 rounded-lg bg-purple-500 hover:bg-purple-600 text-white text-sm"
-        >
-          {t('common:common.retry')}
-        </button>
       </div>
     )
   }
@@ -222,7 +153,7 @@ export function ServiceExports({ config: _config }: ServiceExportsProps) {
             <ExternalLink className="w-4 h-4" />
           </a>
           <span className="text-sm font-medium text-muted-foreground">
-            {t('serviceExports.nExports', { count: DEMO_STATS.totalExports })}
+            {t('serviceExports.nExports', { count: totalItems })}
           </span>
           {localClusterFilter.length > 0 && (
             <span className="flex items-center gap-1 text-xs text-muted-foreground bg-secondary/50 px-1.5 py-0.5 rounded">
@@ -276,16 +207,16 @@ export function ServiceExports({ config: _config }: ServiceExportsProps) {
       {/* Stats */}
       <div className="grid grid-cols-3 gap-2 mb-3">
         <div className="p-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-center">
-          <p className="text-[10px] text-blue-400">{t('serviceExports.exports')}</p>
-          <p className="text-lg font-bold text-foreground">{DEMO_STATS.totalExports}</p>
+          <p className="text-2xs text-blue-400">{t('serviceExports.exports')}</p>
+          <p className="text-lg font-bold text-foreground">{totalItems}</p>
         </div>
         <div className="p-2 rounded-lg bg-green-500/10 border border-green-500/20 text-center">
-          <p className="text-[10px] text-green-400">{t('common:common.ready')}</p>
-          <p className="text-lg font-bold text-foreground">{DEMO_STATS.readyCount}</p>
+          <p className="text-2xs text-green-400">{t('common:common.ready')}</p>
+          <p className="text-lg font-bold text-foreground">{readyCount}</p>
         </div>
-        <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-center">
-          <p className="text-[10px] text-amber-400">{t('common:common.pending')}</p>
-          <p className="text-lg font-bold text-foreground">{DEMO_STATS.pendingCount}</p>
+        <div className="p-2 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-center">
+          <p className="text-2xs text-yellow-400">{t('common:common.pending')}</p>
+          <p className="text-lg font-bold text-foreground">{pendingCount}</p>
         </div>
       </div>
 
@@ -298,7 +229,7 @@ export function ServiceExports({ config: _config }: ServiceExportsProps) {
       />
 
       {/* Exports list */}
-      <div className="flex-1 overflow-y-auto space-y-2">
+      <div ref={containerRef} className="flex-1 overflow-y-auto space-y-2" style={containerStyle}>
         {filteredExports.map((exp, idx) => {
           const Icon = getStatusIcon(exp.status)
           const colors = getStatusColors(exp.status)
@@ -311,7 +242,7 @@ export function ServiceExports({ config: _config }: ServiceExportsProps) {
                 <div className="flex items-center gap-2">
                   <Icon className={`w-4 h-4 ${colors.text}`} />
                   <span className="text-sm font-medium text-foreground truncate">{exp.name}</span>
-                  <span className={`px-1.5 py-0.5 rounded text-[10px] ${colors.bg} ${colors.text}`}>
+                  <span className={`px-1.5 py-0.5 rounded text-2xs ${colors.bg} ${colors.text}`}>
                     {exp.status}
                   </span>
                 </div>
@@ -356,14 +287,14 @@ export function ServiceExports({ config: _config }: ServiceExportsProps) {
 
       {/* Quick install command */}
       <div className="mt-3 pt-3 border-t border-border/50">
-        <p className="text-[10px] text-muted-foreground font-medium mb-2">{t('serviceExports.quickInstall')}</p>
-        <code className="block p-2 rounded bg-secondary text-[10px] text-muted-foreground font-mono overflow-x-auto whitespace-nowrap">
+        <p className="text-2xs text-muted-foreground font-medium mb-2">{t('serviceExports.quickInstall')}</p>
+        <code className="block p-2 rounded bg-secondary text-2xs text-muted-foreground font-mono overflow-x-auto whitespace-nowrap">
           {K8S_DOCS.mcsApiInstallCommand}
         </code>
       </div>
 
       {/* Footer links */}
-      <div className="flex items-center justify-center gap-3 pt-2 mt-2 border-t border-border/50 text-[10px]">
+      <div className="flex items-center justify-center gap-3 pt-2 mt-2 border-t border-border/50 text-2xs">
         <a
           href={K8S_DOCS.mcsApi}
           target="_blank"

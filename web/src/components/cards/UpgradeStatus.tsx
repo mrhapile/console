@@ -8,6 +8,7 @@ import { useLocalAgent } from '../../hooks/useLocalAgent'
 import { useDemoMode } from '../../hooks/useDemoMode'
 import { useCardData, commonComparators } from '../../lib/cards/cardHooks'
 import { CardSearchInput, CardControlsRow, CardPaginationFooter, CardAIActions } from '../../lib/cards/CardComponents'
+import { StatusBadge } from '../ui/StatusBadge'
 import { useCardLoadingState } from './CardDataContext'
 import { LOCAL_AGENT_WS_URL } from '../../lib/constants'
 import { useTranslation } from 'react-i18next'
@@ -318,6 +319,7 @@ export function UpgradeStatus({ config: _config }: UpgradeStatusProps) {
   useCardLoadingState({
     isLoading: isLoadingHook,
     hasAnyData: allClusters.length > 0,
+    isDemoData: isDemoMode,
   })
 
   // Track previous agent connection state to detect reconnections
@@ -521,6 +523,8 @@ Please proceed step by step and ask for confirmation before making any changes.`
       sortDirection,
       setSortDirection,
     },
+    containerRef,
+    containerStyle,
   } = useCardData<UpgradeItem, SortByOption>(clusterVersionData, {
     filter: {
       searchFields: ['name', 'currentVersion'],
@@ -554,9 +558,9 @@ Please proceed step by step and ask for confirmation before making any changes.`
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           {pendingUpgrades > 0 && (
-            <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400">
+            <StatusBadge color="yellow">
               {pendingUpgrades} upgrades available
-            </span>
+            </StatusBadge>
           )}
         </div>
         <CardControlsRow
@@ -597,7 +601,7 @@ Please proceed step by step and ask for confirmation before making any changes.`
       />
 
       {/* Clusters list */}
-      <div className="flex-1 space-y-2 overflow-y-auto">
+      <div ref={containerRef} className="flex-1 space-y-2 overflow-y-auto" style={containerStyle}>
         {displayClusters.map((cluster) => (
           <div
             key={cluster.name}

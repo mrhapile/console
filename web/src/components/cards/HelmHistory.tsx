@@ -1,17 +1,19 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { CheckCircle, XCircle, RotateCcw, ArrowUp, Clock, ChevronRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { useClusters, useHelmReleases, useHelmHistory, type HelmHistoryEntry } from '../../hooks/useMCP'
+import { useClusters, type HelmHistoryEntry } from '../../hooks/useMCP'
+import { useCachedHelmReleases, useCachedHelmHistory } from '../../hooks/useCachedData'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
-import { useDemoMode } from '../../hooks/useDemoMode'
 import { useDrillDownActions } from '../../hooks/useDrillDown'
 import { Skeleton } from '../ui/Skeleton'
 import { ClusterBadge } from '../ui/ClusterBadge'
+import { StatusBadge } from '../ui/StatusBadge'
 import {
   useCardData,
   CardSearchInput, CardControlsRow, CardPaginationFooter,
 } from '../../lib/cards'
 import { useCardLoadingState } from './CardDataContext'
+import { HelmHistoryDetailModal } from './deploy/HelmHistoryDetailModal'
 
 interface HelmHistoryProps {
   config?: {
@@ -45,7 +47,6 @@ export function HelmHistory({ config }: HelmHistoryProps) {
     [t]
   )
   const { deduplicatedClusters: allClusters } = useClusters()
-  const { isDemoMode: demoMode } = useDemoMode()
   const [selectedCluster, setSelectedCluster] = useState<string>(config?.cluster || '')
   const [selectedRelease, setSelectedRelease] = useState<string>(config?.release || '')
 
@@ -60,6 +61,7 @@ export function HelmHistory({ config }: HelmHistoryProps) {
     customFilter,
   } = useGlobalFilters()
   const { drillToHelm } = useDrillDownActions()
+  const [modalEntry, setModalEntry] = useState<HelmHistoryEntry | null>(null)
 
   // Sync local selection with global filter changes
   useEffect(() => {
@@ -90,11 +92,11 @@ export function HelmHistory({ config }: HelmHistoryProps) {
   }, [globalSelectedClusters, isAllClustersSelected])
 
   // Fetch ALL Helm releases from all clusters once (not per-cluster)
-  const { releases: allHelmReleases, isLoading: releasesLoading } = useHelmReleases()
+  const { releases: allHelmReleases, isLoading: releasesLoading, isDemoFallback: isDemoData } = useCachedHelmReleases()
 
   // Auto-select cluster and release in demo mode so card shows data immediately
   useEffect(() => {
-    if (demoMode && allHelmReleases.length > 0 && allClusters.length > 0) {
+    if (isDemoData && allHelmReleases.length > 0 && allClusters.length > 0) {
       if (!selectedCluster) {
         const firstCluster = allClusters[0].name
         setSelectedCluster(firstCluster)
@@ -106,7 +108,7 @@ export function HelmHistory({ config }: HelmHistoryProps) {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [demoMode, allHelmReleases, allClusters])
+  }, [isDemoData, allHelmReleases, allClusters])
 
   // Look up namespace from the selected release (required for helm history command)
   const selectedReleaseNamespace = useMemo(() => {
@@ -124,7 +126,7 @@ export function HelmHistory({ config }: HelmHistoryProps) {
     isRefreshing: historyRefreshing,
     isFailed,
     consecutiveFailures,
-  } = useHelmHistory(
+  } = useCachedHelmHistory(
     selectedCluster || undefined,
     selectedRelease || undefined,
     selectedReleaseNamespace
@@ -137,6 +139,7 @@ export function HelmHistory({ config }: HelmHistoryProps) {
     hasAnyData: rawHistory.length > 0 || !selectedRelease,
     isFailed,
     consecutiveFailures,
+    isDemoData,
   })
 
   // Apply global filters to clusters
@@ -197,6 +200,8 @@ export function HelmHistory({ config }: HelmHistoryProps) {
       sortDirection,
       setSortDirection,
     },
+    containerRef,
+    containerStyle,
   } = useCardData<HelmHistoryEntry, SortByOption>(rawHistory, {
     filter: {
       searchFields: ['chart', 'status', 'description'] as (keyof HelmHistoryEntry)[],
@@ -271,9 +276,9 @@ export function HelmHistory({ config }: HelmHistoryProps) {
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           {totalItems > 0 && (
-            <span className="text-xs px-1.5 py-0.5 rounded bg-violet-500/20 text-violet-400">
+            <StatusBadge color="purple">
               {t('helmHistory.nRevisions', { count: totalItems })}
-            </span>
+            </StatusBadge>
           )}
         </div>
         <CardControlsRow
@@ -370,7 +375,7 @@ export function HelmHistory({ config }: HelmHistoryProps) {
           />
 
           {/* History timeline */}
-          <div className="flex-1 overflow-y-auto">
+          <div ref={containerRef} className="flex-1 overflow-y-auto" style={containerStyle}>
             {history.length === 0 ? (
               <div className="flex items-center justify-center text-muted-foreground text-sm py-4">
                 {t('helmHistory.noHistoryFound')}
@@ -391,11 +396,7 @@ export function HelmHistory({ config }: HelmHistoryProps) {
                       <div
                         key={idx}
                         className="relative pl-6 group cursor-pointer"
-                        onClick={() => drillToHelm(selectedCluster, selectedReleaseNamespace || 'default', selectedRelease, {
-                          history: rawHistory,
-                          currentRevision: entry.revision,
-                          selectedRevision: entry,
-                        })}
+                        onClick={() => setModalEntry(entry)}
                         title={`Click to view details for revision ${entry.revision}`}
                       >
                         {/* Timeline dot */}
@@ -410,9 +411,9 @@ export function HelmHistory({ config }: HelmHistoryProps) {
                             <div className="flex items-center gap-2">
                               <span className="text-sm font-medium text-foreground">{t('helmHistory.rev', { revision: entry.revision })}</span>
                               {isCurrent && (
-                                <span className="text-xs px-1.5 py-0.5 rounded bg-green-500/20 text-green-400">
+                                <StatusBadge color="green">
                                   {t('helmHistory.current')}
-                                </span>
+                                </StatusBadge>
                               )}
                             </div>
                             <div className="flex items-center gap-2">
@@ -454,6 +455,16 @@ export function HelmHistory({ config }: HelmHistoryProps) {
           </div>
         </>
       )}
+
+      <HelmHistoryDetailModal
+        isOpen={!!modalEntry}
+        onClose={() => setModalEntry(null)}
+        entry={modalEntry}
+        releaseName={selectedRelease}
+        clusterName={selectedCluster}
+        namespace={selectedReleaseNamespace || 'default'}
+        currentRevision={rawHistory.find(h => h.status === 'deployed')?.revision}
+      />
     </div>
   )
 }

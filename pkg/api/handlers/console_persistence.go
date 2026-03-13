@@ -145,7 +145,8 @@ func (h *ConsolePersistenceHandlers) UpdateConfig(c *fiber.Ctx) error {
 	}
 
 	if err := h.persistenceStore.UpdateConfig(config); err != nil {
-		return c.Status(400).JSON(fiber.Map{"error": err.Error()})
+		log.Printf("bad request: %v", err)
+		return c.Status(400).JSON(fiber.Map{"error": "invalid request"})
 	}
 
 	if err := h.persistenceStore.Save(); err != nil {
@@ -179,7 +180,8 @@ func (h *ConsolePersistenceHandlers) GetStatus(c *fiber.Ctx) error {
 func (h *ConsolePersistenceHandlers) ListManagedWorkloads(c *fiber.Ctx) error {
 	client, _, err := h.persistenceStore.GetActiveClient(c.Context())
 	if err != nil {
-		return c.Status(503).JSON(fiber.Map{"error": err.Error()})
+		log.Printf("service unavailable: %v", err)
+		return c.Status(503).JSON(fiber.Map{"error": "service unavailable"})
 	}
 
 	namespace := h.persistenceStore.GetNamespace()
@@ -187,7 +189,8 @@ func (h *ConsolePersistenceHandlers) ListManagedWorkloads(c *fiber.Ctx) error {
 
 	workloads, err := persistence.ListManagedWorkloads(c.Context(), namespace)
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		log.Printf("internal error: %v", err)
+		return c.Status(500).JSON(fiber.Map{"error": "internal server error"})
 	}
 
 	return c.JSON(workloads)
@@ -200,7 +203,8 @@ func (h *ConsolePersistenceHandlers) GetManagedWorkload(c *fiber.Ctx) error {
 
 	client, _, err := h.persistenceStore.GetActiveClient(c.Context())
 	if err != nil {
-		return c.Status(503).JSON(fiber.Map{"error": err.Error()})
+		log.Printf("service unavailable: %v", err)
+		return c.Status(503).JSON(fiber.Map{"error": "service unavailable"})
 	}
 
 	namespace := h.persistenceStore.GetNamespace()
@@ -208,7 +212,8 @@ func (h *ConsolePersistenceHandlers) GetManagedWorkload(c *fiber.Ctx) error {
 
 	workload, err := persistence.GetManagedWorkload(c.Context(), namespace, name)
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		log.Printf("internal error: %v", err)
+		return c.Status(500).JSON(fiber.Map{"error": "internal server error"})
 	}
 
 	return c.JSON(workload)
@@ -224,7 +229,8 @@ func (h *ConsolePersistenceHandlers) CreateManagedWorkload(c *fiber.Ctx) error {
 
 	client, _, err := h.persistenceStore.GetActiveClient(c.Context())
 	if err != nil {
-		return c.Status(503).JSON(fiber.Map{"error": err.Error()})
+		log.Printf("service unavailable: %v", err)
+		return c.Status(503).JSON(fiber.Map{"error": "service unavailable"})
 	}
 
 	namespace := h.persistenceStore.GetNamespace()
@@ -242,7 +248,8 @@ func (h *ConsolePersistenceHandlers) CreateManagedWorkload(c *fiber.Ctx) error {
 
 	created, err := persistence.CreateManagedWorkload(c.Context(), &workload)
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		log.Printf("internal error: %v", err)
+		return c.Status(500).JSON(fiber.Map{"error": "internal server error"})
 	}
 
 	return c.Status(201).JSON(created)
@@ -260,7 +267,8 @@ func (h *ConsolePersistenceHandlers) UpdateManagedWorkload(c *fiber.Ctx) error {
 
 	client, _, err := h.persistenceStore.GetActiveClient(c.Context())
 	if err != nil {
-		return c.Status(503).JSON(fiber.Map{"error": err.Error()})
+		log.Printf("service unavailable: %v", err)
+		return c.Status(503).JSON(fiber.Map{"error": "service unavailable"})
 	}
 
 	namespace := h.persistenceStore.GetNamespace()
@@ -272,7 +280,8 @@ func (h *ConsolePersistenceHandlers) UpdateManagedWorkload(c *fiber.Ctx) error {
 
 	updated, err := persistence.UpdateManagedWorkload(c.Context(), &workload)
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		log.Printf("internal error: %v", err)
+		return c.Status(500).JSON(fiber.Map{"error": "internal server error"})
 	}
 
 	return c.JSON(updated)
@@ -285,14 +294,16 @@ func (h *ConsolePersistenceHandlers) DeleteManagedWorkload(c *fiber.Ctx) error {
 
 	client, _, err := h.persistenceStore.GetActiveClient(c.Context())
 	if err != nil {
-		return c.Status(503).JSON(fiber.Map{"error": err.Error()})
+		log.Printf("service unavailable: %v", err)
+		return c.Status(503).JSON(fiber.Map{"error": "service unavailable"})
 	}
 
 	namespace := h.persistenceStore.GetNamespace()
 	persistence := k8s.NewConsolePersistence(client)
 
 	if err := persistence.DeleteManagedWorkload(c.Context(), namespace, name); err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		log.Printf("internal error: %v", err)
+		return c.Status(500).JSON(fiber.Map{"error": "internal server error"})
 	}
 
 	return c.SendStatus(204)
@@ -307,7 +318,8 @@ func (h *ConsolePersistenceHandlers) DeleteManagedWorkload(c *fiber.Ctx) error {
 func (h *ConsolePersistenceHandlers) ListClusterGroups(c *fiber.Ctx) error {
 	client, _, err := h.persistenceStore.GetActiveClient(c.Context())
 	if err != nil {
-		return c.Status(503).JSON(fiber.Map{"error": err.Error()})
+		log.Printf("service unavailable: %v", err)
+		return c.Status(503).JSON(fiber.Map{"error": "service unavailable"})
 	}
 
 	namespace := h.persistenceStore.GetNamespace()
@@ -315,7 +327,8 @@ func (h *ConsolePersistenceHandlers) ListClusterGroups(c *fiber.Ctx) error {
 
 	groups, err := persistence.ListClusterGroups(c.Context(), namespace)
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		log.Printf("internal error: %v", err)
+		return c.Status(500).JSON(fiber.Map{"error": "internal server error"})
 	}
 
 	return c.JSON(groups)
@@ -328,7 +341,8 @@ func (h *ConsolePersistenceHandlers) GetClusterGroup(c *fiber.Ctx) error {
 
 	client, _, err := h.persistenceStore.GetActiveClient(c.Context())
 	if err != nil {
-		return c.Status(503).JSON(fiber.Map{"error": err.Error()})
+		log.Printf("service unavailable: %v", err)
+		return c.Status(503).JSON(fiber.Map{"error": "service unavailable"})
 	}
 
 	namespace := h.persistenceStore.GetNamespace()
@@ -336,7 +350,8 @@ func (h *ConsolePersistenceHandlers) GetClusterGroup(c *fiber.Ctx) error {
 
 	group, err := persistence.GetClusterGroup(c.Context(), namespace, name)
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		log.Printf("internal error: %v", err)
+		return c.Status(500).JSON(fiber.Map{"error": "internal server error"})
 	}
 
 	return c.JSON(group)
@@ -352,7 +367,8 @@ func (h *ConsolePersistenceHandlers) CreateClusterGroup(c *fiber.Ctx) error {
 
 	client, _, err := h.persistenceStore.GetActiveClient(c.Context())
 	if err != nil {
-		return c.Status(503).JSON(fiber.Map{"error": err.Error()})
+		log.Printf("service unavailable: %v", err)
+		return c.Status(503).JSON(fiber.Map{"error": "service unavailable"})
 	}
 
 	namespace := h.persistenceStore.GetNamespace()
@@ -376,7 +392,8 @@ func (h *ConsolePersistenceHandlers) CreateClusterGroup(c *fiber.Ctx) error {
 
 	created, err := persistence.CreateClusterGroup(c.Context(), &group)
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		log.Printf("internal error: %v", err)
+		return c.Status(500).JSON(fiber.Map{"error": "internal server error"})
 	}
 
 	return c.Status(201).JSON(created)
@@ -394,7 +411,8 @@ func (h *ConsolePersistenceHandlers) UpdateClusterGroup(c *fiber.Ctx) error {
 
 	client, _, err := h.persistenceStore.GetActiveClient(c.Context())
 	if err != nil {
-		return c.Status(503).JSON(fiber.Map{"error": err.Error()})
+		log.Printf("service unavailable: %v", err)
+		return c.Status(503).JSON(fiber.Map{"error": "service unavailable"})
 	}
 
 	namespace := h.persistenceStore.GetNamespace()
@@ -412,7 +430,8 @@ func (h *ConsolePersistenceHandlers) UpdateClusterGroup(c *fiber.Ctx) error {
 
 	updated, err := persistence.UpdateClusterGroup(c.Context(), &group)
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		log.Printf("internal error: %v", err)
+		return c.Status(500).JSON(fiber.Map{"error": "internal server error"})
 	}
 
 	return c.JSON(updated)
@@ -425,14 +444,16 @@ func (h *ConsolePersistenceHandlers) DeleteClusterGroup(c *fiber.Ctx) error {
 
 	client, _, err := h.persistenceStore.GetActiveClient(c.Context())
 	if err != nil {
-		return c.Status(503).JSON(fiber.Map{"error": err.Error()})
+		log.Printf("service unavailable: %v", err)
+		return c.Status(503).JSON(fiber.Map{"error": "service unavailable"})
 	}
 
 	namespace := h.persistenceStore.GetNamespace()
 	persistence := k8s.NewConsolePersistence(client)
 
 	if err := persistence.DeleteClusterGroup(c.Context(), namespace, name); err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		log.Printf("internal error: %v", err)
+		return c.Status(500).JSON(fiber.Map{"error": "internal server error"})
 	}
 
 	return c.SendStatus(204)
@@ -451,8 +472,26 @@ func (h *ConsolePersistenceHandlers) evaluateClusterGroup(group *v1alpha1.Cluste
 	if h.k8sClient != nil && len(group.Spec.DynamicFilters) > 0 {
 		clusters, err := h.k8sClient.ListClusters(context.Background())
 		if err == nil {
+			// Get cached health data (no extra network calls).
+			// GetCachedHealth always returns a non-nil map; individual entries
+			// may be nil for clusters that have not yet been health-checked.
+			healthMap := h.k8sClient.GetCachedHealth()
+
+			// Fetch nodes per cluster only when a filter requires node-level data.
+			nodesByCluster := make(map[string][]k8s.NodeInfo)
+			if clusterFilterNeedsNodes(group.Spec.DynamicFilters) {
+				for _, cluster := range clusters {
+					nodes, nodeErr := h.k8sClient.GetNodes(context.Background(), cluster.Name)
+					if nodeErr == nil {
+						nodesByCluster[cluster.Name] = nodes
+					}
+				}
+			}
+
 			for _, cluster := range clusters {
-				if h.clusterMatchesFilters(cluster, group.Spec.DynamicFilters) {
+				health := healthMap[cluster.Name]
+				nodes := nodesByCluster[cluster.Name]
+				if h.clusterMatchesFilters(cluster, health, nodes, group.Spec.DynamicFilters) {
 					matched[cluster.Name] = true
 				}
 			}
@@ -469,9 +508,9 @@ func (h *ConsolePersistenceHandlers) evaluateClusterGroup(group *v1alpha1.Cluste
 }
 
 // clusterMatchesFilters checks if a cluster matches all filters
-func (h *ConsolePersistenceHandlers) clusterMatchesFilters(cluster k8s.ClusterInfo, filters []v1alpha1.ClusterFilter) bool {
+func (h *ConsolePersistenceHandlers) clusterMatchesFilters(cluster k8s.ClusterInfo, health *k8s.ClusterHealth, nodes []k8s.NodeInfo, filters []v1alpha1.ClusterFilter) bool {
 	for _, filter := range filters {
-		if !h.clusterMatchesFilter(cluster, filter) {
+		if !h.clusterMatchesFilter(cluster, health, nodes, filter) {
 			return false
 		}
 	}
@@ -479,17 +518,55 @@ func (h *ConsolePersistenceHandlers) clusterMatchesFilters(cluster k8s.ClusterIn
 }
 
 // clusterMatchesFilter checks if a cluster matches a single filter
-func (h *ConsolePersistenceHandlers) clusterMatchesFilter(cluster k8s.ClusterInfo, filter v1alpha1.ClusterFilter) bool {
-	// TODO: Implement filter evaluation based on cluster properties
-	// This is a simplified version - real implementation would check:
-	// - name, healthy, gpuCount, cpuCount, memoryGB, nodeCount, region, zone, provider, version, label
+func (h *ConsolePersistenceHandlers) clusterMatchesFilter(cluster k8s.ClusterInfo, health *k8s.ClusterHealth, nodes []k8s.NodeInfo, filter v1alpha1.ClusterFilter) bool {
 	switch filter.Field {
 	case "name":
 		return matchString(cluster.Name, filter.Operator, filter.Value)
 	case "healthy":
-		return matchBool(cluster.Healthy, filter.Operator, filter.Value)
+		return compareBool(cluster.Healthy, filter.Operator, filter.Value)
+	case "reachable":
+		if health == nil {
+			return false
+		}
+		return compareBool(health.Reachable, filter.Operator, filter.Value)
+	case "nodeCount":
+		return compareInt(int64(cluster.NodeCount), filter.Operator, filter.Value)
+	case "podCount":
+		return compareInt(int64(cluster.PodCount), filter.Operator, filter.Value)
+	case "cpuCores":
+		if health == nil {
+			return false
+		}
+		return compareInt(int64(health.CpuCores), filter.Operator, filter.Value)
+	case "memoryGB":
+		if health == nil {
+			return false
+		}
+		return compareFloat(health.MemoryGB, filter.Operator, filter.Value)
+	case "gpuCount":
+		total := clusterGPUCount(nodes)
+		return compareInt(int64(total), filter.Operator, filter.Value)
+	case "gpuType":
+		types := clusterGPUTypes(nodes)
+		return compareStringSet(types, filter.Operator, filter.Value)
+	case "label":
+		// Returns true when any node in the cluster carries a label whose key
+		// matches filter.LabelKey and whose value satisfies the operator/value pair.
+		for _, node := range nodes {
+			if val, ok := node.Labels[filter.LabelKey]; ok {
+				if matchString(val, filter.Operator, filter.Value) {
+					return true
+				}
+			}
+		}
+		return false
 	default:
-		return true // Unknown filter, assume match
+		// Fields like "region", "zone", "provider", and "version" are referenced
+		// in the original issue but are not yet present in the ClusterInfo or
+		// ClusterHealth data models. Until those fields are added, filters on
+		// them intentionally return false so they do not silently match all clusters.
+		log.Printf("clusterMatchesFilter: unsupported filter field %q, skipping cluster %q", filter.Field, cluster.Name)
+		return false
 	}
 }
 
@@ -506,16 +583,15 @@ func matchString(actual, operator, expected string) bool {
 	}
 }
 
-func matchBool(actual bool, operator, expected string) bool {
-	expectedBool := expected == "true"
-	switch operator {
-	case "eq":
-		return actual == expectedBool
-	case "neq":
-		return actual != expectedBool
-	default:
-		return false
+// clusterFilterNeedsNodes returns true if any filter in the slice requires
+// per-node data (GPU counts/types or node label matching).
+func clusterFilterNeedsNodes(filters []v1alpha1.ClusterFilter) bool {
+	for _, f := range filters {
+		if f.Field == "gpuCount" || f.Field == "gpuType" || f.Field == "label" {
+			return true
+		}
 	}
+	return false
 }
 
 // =============================================================================
@@ -527,7 +603,8 @@ func matchBool(actual bool, operator, expected string) bool {
 func (h *ConsolePersistenceHandlers) ListWorkloadDeployments(c *fiber.Ctx) error {
 	client, _, err := h.persistenceStore.GetActiveClient(c.Context())
 	if err != nil {
-		return c.Status(503).JSON(fiber.Map{"error": err.Error()})
+		log.Printf("service unavailable: %v", err)
+		return c.Status(503).JSON(fiber.Map{"error": "service unavailable"})
 	}
 
 	namespace := h.persistenceStore.GetNamespace()
@@ -535,7 +612,8 @@ func (h *ConsolePersistenceHandlers) ListWorkloadDeployments(c *fiber.Ctx) error
 
 	deployments, err := persistence.ListWorkloadDeployments(c.Context(), namespace)
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		log.Printf("internal error: %v", err)
+		return c.Status(500).JSON(fiber.Map{"error": "internal server error"})
 	}
 
 	return c.JSON(deployments)
@@ -548,7 +626,8 @@ func (h *ConsolePersistenceHandlers) GetWorkloadDeployment(c *fiber.Ctx) error {
 
 	client, _, err := h.persistenceStore.GetActiveClient(c.Context())
 	if err != nil {
-		return c.Status(503).JSON(fiber.Map{"error": err.Error()})
+		log.Printf("service unavailable: %v", err)
+		return c.Status(503).JSON(fiber.Map{"error": "service unavailable"})
 	}
 
 	namespace := h.persistenceStore.GetNamespace()
@@ -556,7 +635,8 @@ func (h *ConsolePersistenceHandlers) GetWorkloadDeployment(c *fiber.Ctx) error {
 
 	deployment, err := persistence.GetWorkloadDeployment(c.Context(), namespace, name)
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		log.Printf("internal error: %v", err)
+		return c.Status(500).JSON(fiber.Map{"error": "internal server error"})
 	}
 
 	return c.JSON(deployment)
@@ -572,7 +652,8 @@ func (h *ConsolePersistenceHandlers) CreateWorkloadDeployment(c *fiber.Ctx) erro
 
 	client, _, err := h.persistenceStore.GetActiveClient(c.Context())
 	if err != nil {
-		return c.Status(503).JSON(fiber.Map{"error": err.Error()})
+		log.Printf("service unavailable: %v", err)
+		return c.Status(503).JSON(fiber.Map{"error": "service unavailable"})
 	}
 
 	namespace := h.persistenceStore.GetNamespace()
@@ -595,7 +676,8 @@ func (h *ConsolePersistenceHandlers) CreateWorkloadDeployment(c *fiber.Ctx) erro
 
 	created, err := persistence.CreateWorkloadDeployment(c.Context(), &deployment)
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		log.Printf("internal error: %v", err)
+		return c.Status(500).JSON(fiber.Map{"error": "internal server error"})
 	}
 
 	// Trigger deployment reconciliation asynchronously
@@ -616,7 +698,8 @@ func (h *ConsolePersistenceHandlers) UpdateWorkloadDeploymentStatus(c *fiber.Ctx
 
 	client, _, err := h.persistenceStore.GetActiveClient(c.Context())
 	if err != nil {
-		return c.Status(503).JSON(fiber.Map{"error": err.Error()})
+		log.Printf("service unavailable: %v", err)
+		return c.Status(503).JSON(fiber.Map{"error": "service unavailable"})
 	}
 
 	namespace := h.persistenceStore.GetNamespace()
@@ -625,7 +708,8 @@ func (h *ConsolePersistenceHandlers) UpdateWorkloadDeploymentStatus(c *fiber.Ctx
 	// Get existing deployment
 	deployment, err := persistence.GetWorkloadDeployment(c.Context(), namespace, name)
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		log.Printf("internal error: %v", err)
+		return c.Status(500).JSON(fiber.Map{"error": "internal server error"})
 	}
 
 	// Update status
@@ -633,7 +717,8 @@ func (h *ConsolePersistenceHandlers) UpdateWorkloadDeploymentStatus(c *fiber.Ctx
 
 	updated, err := persistence.UpdateWorkloadDeploymentStatus(c.Context(), deployment)
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		log.Printf("internal error: %v", err)
+		return c.Status(500).JSON(fiber.Map{"error": "internal server error"})
 	}
 
 	return c.JSON(updated)
@@ -646,14 +731,16 @@ func (h *ConsolePersistenceHandlers) DeleteWorkloadDeployment(c *fiber.Ctx) erro
 
 	client, _, err := h.persistenceStore.GetActiveClient(c.Context())
 	if err != nil {
-		return c.Status(503).JSON(fiber.Map{"error": err.Error()})
+		log.Printf("service unavailable: %v", err)
+		return c.Status(503).JSON(fiber.Map{"error": "service unavailable"})
 	}
 
 	namespace := h.persistenceStore.GetNamespace()
 	persistence := k8s.NewConsolePersistence(client)
 
 	if err := persistence.DeleteWorkloadDeployment(c.Context(), namespace, name); err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		log.Printf("internal error: %v", err)
+		return c.Status(500).JSON(fiber.Map{"error": "internal server error"})
 	}
 
 	return c.SendStatus(204)

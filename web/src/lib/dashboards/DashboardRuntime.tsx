@@ -177,6 +177,10 @@ export function DashboardRuntime({
     closeConfigureCard,
     autoRefresh,
     setAutoRefresh,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
   } = dashboard
 
   // Workload drag-drop state for deploying to clusters
@@ -353,7 +357,7 @@ export function DashboardRuntime({
                     <SortableDashboardCard
                       key={card.id}
                       card={card}
-                      onConfigure={() => openConfigureCard(card.id, cards)}
+                      onConfigure={() => openConfigureCard(card.id)}
                       onRemove={() => removeCard(card.id)}
                       onWidthChange={(w) => updateCardWidth(card.id, w)}
                       isDragging={dnd.activeId === card.id}
@@ -387,6 +391,10 @@ export function DashboardRuntime({
           onOpenTemplates={() => enableTemplates && setShowTemplates(true)}
           onResetToDefaults={reset}
           isCustomized={isCustomized}
+          onUndo={undo}
+          onRedo={redo}
+          canUndo={canUndo}
+          canRedo={canRedo}
         />
       )}
 

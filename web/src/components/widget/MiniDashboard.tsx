@@ -15,6 +15,7 @@ import { useTranslation } from 'react-i18next'
 import { LOCAL_AGENT_HTTP_URL, FETCH_DEFAULT_TIMEOUT_MS } from '../../lib/constants'
 import { POLL_INTERVAL_MS } from '../../lib/constants/network'
 import { emitWidgetLoaded, emitWidgetNavigation, emitWidgetInstalled } from '../../lib/analytics'
+import { sendNotificationWithDeepLink } from '../../hooks/useDeepLink'
 
 /** UTM params appended to click-through URLs for GA4 widget campaign attribution */
 const WIDGET_UTM_PARAMS = 'utm_source=widget&utm_medium=pwa&utm_campaign=widget-usage'
@@ -48,14 +49,14 @@ function StatCard({
       disabled={!onClick}
       className={cn(
         'flex flex-col items-center justify-center p-3 rounded-lg',
-        'bg-gray-800/50 border border-gray-700/50',
+        'bg-secondary/50 border border-border/50',
         'transition-all duration-200',
-        onClick && 'hover:bg-gray-700/50 hover:border-gray-600 cursor-pointer'
+        onClick && 'hover:bg-secondary/70 hover:border-border cursor-pointer'
       )}
     >
       <span className={cn('text-2xl font-bold', color)}>{value}</span>
-      <span className="text-xs text-gray-400 mt-1">{label}</span>
-      {subValue && <span className="text-[10px] text-gray-500">{subValue}</span>}
+      <span className="text-xs text-muted-foreground mt-1">{label}</span>
+      {subValue && <span className="text-2xs text-muted-foreground">{subValue}</span>}
     </button>
   )
 }
@@ -164,38 +165,19 @@ export function MiniDashboard() {
       const newOffline = offlineCount - prevOfflineCountRef.current
       if ('Notification' in window && Notification.permission === 'granted' && newOffline > 0) {
         const firstOfflineNode = offlineNodes[0]
-        const nodeNames = offlineNodes.slice(0, 3).map(n => n.name).join(', ')
+        const nodeNames = (offlineNodes || []).slice(0, 3).map(n => n.name).join(', ')
 
-        const notification = new Notification('KubeStellar: Nodes Offline', {
-          body: `${newOffline} node${newOffline > 1 ? 's' : ''} went offline: ${nodeNames}${offlineCount > 3 ? '...' : ''}`,
-          icon: '/kubestellar-logo.svg',
-          tag: 'node-offline', // Prevents duplicate notifications
-          requireInteraction: true, // Keeps notification until dismissed
-        })
-
-        // Deep link to node drilldown when notification is clicked
-        notification.onclick = (event: Event) => {
-          // Prevent default OS behavior (e.g., macOS opening Finder instead of the browser)
-          event.preventDefault()
-          window.focus()
-          if (firstOfflineNode) {
-            // Build deep link URL to node drilldown with widget campaign attribution
-            const params = new URLSearchParams({
-              drilldown: 'node',
-              cluster: firstOfflineNode.cluster || 'unknown',
-              node: firstOfflineNode.name,
-              issue: 'Node went offline',
-              utm_source: 'widget',
-              utm_medium: 'notification',
-              utm_campaign: 'widget-usage',
-            })
-            window.location.href = `${window.location.origin}/?${params.toString()}`
-          } else {
-            // Fallback to main dashboard
-            window.location.href = `${window.location.origin}/?${WIDGET_UTM_PARAMS}`
-          }
-          notification.close()
-        }
+        sendNotificationWithDeepLink(
+          'KubeStellar: Nodes Offline',
+          `${newOffline} node${newOffline > 1 ? 's' : ''} went offline: ${nodeNames}${offlineCount > 3 ? '...' : ''}`,
+          {
+            drilldown: 'node',
+            cluster: firstOfflineNode?.cluster || 'unknown',
+            node: firstOfflineNode?.name || 'unknown',
+            issue: 'Node went offline',
+          },
+          { tag: 'node-offline' }
+        )
       }
     }
     prevOfflineCountRef.current = offlineCount
@@ -278,7 +260,7 @@ export function MiniDashboard() {
     }
 
     const separator = path.includes('?') ? '&' : '?'
-    window.open(`${targetOrigin}${path}${separator}${WIDGET_UTM_PARAMS}`, '_blank')
+    window.open(`${targetOrigin}${path}${separator}${WIDGET_UTM_PARAMS}`, '_blank', 'noopener,noreferrer')
   }, [])
 
   // Open full dashboard in new window
@@ -301,7 +283,7 @@ export function MiniDashboard() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-900 to-gray-800 text-white flex items-center justify-center p-2">
       {/* Fixed-size widget container */}
-      <div className="w-[520px] h-[320px] flex flex-col bg-gray-900/50 rounded-xl border border-gray-700/50 overflow-hidden">
+      <div className="w-[520px] h-[320px] flex flex-col bg-background/50 rounded-xl border border-border/50 overflow-hidden">
         <div className="flex-1 p-4 overflow-auto scroll-enhanced">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
@@ -311,21 +293,21 @@ export function MiniDashboard() {
         </div>
         <div className="flex items-center gap-2">
           {lastUpdated && (
-            <span className="text-xs text-gray-500">
+            <span className="text-xs text-muted-foreground">
               {lastUpdated.toLocaleTimeString()}
             </span>
           )}
           <button
             onClick={handleRefresh}
             disabled={isRefreshing}
-            className="p-1.5 rounded-lg hover:bg-gray-700/50 text-gray-400 hover:text-white transition-colors disabled:opacity-50"
+            className="p-1.5 rounded-lg hover:bg-secondary/50 text-muted-foreground hover:text-white transition-colors disabled:opacity-50"
             title={t('common.refresh')}
           >
             <RefreshCw className={cn('w-4 h-4', isRefreshing && 'animate-spin')} />
           </button>
           <button
             onClick={openFullDashboard}
-            className="p-1.5 rounded-lg hover:bg-gray-700/50 text-gray-400 hover:text-white transition-colors"
+            className="p-1.5 rounded-lg hover:bg-secondary/50 text-muted-foreground hover:text-white transition-colors"
             title="Open full dashboard"
           >
             <Maximize2 className="w-4 h-4" />
@@ -359,7 +341,7 @@ export function MiniDashboard() {
         <StatCard
           label="Pod Issues"
           value={totalIssues}
-          color={totalIssues > 0 ? 'text-orange-400' : 'text-gray-400'}
+          color={totalIssues > 0 ? 'text-orange-400' : 'text-muted-foreground'}
           subValue={criticalIssues > 0 ? `${criticalIssues} critical` : undefined}
           onClick={() => openInBrowser('/pods?card=pod_issues')}
         />
@@ -387,7 +369,7 @@ export function MiniDashboard() {
       {/* Issues List (if any) */}
       {totalIssues > 0 && (
         <div className="mb-4">
-          <h2 className="text-xs font-medium text-gray-400 mb-2">Recent Issues</h2>
+          <h2 className="text-xs font-medium text-muted-foreground mb-2">Recent Issues</h2>
           <div className="space-y-1 max-h-32 overflow-y-auto">
             {podIssues?.slice(0, 5).map((issue, i) => {
               const isCritical = issue.status === 'CrashLoopBackOff' || issue.status === 'OOMKilled' || issue.status === 'Error'
@@ -395,7 +377,7 @@ export function MiniDashboard() {
                 <button
                   key={i}
                   onClick={() => openInBrowser(`/pods?search=${encodeURIComponent(issue.name)}`)}
-                  className="w-full flex items-center gap-2 text-xs p-2 rounded bg-gray-800/50 border border-gray-700/30 hover:bg-gray-700/50 hover:border-gray-600 transition-colors text-left"
+                  className="w-full flex items-center gap-2 text-xs p-2 rounded bg-secondary/50 border border-border/30 hover:bg-secondary/70 hover:border-border transition-colors text-left"
                 >
                   <span
                     className={cn(
@@ -403,8 +385,8 @@ export function MiniDashboard() {
                       isCritical ? 'bg-red-500' : 'bg-orange-500'
                     )}
                   />
-                  <span className="truncate text-gray-300">{issue.name}</span>
-                  <span className="text-gray-500 ml-auto flex-shrink-0">{issue.reason || issue.status}</span>
+                  <span className="truncate text-foreground">{issue.name}</span>
+                  <span className="text-muted-foreground ml-auto flex-shrink-0">{issue.reason || issue.status}</span>
                 </button>
               )
             })}
@@ -415,7 +397,7 @@ export function MiniDashboard() {
         </div>{/* End scrollable content */}
 
         {/* Footer / Install Prompt */}
-        <div className="p-3 bg-gray-900/90 border-t border-gray-700/50 flex-shrink-0">
+        <div className="p-3 bg-background/90 border-t border-border/50 flex-shrink-0">
         {!isInstalled && installPrompt ? (
           <button
             onClick={handleInstall}
@@ -425,22 +407,22 @@ export function MiniDashboard() {
             Install as Desktop Widget
           </button>
         ) : !isInstalled ? (
-          <div className="text-center text-xs text-gray-500 space-y-1">
+          <div className="text-center text-xs text-muted-foreground space-y-1">
             {isSafariBrowser ? (
               <p>Safari: <strong>File → Add to Dock</strong> to install</p>
             ) : (
               <>
                 <p className="text-yellow-500/80">⚠️ Install from THIS page for the mini widget</p>
-                <p>Click <strong className="text-gray-300">Open in app</strong> in your address bar</p>
+                <p>Click <strong className="text-foreground">Open in app</strong> in your address bar</p>
               </>
             )}
           </div>
         ) : (
-          <div className="flex items-center justify-between text-xs text-gray-500">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span>Nodes Widget</span>
             <button
               onClick={openFullDashboard}
-              className="flex items-center gap-1 hover:text-gray-400 transition-colors"
+              className="flex items-center gap-1 hover:text-muted-foreground transition-colors"
             >
               <Maximize2 className="w-3 h-3" />
               Open Full Dashboard

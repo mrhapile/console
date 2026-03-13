@@ -13,7 +13,7 @@ export function AgentIcon({ provider, className = 'w-5 h-5' }: AgentIconProps) {
       return (
         <svg className={className} viewBox="0 0 24 24" fill="currentColor">
           {/* Claude/Anthropic icon - stylized A */}
-          <path d="M12.04 2L1 22h5.48l2.49-4.71h6.06L17.52 22H23L12.04 2zm-.09 5.65l2.67 5.05H9.28l2.67-5.05z" className="fill-amber-600" />
+          <path d="M12.04 2L1 22h5.48l2.49-4.71h6.06L17.52 22H23L12.04 2zm-.09 5.65l2.67 5.05H9.28l2.67-5.05z" className="fill-yellow-600" />
         </svg>
       )
     case 'openai':
@@ -28,7 +28,7 @@ export function AgentIcon({ provider, className = 'w-5 h-5' }: AgentIconProps) {
         <svg className={className} viewBox="0 0 24 24" fill="currentColor">
           {/* Codex - OpenAI logo with terminal indicator */}
           <path d="M22.282 9.821a5.985 5.985 0 0 0-.516-4.91 6.046 6.046 0 0 0-6.51-2.9A6.065 6.065 0 0 0 4.981 4.18a5.985 5.985 0 0 0-3.998 2.9 6.046 6.046 0 0 0 .743 7.097 5.98 5.98 0 0 0 .51 4.911 6.051 6.051 0 0 0 6.515 2.9A5.985 5.985 0 0 0 13.26 24a6.056 6.056 0 0 0 5.772-4.206 5.99 5.99 0 0 0 3.997-2.9 6.056 6.056 0 0 0-.747-7.073z" style={{ fill: 'var(--agent-openai)' }} />
-          <circle cx="18" cy="6" r="4" className="fill-amber-500" />
+          <circle cx="18" cy="6" r="4" className="fill-yellow-500" />
           <text x="18" y="8" textAnchor="middle" fill="white" fontSize="5" fontWeight="bold">&gt;</text>
         </svg>
       )
@@ -68,8 +68,8 @@ export function AgentIcon({ provider, className = 'w-5 h-5' }: AgentIconProps) {
       return (
         <svg className={className} viewBox="0 0 24 24" fill="currentColor">
           {/* Cursor icon - stylized cursor/pointer */}
-          <path d="M5 3l14 9-6 2-4 8-4-19z" className="fill-indigo-500" />
-          <path d="M13 14l4-2-8-5 4 11 2-4h2z" className="fill-indigo-400" />
+          <path d="M5 3l14 9-6 2-4 8-4-19z" className="fill-blue-500" />
+          <path d="M13 14l4-2-8-5 4 11 2-4h2z" className="fill-blue-400" />
         </svg>
       )
     case 'microsoft':
@@ -132,7 +132,7 @@ export function AgentIcon({ provider, className = 'w-5 h-5' }: AgentIconProps) {
       return (
         <svg className={className} viewBox="0 0 24 24" fill="currentColor">
           {/* Open WebUI icon - chat bubble with gear */}
-          <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5A8.48 8.48 0 0 1 21 11v.5z" className="fill-violet-500" />
+          <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5A8.48 8.48 0 0 1 21 11v.5z" className="fill-purple-500" />
           <circle cx="12" cy="11" r="2" fill="white" />
         </svg>
       )
@@ -141,19 +141,19 @@ export function AgentIcon({ provider, className = 'w-5 h-5' }: AgentIconProps) {
         <svg className={className} viewBox="0 0 100 100" fill="none">
           {/* Bob icon - robot with hard hat and code brackets */}
           {/* Hard hat */}
-          <ellipse cx="50" cy="22" rx="32" ry="18" className="fill-indigo-600" />
-          <rect x="18" y="20" width="64" height="8" rx="2" className="fill-indigo-800" />
+          <ellipse cx="50" cy="22" rx="32" ry="18" className="fill-blue-600" />
+          <rect x="18" y="20" width="64" height="8" rx="2" className="fill-blue-800" />
           {/* Robot head/body */}
           <rect x="20" y="28" width="60" height="55" rx="12" className="fill-gray-50 stroke-gray-200" strokeWidth="2" />
           {/* Eyes */}
           <circle cx="38" cy="48" r="8" className="fill-gray-800" />
-          <circle cx="62" cy="48" r="8" className="fill-indigo-600" />
+          <circle cx="62" cy="48" r="8" className="fill-blue-600" />
           <circle cx="40" cy="46" r="2" fill="white" />
           <circle cx="64" cy="46" r="2" fill="white" />
           {/* Code brackets </> */}
-          <path d="M35 62 L25 70 L35 78" className="stroke-indigo-600" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-          <path d="M65 62 L75 70 L65 78" className="stroke-indigo-600" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-          <path d="M45 60 L55 80" className="stroke-indigo-600" strokeWidth="4" strokeLinecap="round" fill="none" />
+          <path d="M35 62 L25 70 L35 78" className="stroke-blue-600" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+          <path d="M65 62 L75 70 L65 78" className="stroke-blue-600" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+          <path d="M45 60 L55 80" className="stroke-blue-600" strokeWidth="4" strokeLinecap="round" fill="none" />
           {/* Side panels (ears) */}
           <rect x="8" y="40" width="12" height="20" rx="3" className="fill-gray-400" />
           <rect x="80" y="40" width="12" height="20" rx="3" className="fill-gray-400" />
@@ -166,7 +166,7 @@ export function AgentIcon({ provider, className = 'w-5 h-5' }: AgentIconProps) {
       return (
         <svg className={className} viewBox="0 0 24 24" fill="currentColor">
           {/* Claude Code local icon - A with terminal prompt */}
-          <path d="M12.04 2L1 22h5.48l2.49-4.71h6.06L17.52 22H23L12.04 2zm-.09 5.65l2.67 5.05H9.28l2.67-5.05z" className="fill-amber-600" />
+          <path d="M12.04 2L1 22h5.48l2.49-4.71h6.06L17.52 22H23L12.04 2zm-.09 5.65l2.67 5.05H9.28l2.67-5.05z" className="fill-yellow-600" />
           <circle cx="18" cy="6" r="4" className="fill-green-500" />
         </svg>
       )
@@ -193,7 +193,7 @@ interface AgentBadgeProps {
 
 export function AgentBadge({ provider, name, className = '' }: AgentBadgeProps) {
   return (
-    <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 ${className}`}>
+    <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-gray-100 dark:bg-secondary text-gray-700 dark:text-foreground ${className}`}>
       <AgentIcon provider={provider} className="w-3.5 h-3.5" />
       {name}
     </span>

@@ -5,6 +5,7 @@ import { Play, RotateCcw, Pause, Trophy, Heart, Star } from 'lucide-react'
 import { useCardExpanded } from './CardWrapper'
 import { useReportCardDataState } from './CardDataContext'
 import { useTranslation } from 'react-i18next'
+import { emitGameStarted, emitGameEnded } from '../../lib/analytics'
 
 // Game constants
 const CANVAS_WIDTH = 480
@@ -77,7 +78,7 @@ interface Coin {
 
 export function PodBrothers() {
   const { t: _t } = useTranslation()
-  useReportCardDataState({ hasData: true, isFailed: false, consecutiveFailures: 0 })
+  useReportCardDataState({ hasData: true, isFailed: false, consecutiveFailures: 0, isDemoData: false })
   const { isExpanded } = useCardExpanded()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [gameState, setGameState] = useState<'idle' | 'playing' | 'paused' | 'won' | 'lost'>('idle')
@@ -162,17 +163,17 @@ export function PodBrothers() {
     const keys = keysRef.current
 
     // Handle input
-    if (keys.has('ArrowLeft') || keys.has('a')) {
+    if (keys.has('ArrowLeft') || keys.has('a') || keys.has('A')) {
       player.vx = -MOVE_SPEED
       player.facingRight = false
-    } else if (keys.has('ArrowRight') || keys.has('d')) {
+    } else if (keys.has('ArrowRight') || keys.has('d') || keys.has('D')) {
       player.vx = MOVE_SPEED
       player.facingRight = true
     } else {
       player.vx = 0
     }
 
-    if ((keys.has('ArrowUp') || keys.has('w') || keys.has(' ')) && player.onGround) {
+    if ((keys.has('ArrowUp') || keys.has('w') || keys.has('W') || keys.has(' ')) && player.onGround) {
       player.vy = JUMP_FORCE
       player.onGround = false
     }
@@ -240,6 +241,7 @@ export function PodBrothers() {
       setLives(l => {
         if (l <= 1) {
           setGameState('lost')
+          setScore(s => { emitGameEnded('pod_brothers', 'loss', s); return s })
           return 0
         }
         initLevel()
@@ -281,6 +283,7 @@ export function PodBrothers() {
           setLives(l => {
             if (l <= 1) {
               setGameState('lost')
+              setScore(s => { emitGameEnded('pod_brothers', 'loss', s); return s })
               return 0
             }
             initLevel()
@@ -320,6 +323,7 @@ export function PodBrothers() {
             setHighScore(finalScore)
             localStorage.setItem('podBrothersHighScore', finalScore.toString())
           }
+          emitGameEnded('pod_brothers', 'win', finalScore)
           return finalScore
         })
         setGameState('won')
@@ -452,11 +456,11 @@ export function PodBrothers() {
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) {
         e.preventDefault()
       }
-      keysRef.current.add(e.key.toLowerCase())
+      keysRef.current.add(e.key)
     }
 
     const handleKeyUp = (e: KeyboardEvent) => {
-      keysRef.current.delete(e.key.toLowerCase())
+      keysRef.current.delete(e.key)
     }
 
     window.addEventListener('keydown', handleKeyDown)
@@ -480,6 +484,7 @@ export function PodBrothers() {
     setScore(0)
     setLives(3)
     setGameState('playing')
+    emitGameStarted('pod_brothers')
   }
 
   const togglePause = () => {

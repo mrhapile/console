@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, startTransition, type ReactNode } from 'react'
+import { useState, useEffect, useCallback, startTransition, useRef, type ReactNode } from 'react'
 import { Sparkles, Loader2, CheckCircle, AlertTriangle, RotateCw, Save } from 'lucide-react'
 import { useMissions } from '../../hooks/useMissions'
 import { useApiKeyCheck, ApiKeyPromptModal } from '../cards/console-missions/shared'
@@ -33,6 +33,13 @@ export function AiGenerationPanel<T>({
   const [streamingText, setStreamingText] = useState('')
   const [parsedResult, setParsedResult] = useState<T | null>(null)
   const [parseError, setParseError] = useState<string | null>(null)
+  const closeSidebarTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (closeSidebarTimeoutRef.current !== null) clearTimeout(closeSidebarTimeoutRef.current)
+    }
+  }, [])
 
   const { startMission, missions, closeSidebar } = useMissions()
   const { showKeyPrompt, checkKeyAndRun, goToSettings, dismissPrompt } = useApiKeyCheck()
@@ -99,7 +106,8 @@ export function AiGenerationPanel<T>({
       setParsedResult(null)
       setParseError(null)
       // Close sidebar so modal stays focused
-      setTimeout(() => closeSidebar(), CLOSE_ANIMATION_MS)
+      if (closeSidebarTimeoutRef.current !== null) clearTimeout(closeSidebarTimeoutRef.current)
+      closeSidebarTimeoutRef.current = setTimeout(() => closeSidebar(), CLOSE_ANIMATION_MS)
     })
   }, [userPrompt, systemPrompt, missionTitle, startMission, closeSidebar, checkKeyAndRun])
 
@@ -141,7 +149,7 @@ export function AiGenerationPanel<T>({
               rows={4}
               className="w-full text-sm px-3 py-2 rounded-md bg-secondary border border-border text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-purple-500/50"
             />
-            <p className="text-[10px] text-muted-foreground/50 mt-1">
+            <p className="text-2xs text-muted-foreground/50 mt-1">
               Press Cmd+Enter to generate
             </p>
           </div>
@@ -157,7 +165,7 @@ export function AiGenerationPanel<T>({
                     <summary className="text-muted-foreground cursor-pointer hover:text-foreground">
                       View raw AI output
                     </summary>
-                    <pre className="mt-1 p-2 bg-secondary rounded text-[10px] text-muted-foreground overflow-x-auto max-h-40 whitespace-pre-wrap">
+                    <pre className="mt-1 p-2 bg-secondary rounded text-2xs text-muted-foreground overflow-x-auto max-h-40 whitespace-pre-wrap">
                       {streamingText}
                     </pre>
                   </details>
@@ -198,7 +206,7 @@ export function AiGenerationPanel<T>({
             rows={12}
             className="w-full text-xs px-3 py-2 rounded-md bg-secondary border border-border text-foreground font-mono focus:outline-none leading-relaxed"
           />
-          <p className="text-[10px] text-muted-foreground/50 text-center">
+          <p className="text-2xs text-muted-foreground/50 text-center">
             The AI is generating your definition. This may take a moment.
           </p>
         </div>

@@ -1,14 +1,17 @@
 import { useMemo, useEffect } from 'react'
 import { AlertTriangle, Info, AlertCircle, Clock, ChevronRight } from 'lucide-react'
-import { useClusters, useWarningEvents, useNamespaces, type ClusterEvent } from '../../hooks/useMCP'
+import { useClusters, type ClusterEvent } from '../../hooks/useMCP'
+import { useCachedWarningEvents, useCachedNamespaces } from '../../hooks/useCachedData'
 import { useDrillDownActions } from '../../hooks/useDrillDown'
 import { ClusterBadge } from '../ui/ClusterBadge'
+import { StatusBadge } from '../ui/StatusBadge'
 import {
   useCardData, useCascadingSelection, commonComparators,
   CardSkeleton, CardSearchInput, CardControlsRow, CardPaginationFooter,
 } from '../../lib/cards'
 import { useCardLoadingState } from './CardDataContext'
 import { useTranslation } from 'react-i18next'
+import { useDemoMode } from '../../hooks/useDemoMode'
 
 interface NamespaceEventsProps {
   config?: {
@@ -45,8 +48,9 @@ export function NamespaceEvents({ config }: NamespaceEventsProps) {
     [t]
   )
   const { isLoading: clustersLoading } = useClusters()
-  const { events: allEvents, isLoading: eventsLoading } = useWarningEvents()
+  const { events: allEvents, isLoading: eventsLoading, isDemoFallback: eventsDemoFallback } = useCachedWarningEvents()
   const { drillToEvents } = useDrillDownActions()
+  const { isDemoMode } = useDemoMode()
 
   const isLoading = clustersLoading || eventsLoading
 
@@ -54,6 +58,7 @@ export function NamespaceEvents({ config }: NamespaceEventsProps) {
   const { showSkeleton, showEmptyState } = useCardLoadingState({
     isLoading,
     hasAnyData: allEvents.length > 0,
+    isDemoData: eventsDemoFallback || isDemoMode,
   })
 
   // Use cascading selection hook for cluster -> namespace
@@ -80,7 +85,7 @@ export function NamespaceEvents({ config }: NamespaceEventsProps) {
   }, [])
 
   // Fetch namespaces for the selected cluster
-  const { namespaces } = useNamespaces(selectedCluster || undefined)
+  const { namespaces } = useCachedNamespaces(selectedCluster || undefined)
 
   // Pre-filter by selected cluster/namespace (card-specific cascading selection)
   const preFilteredEvents = useMemo(() => {
@@ -121,6 +126,8 @@ export function NamespaceEvents({ config }: NamespaceEventsProps) {
       sortDirection,
       setSortDirection,
     },
+    containerRef,
+    containerStyle,
   } = useCardData<ClusterEvent, SortByOption>(preFilteredEvents, {
     filter: {
       searchFields: ['message', 'object', 'namespace', 'type', 'reason'],
@@ -177,9 +184,9 @@ export function NamespaceEvents({ config }: NamespaceEventsProps) {
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           {totalItems > 0 && (
-            <span className="text-xs px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-400">
+            <StatusBadge color="orange">
               {t('namespaceEvents.nEvents', { count: totalItems })}
-            </span>
+            </StatusBadge>
           )}
         </div>
         <CardControlsRow
@@ -255,7 +262,7 @@ export function NamespaceEvents({ config }: NamespaceEventsProps) {
       />
 
       {/* Events list */}
-      <div className="flex-1 space-y-2 overflow-y-auto">
+      <div ref={containerRef} className="flex-1 space-y-2 overflow-y-auto" style={containerStyle}>
         {filteredEvents.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <div className="w-10 h-10 rounded-full bg-green-500/10 flex items-center justify-center mb-2">

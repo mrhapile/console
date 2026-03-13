@@ -44,7 +44,7 @@ const DEMO_NAMESPACE_COSTS: NamespaceCost[] = [
 function OpenCostOverviewInternal({ config: _config }: OpenCostOverviewProps) {
   const { t } = useTranslation('common')
   const { drillToCost } = useDrillDownActions()
-  useReportCardDataState({ hasData: true, isFailed: false, consecutiveFailures: 0 })
+  useReportCardDataState({ hasData: true, isFailed: false, consecutiveFailures: 0, isDemoData: false })
 
   const {
     items: filteredCosts,
@@ -72,6 +72,8 @@ function OpenCostOverviewInternal({ config: _config }: OpenCostOverviewProps) {
       sortDirection,
       setSortDirection,
     },
+    containerRef,
+    containerStyle,
   } = useCardData<NamespaceCost, SortByOption>(DEMO_NAMESPACE_COSTS, {
     filter: {
       searchFields: ['namespace'],
@@ -151,7 +153,7 @@ function OpenCostOverviewInternal({ config: _config }: OpenCostOverviewProps) {
           <p className="text-blue-400 font-medium">OpenCost Integration</p>
           <p className="text-muted-foreground">
             Install OpenCost in your cluster to get real cost allocation data.{' '}
-            <a href="https://www.opencost.io/docs/installation/install" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:underline">
+            <a href="https://www.opencost.io/docs/installation/install" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:underline inline-block py-2">
               Install guide →
             </a>
           </p>
@@ -165,7 +167,7 @@ function OpenCostOverviewInternal({ config: _config }: OpenCostOverviewProps) {
       </div>
 
       {/* Namespace costs */}
-      <div className="flex-1 overflow-y-auto space-y-2">
+      <div ref={containerRef} className="flex-1 overflow-y-auto space-y-2" style={containerStyle}>
         <p className="text-xs text-muted-foreground font-medium mb-2">Cost by Namespace</p>
         {filteredCosts.map(ns => (
           <div
@@ -196,7 +198,7 @@ function OpenCostOverviewInternal({ config: _config }: OpenCostOverviewProps) {
                 style={{ width: `${(ns.totalCost / maxCost) * 100}%` }}
               />
             </div>
-            <div className="flex gap-3 text-[10px] text-muted-foreground">
+            <div className="flex gap-3 text-2xs text-muted-foreground">
               <span className="flex items-center gap-1">
                 <Server className="w-2.5 h-2.5" />
                 CPU: ${ns.cpuCost}

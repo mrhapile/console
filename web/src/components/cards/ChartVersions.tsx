@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { Package } from 'lucide-react'
-import { useClusters, useHelmReleases } from '../../hooks/useMCP'
+import { useClusters } from '../../hooks/useMCP'
+import { useCachedHelmReleases } from '../../hooks/useCachedData'
 import { ClusterBadge } from '../ui/ClusterBadge'
 import {
   useCardData, commonComparators,
@@ -41,7 +42,8 @@ export function ChartVersions({ config: _config }: ChartVersionsProps) {
     isLoading: releasesLoading,
     isFailed,
     consecutiveFailures,
-  } = useHelmReleases()
+    isDemoFallback: isDemoData,
+  } = useCachedHelmReleases()
 
   // Report loading state to CardWrapper for skeleton/refresh behavior
   const { showSkeleton, showEmptyState } = useCardLoadingState({
@@ -49,6 +51,7 @@ export function ChartVersions({ config: _config }: ChartVersionsProps) {
     hasAnyData: allHelmReleases.length > 0,
     isFailed,
     consecutiveFailures,
+    isDemoData,
   })
 
   // Transform Helm releases to chart info
@@ -96,6 +99,8 @@ export function ChartVersions({ config: _config }: ChartVersionsProps) {
       sortDirection,
       setSortDirection,
     },
+    containerRef,
+    containerStyle,
   } = useCardData<ChartInfo, SortByOption>(allCharts, {
     filter: {
       searchFields: ['name', 'chart', 'namespace', 'version'],
@@ -178,8 +183,8 @@ export function ChartVersions({ config: _config }: ChartVersionsProps) {
 
           {/* Summary */}
           <div className="flex gap-2 mb-4">
-            <div className="flex-1 p-2 rounded-lg bg-emerald-500/10 text-center">
-              <span className="text-lg font-bold text-emerald-400">{allCharts.length}</span>
+            <div className="flex-1 p-2 rounded-lg bg-green-500/10 text-center">
+              <span className="text-lg font-bold text-green-400">{allCharts.length}</span>
               <p className="text-xs text-muted-foreground">Releases</p>
             </div>
             <div className="flex-1 p-2 rounded-lg bg-blue-500/10 text-center">
@@ -189,7 +194,7 @@ export function ChartVersions({ config: _config }: ChartVersionsProps) {
           </div>
 
           {/* Charts list */}
-          <div className="flex-1 space-y-2 overflow-y-auto">
+          <div ref={containerRef} className="flex-1 space-y-2 overflow-y-auto" style={containerStyle}>
             {charts.length === 0 ? (
               <div className="flex items-center justify-center text-muted-foreground text-sm py-4">
                 No Helm releases found
@@ -202,7 +207,7 @@ export function ChartVersions({ config: _config }: ChartVersionsProps) {
                 >
                   <div className="flex items-center justify-between mb-1 gap-2 min-w-0">
                     <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <Package className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <Package className="w-4 h-4 text-green-400 shrink-0" />
                       <span className="text-sm text-foreground font-medium truncate">{chart.name}</span>
                     </div>
                     {chart.cluster && <ClusterBadge cluster={chart.cluster} size="sm" />}

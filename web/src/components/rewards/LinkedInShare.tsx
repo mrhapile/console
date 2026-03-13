@@ -4,8 +4,11 @@
 
 import { useState } from 'react'
 import { Linkedin, Share2, Coins, CheckCircle2 } from 'lucide-react'
+import { StatusBadge } from '../ui/StatusBadge'
+import { Button } from '../ui/Button'
 import { useRewards } from '../../hooks/useRewards'
 import { useTranslation } from 'react-i18next'
+import { emitLinkedInShare } from '../../lib/analytics'
 
 const LINKEDIN_SHARE_URL = 'https://www.linkedin.com/sharing/share-offsite/'
 const KUBESTELLAR_URL = 'https://kubestellar.io'
@@ -20,7 +23,8 @@ export function LinkedInShareButton() {
   const handleShare = () => {
     // Open LinkedIn share dialog
     const shareUrl = `${LINKEDIN_SHARE_URL}?url=${encodeURIComponent(KUBESTELLAR_URL)}`
-    window.open(shareUrl, '_blank', 'width=600,height=600')
+    window.open(shareUrl, '_blank', 'noopener,noreferrer,width=600,height=600')
+    emitLinkedInShare('rewards_panel')
 
     // Show confirmation dialog
     setShowConfirm(true)
@@ -40,12 +44,12 @@ export function LinkedInShareButton() {
       >
         <Linkedin className="w-4 h-4" />
         Share on LinkedIn
-        <span className="px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400 text-xs">+200</span>
+        <StatusBadge color="yellow">+200</StatusBadge>
       </button>
 
       {/* Confirmation Modal */}
       {showConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-2xl">
           <div className="bg-card border border-border rounded-xl shadow-2xl w-full max-w-sm mx-4 p-6">
             <div className="text-center">
               <div className="w-14 h-14 rounded-full bg-blue-600/20 flex items-center justify-center mx-auto mb-4">
@@ -64,18 +68,22 @@ export function LinkedInShareButton() {
               </div>
 
               <div className="flex gap-2">
-                <button
+                <Button
+                  variant="secondary"
+                  size="lg"
                   onClick={() => setShowConfirm(false)}
-                  className="flex-1 px-4 py-2 rounded-lg bg-secondary hover:bg-secondary/80 text-foreground text-sm transition-colors"
+                  className="flex-1"
                 >
                   Not yet
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="primary"
+                  size="lg"
                   onClick={handleConfirmShare}
-                  className="flex-1 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors"
+                  className="flex-1"
                 >
                   Yes, I shared!
-                </button>
+                </Button>
               </div>
 
               {shareCount > 0 && (

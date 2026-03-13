@@ -3,7 +3,10 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { Download } from 'lucide-react'
 import { useVersionCheck } from '../../../hooks/useVersionCheck'
+import { useFeatureHints } from '../../../hooks/useFeatureHints'
+import { FeatureHintTooltip } from '../../ui/FeatureHintTooltip'
 import { getSettingsWithHash } from '../../../config/routes'
+import { isDemoMode } from '../../../lib/demoMode'
 
 export function UpdateIndicator() {
   const navigate = useNavigate()
@@ -11,6 +14,7 @@ export function UpdateIndicator() {
   const { hasUpdate, latestRelease, channel, autoUpdateStatus, latestMainSHA, skipVersion } = useVersionCheck()
   const [showUpdateDropdown, setShowUpdateDropdown] = useState(false)
   const updateRef = useRef<HTMLDivElement>(null)
+  const updateHint = useFeatureHints('update-available')
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -23,7 +27,8 @@ export function UpdateIndicator() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  if (!hasUpdate) {
+  // Don't show update indicator in demo mode — demo users can't update
+  if (!hasUpdate || isDemoMode()) {
     return null
   }
 
@@ -42,13 +47,25 @@ export function UpdateIndicator() {
   return (
     <div className="relative" ref={updateRef}>
       <button
-        onClick={() => setShowUpdateDropdown(!showUpdateDropdown)}
+        onClick={() => {
+          setShowUpdateDropdown(!showUpdateDropdown)
+          updateHint.action()
+        }}
         className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-green-500/10 text-green-400 hover:bg-green-500/20 transition-colors"
         title={isDeveloperUpdate ? updateLabel : t('update.availableTag', { tag: latestRelease?.tag ?? '' })}
       >
         <Download className="w-4 h-4" />
         <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
       </button>
+
+      {/* First-time hint: show users how to update */}
+      {updateHint.isVisible && !showUpdateDropdown && (
+        <FeatureHintTooltip
+          message="An update is available — click here to see what's new and how to update"
+          onDismiss={updateHint.dismiss}
+          placement="bottom-right"
+        />
+      )}
 
       {showUpdateDropdown && (
         <div className="absolute top-full right-0 mt-2 w-64 bg-card border border-border rounded-lg shadow-xl z-50">

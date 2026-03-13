@@ -4,6 +4,7 @@ import { CardComponentProps } from './cardRegistry'
 import { useCardExpanded } from './CardWrapper'
 import { useReportCardDataState } from './CardDataContext'
 import { useTranslation } from 'react-i18next'
+import { emitGameStarted, emitGameEnded } from '../../lib/analytics'
 
 // Game constants
 const CELL_SIZE = 16
@@ -118,7 +119,7 @@ function moveInDir(pos: Position, dir: Direction): Position {
 
 export function KubeMan(_props: CardComponentProps) {
   const { t: _t } = useTranslation()
-  useReportCardDataState({ hasData: true, isFailed: false, consecutiveFailures: 0 })
+  useReportCardDataState({ hasData: true, isFailed: false, consecutiveFailures: 0, isDemoData: false })
   const { isExpanded } = useCardExpanded()
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -371,6 +372,7 @@ export function KubeMan(_props: CardComponentProps) {
             if (l <= 1) {
               setGameOver(true)
               setIsPlaying(false)
+              setScore(s => { emitGameEnded('kube_man', 'loss', s); return s })
               return 0
             }
             // Reset positions after animation
@@ -528,6 +530,7 @@ export function KubeMan(_props: CardComponentProps) {
         setWon(true)
         setGameOver(true)
         setIsPlaying(false)
+        setScore(s => { emitGameEnded('kube_man', 'win', s); return s })
       }
 
       // Draw
@@ -592,6 +595,7 @@ export function KubeMan(_props: CardComponentProps) {
     setPowerMode(false)
     setDeathAnimation({ active: false, frame: 0, maxFrames: 60 })
     setIsPlaying(true)
+    emitGameStarted('kube_man')
   }, [])
 
   const scale = isExpanded ? 1.5 : 1

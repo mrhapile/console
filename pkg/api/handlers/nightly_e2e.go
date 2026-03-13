@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"regexp"
 	"strings"
@@ -319,7 +320,10 @@ func (h *NightlyE2EHandler) fetchWorkflowRuns(wf NightlyWorkflow) ([]NightlyRun,
 		return []NightlyRun{}, nil
 	}
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			body = []byte("(failed to read response body)")
+		}
 		return nil, fmt.Errorf("GitHub API returned %d: %s", resp.StatusCode, string(body))
 	}
 
@@ -709,7 +713,8 @@ func (h *NightlyE2EHandler) GetRunLogs(c *fiber.Ctx) error {
 
 	req, err := http.NewRequest("GET", jobsURL, nil)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		log.Printf("internal error: %v", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
 	}
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
 	if h.githubToken != "" {
@@ -718,12 +723,16 @@ func (h *NightlyE2EHandler) GetRunLogs(c *fiber.Ctx) error {
 
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
-		return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{"error": err.Error()})
+		log.Printf("bad gateway: %v", err)
+		return c.Status(fiber.StatusBadGateway).JSON(fiber.Map{"error": "bad gateway"})
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			body = []byte("(failed to read response body)")
+		}
 		return c.Status(resp.StatusCode).JSON(fiber.Map{
 			"error": fmt.Sprintf("GitHub API returned %d: %s", resp.StatusCode, string(body)),
 		})
@@ -737,7 +746,8 @@ func (h *NightlyE2EHandler) GetRunLogs(c *fiber.Ctx) error {
 		} `json:"jobs"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&jobData); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		log.Printf("internal error: %v", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "internal server error"})
 	}
 
 	// Fetch logs for failed jobs concurrently (limit concurrency)

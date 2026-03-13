@@ -26,6 +26,7 @@ import { ReactNode, useState, useEffect, useRef } from 'react'
 import { Copy, Check, ChevronDown, ChevronRight, ExternalLink, AlertCircle } from 'lucide-react'
 import { getStatusColors, NavigationTarget } from './types'
 import { UI_FEEDBACK_TIMEOUT_MS } from '../constants/network'
+import { Button } from '../../components/ui/Button'
 
 // ============================================================================
 // Key-Value Section
@@ -166,17 +167,17 @@ function KeyValueItem({
       <dd className="text-sm text-foreground flex items-center gap-2">
         {renderValue()}
         {(item.copyable || item.render === 'copyable') && (
-          <button
+          <Button
+            variant="ghost"
             onClick={handleCopy}
-            className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+            className="p-1 rounded-md"
             title="Copy to clipboard"
-          >
-            {copied ? (
+            icon={copied ? (
               <Check className="w-3 h-3 text-green-400" />
             ) : (
               <Copy className="w-3 h-3" />
             )}
-          </button>
+          />
         )}
       </dd>
     </div>
@@ -289,6 +290,10 @@ export function TableSection<T extends Record<string, unknown>>({
                 onRowClick ? 'cursor-pointer hover:bg-secondary/50' : ''
               }`}
               onClick={() => onRowClick?.(row)}
+              {...(onRowClick ? {
+                tabIndex: 0,
+                onKeyDown: (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onRowClick(row) } },
+              } : {})}
             >
               {columns.map((column) => (
                 <td
@@ -430,12 +435,13 @@ export function EmptySection({
         <p className="text-sm text-muted-foreground mb-4">{message}</p>
       )}
       {action && (
-        <button
+        <Button
+          variant="accent"
+          size="lg"
           onClick={action.onClick}
-          className="px-4 py-2 bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 rounded-lg text-sm font-medium transition-colors"
         >
           {action.label}
-        </button>
+        </Button>
       )}
     </div>
   )
@@ -487,6 +493,11 @@ export function BadgesSection({ badges, className = '' }: BadgesSectionProps) {
         <span
           key={index}
           onClick={badge.onClick}
+          {...(badge.onClick ? {
+            role: 'button' as const,
+            tabIndex: 0,
+            onKeyDown: (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); badge.onClick!() } },
+          } : {})}
           className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${
             badge.color || 'bg-secondary text-muted-foreground'
           } ${badge.onClick ? 'cursor-pointer hover:opacity-80' : ''}`}

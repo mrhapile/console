@@ -87,13 +87,13 @@ function RunDot({ run, guide, isHighlighted, onMouseEnter, onMouseLeave }: {
   const color = isRunning
     ? 'bg-blue-400'
     : run.conclusion === 'success'
-      ? 'bg-emerald-400'
+      ? 'bg-green-400'
       : isGPUFailure
-        ? 'bg-amber-400'
+        ? 'bg-yellow-400'
         : isFailed
           ? 'bg-red-400'
           : run.conclusion === 'cancelled'
-            ? 'bg-slate-500'
+            ? 'bg-gray-500'
             : 'bg-yellow-400'
 
   const reasonLabel = isGPUFailure ? 'GPU unavailable' : ''
@@ -195,8 +195,9 @@ Please provide:
     })
   }, [guide, run, checkKeyAndRun, startMission])
 
-  const llmdImages = guide?.llmdImages
-  const otherImages = guide?.otherImages
+  // Prefer per-run images (from workflow artifact) over guide-level fallback
+  const llmdImages = run.llmdImages ?? guide?.llmdImages
+  const otherImages = run.otherImages ?? guide?.otherImages
   const hasLLMDImages = llmdImages && Object.keys(llmdImages).length > 0
   const hasOtherImages = otherImages && Object.keys(otherImages).length > 0
 
@@ -225,30 +226,30 @@ Please provide:
           onMouseEnter={cancelHide}
           onMouseLeave={scheduleHide}
         >
-          <div className="mb-1.5 bg-slate-800 border border-slate-600 rounded-lg shadow-xl px-2.5 py-1.5 text-[10px]">
+          <div className="mb-1.5 bg-secondary border border-border rounded-lg shadow-xl px-2.5 py-1.5 text-2xs">
             {/* Run status line */}
-            <div className="text-slate-300 mb-1 whitespace-nowrap">
+            <div className="text-foreground mb-1 whitespace-nowrap">
               Run #{run.runNumber} &middot;{' '}
               {isRunning
                 ? <span className="text-blue-400">running</span>
                 : isGPUFailure
-                  ? <span className="text-amber-400">GPU unavailable</span>
+                  ? <span className="text-yellow-400">GPU unavailable</span>
                   : isFailed
                     ? <span className="text-red-400">failed</span>
                     : run.conclusion === 'success'
-                      ? <span className="text-emerald-400">passed</span>
-                      : <span className="text-slate-400">{run.conclusion}</span>
+                      ? <span className="text-green-400">passed</span>
+                      : <span className="text-muted-foreground">{run.conclusion}</span>
               }
               {' '}&middot; {formatTimeAgo(run.createdAt)}
             </div>
 
             {/* llm-d component tags */}
             {hasLLMDImages && (
-              <div className="mt-1.5 pt-1.5 border-t border-slate-700">
-                <div className="text-slate-500 text-[9px] font-medium mb-0.5">llm-d components</div>
+              <div className="mt-1.5 pt-1.5 border-t border-border">
+                <div className="text-muted-foreground text-[9px] font-medium mb-0.5">llm-d components</div>
                 {Object.entries(llmdImages).map(([name, tag]) => (
                   <div key={name} className="flex items-center gap-1 whitespace-nowrap">
-                    <span className="text-slate-400">{name}</span>
+                    <span className="text-muted-foreground">{name}</span>
                     <span className="text-cyan-400 font-mono">:{tag}</span>
                   </div>
                 ))}
@@ -257,11 +258,11 @@ Please provide:
 
             {/* Other container tags */}
             {hasOtherImages && (
-              <div className="mt-1.5 pt-1.5 border-t border-slate-700">
-                <div className="text-slate-500 text-[9px] font-medium mb-0.5">other images</div>
+              <div className="mt-1.5 pt-1.5 border-t border-border">
+                <div className="text-muted-foreground text-[9px] font-medium mb-0.5">other images</div>
                 {Object.entries(otherImages).map(([name, tag]) => (
                   <div key={name} className="flex items-center gap-1 whitespace-nowrap">
-                    <span className="text-slate-400">{name}</span>
+                    <span className="text-muted-foreground">{name}</span>
                     <span className="text-orange-400 font-mono">:{tag}</span>
                   </div>
                 ))}
@@ -269,7 +270,7 @@ Please provide:
             )}
 
             {/* Action links */}
-            <div className="flex items-center gap-2 mt-1.5 pt-1.5 border-t border-slate-700">
+            <div className="flex items-center gap-2 mt-1.5 pt-1.5 border-t border-border">
               {isFailed && guide && (
                 <button
                   onClick={handleDiagnose}
@@ -281,12 +282,12 @@ Please provide:
                 </button>
               )}
               <a href={logsUrl} target="_blank" rel="noopener noreferrer"
-                className="text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-0.5"
+                className="text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-0.5 min-h-11 min-w-11"
                 onClick={e => e.stopPropagation()}>
                 View Logs <ExternalLink size={8} />
               </a>
             </div>
-            <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-slate-600" />
+            <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-border" />
           </div>
         </div>,
         document.body
@@ -299,7 +300,7 @@ Please provide:
 function TrendIndicator({ trend, passRate }: { trend: 'up' | 'down' | 'steady'; passRate: number }) {
   const Icon = trend === 'up' ? TrendingUp : trend === 'down' ? TrendingDown : Minus
   const color = passRate === 100
-    ? 'text-emerald-400'
+    ? 'text-green-400'
     : passRate >= 70
       ? 'text-yellow-400'
       : 'text-red-400'
@@ -329,12 +330,12 @@ function GuideRow({ guide, delay, isSelected, onMouseEnter, onRunHover }: {
         : AlertTriangle
 
   const iconColor = guide.latestConclusion === 'success'
-    ? 'text-emerald-400'
+    ? 'text-green-400'
     : guide.latestConclusion === 'failure'
       ? 'text-red-400'
       : guide.latestConclusion === 'in_progress'
         ? 'text-blue-400 animate-spin'
-        : 'text-slate-400'
+        : 'text-muted-foreground'
 
   return (
     <motion.div
@@ -342,13 +343,13 @@ function GuideRow({ guide, delay, isSelected, onMouseEnter, onRunHover }: {
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.3, delay }}
       className={`flex items-center gap-3 py-1.5 px-2 rounded-lg transition-colors group cursor-pointer ${
-        isSelected ? 'bg-slate-700/50 ring-1 ring-slate-600/50' : 'hover:bg-slate-800/40'
+        isSelected ? 'bg-secondary/50 ring-1 ring-border/50' : 'hover:bg-secondary/40'
       }`}
       onMouseEnter={onMouseEnter}
     >
       <StatusIcon size={14} className={`shrink-0 ${iconColor}`} />
-      <span className="text-xs text-slate-200 w-48 truncate shrink-0" title={guide.guide}>
-        <span className="font-mono font-semibold text-slate-400 mr-1.5">{guide.acronym}</span>
+      <span className="text-xs text-foreground w-48 truncate shrink-0" title={guide.guide}>
+        <span className="font-mono font-semibold text-muted-foreground mr-1.5">{guide.acronym}</span>
         {guide.guide}
       </span>
       <div className="flex items-center gap-1.5 shrink-0">
@@ -360,7 +361,7 @@ function GuideRow({ guide, delay, isSelected, onMouseEnter, onRunHover }: {
         ))}
         {/* Pad with empty dots if fewer than 7 runs */}
         {Array.from({ length: Math.max(0, 7 - guide.runs.length) }).map((_, i) => (
-          <div key={`empty-${i}`} className="w-3 h-3 rounded-full bg-slate-700/50" />
+          <div key={`empty-${i}`} className="w-3 h-3 rounded-full bg-border/50" />
         ))}
       </div>
       <TrendIndicator trend={guide.trend} passRate={guide.passRate} />
@@ -368,10 +369,10 @@ function GuideRow({ guide, delay, isSelected, onMouseEnter, onRunHover }: {
         href={workflowUrl}
         target="_blank"
         rel="noopener noreferrer"
-        className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-slate-700"
+        className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-secondary"
         onClick={e => e.stopPropagation()}
       >
-        <ExternalLink size={12} className="text-slate-400" />
+        <ExternalLink size={12} className="text-muted-foreground" />
       </a>
     </motion.div>
   )
@@ -421,8 +422,8 @@ function TrendSparkline({ runs }: { runs: NightlyRun[] }) {
   const fillOpacity = 0.15
 
   return (
-    <div className="bg-slate-800/60 border border-slate-700/50 rounded-lg p-2">
-      <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">{t('cards:llmd.passFailTrend')}</div>
+    <div className="bg-secondary/60 border border-border/50 rounded-lg p-2">
+      <div className="text-2xs text-muted-foreground uppercase tracking-wider mb-1">{t('cards:llmd.passFailTrend')}</div>
       <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
         <defs>
           <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
@@ -620,14 +621,14 @@ function NightlySummaryPanel({ guides }: { guides: NightlyGuideStatus[] }) {
     <div className="h-full flex flex-col">
       <div className="flex items-center gap-2 mb-3">
         <Sparkles size={14} className="text-purple-400" />
-        <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">{t('cards:llmd.aiSummary')}</span>
+        <span className="text-xs font-semibold text-foreground uppercase tracking-wider">{t('cards:llmd.aiSummary')}</span>
       </div>
       <div className="flex-1 space-y-3">
-        <p className="text-[11px] text-slate-400 leading-relaxed">{para1}</p>
-        {para2 && <p className="text-[11px] text-slate-400 leading-relaxed">{para2}</p>}
+        <p className="text-[11px] text-muted-foreground leading-relaxed">{para1}</p>
+        {para2 && <p className="text-[11px] text-muted-foreground leading-relaxed">{para2}</p>}
       </div>
-      <div className="mt-auto pt-3 border-t border-slate-700/30">
-        <p className="text-[10px] text-slate-600 text-center">{t('cards:llmd.hoverTestDetails')}</p>
+      <div className="mt-auto pt-3 border-t border-border/30">
+        <p className="text-2xs text-muted-foreground text-center">{t('cards:llmd.hoverTestDetails')}</p>
       </div>
     </div>
   )
@@ -692,13 +693,13 @@ function GuideDetailPanel({ guide, hoveredRun, onRunHover }: {
           <span className="font-mono font-bold text-sm" style={{ color: PLATFORM_COLORS[guide.platform] }}>
             {guide.acronym}
           </span>
-          <span className="text-sm font-semibold text-slate-200 truncate">{guide.guide}</span>
+          <span className="text-sm font-semibold text-foreground truncate">{guide.guide}</span>
         </div>
-        <div className="flex items-center gap-2 text-[10px] text-slate-500">
+        <div className="flex items-center gap-2 text-2xs text-muted-foreground">
           <span style={{ color: PLATFORM_COLORS[guide.platform] }}>{guide.platform}</span>
           <span>&middot;</span>
           <a href={workflowUrl} target="_blank" rel="noopener noreferrer"
-            className="hover:text-slate-300 transition-colors flex items-center gap-0.5">
+            className="hover:text-foreground transition-colors flex items-center gap-0.5 min-h-11 min-w-11">
             {guide.repo.split('/')[1]} <ExternalLink size={9} />
           </a>
         </div>
@@ -711,18 +712,18 @@ function GuideDetailPanel({ guide, hoveredRun, onRunHover }: {
 
       {/* Pass rate + stats in a row */}
       <div className={`grid ${gpuFails > 0 ? 'grid-cols-6' : 'grid-cols-5'} gap-1.5 mb-2`}>
-        <div className="col-span-1 bg-slate-800/60 border border-slate-700/50 rounded-lg p-2 text-center">
+        <div className="col-span-1 bg-secondary/60 border border-border/50 rounded-lg p-2 text-center">
           <div className={`text-lg font-bold ${
-            guide.passRate >= 90 ? 'text-emerald-400' : guide.passRate >= 70 ? 'text-yellow-400' : guide.passRate > 0 ? 'text-red-400' : 'text-slate-500'
+            guide.passRate >= 90 ? 'text-green-400' : guide.passRate >= 70 ? 'text-yellow-400' : guide.passRate > 0 ? 'text-red-400' : 'text-muted-foreground'
           }`}>
             {guide.passRate}%
           </div>
-          <div className="text-[8px] text-slate-500 uppercase tracking-wider">{t('common:common.rate')}</div>
+          <div className="text-[8px] text-muted-foreground uppercase tracking-wider">{t('common:common.rate')}</div>
         </div>
-        <StatBox label={t('cards:llmd.pass')} value={String(passed)} color="text-emerald-400" />
+        <StatBox label={t('cards:llmd.pass')} value={String(passed)} color="text-green-400" />
         <StatBox label={t('cards:llmd.fail')} value={String(failed)} color="text-red-400" />
-        {gpuFails > 0 && <StatBox label="GPU" value={String(gpuFails)} color="text-amber-400" />}
-        <StatBox label={t('cards:llmd.skip')} value={String(cancelled)} color="text-slate-400" />
+        {gpuFails > 0 && <StatBox label="GPU" value={String(gpuFails)} color="text-yellow-400" />}
+        <StatBox label={t('cards:llmd.skip')} value={String(cancelled)} color="text-muted-foreground" />
         <StatBox label={t('cards:llmd.run')} value={String(running)} color="text-blue-400" />
       </div>
 
@@ -730,15 +731,15 @@ function GuideDetailPanel({ guide, hoveredRun, onRunHover }: {
       {streakType && streak > 0 && (
         <div className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border mb-2 ${
           streakType === 'success'
-            ? 'bg-emerald-950/30 border-emerald-800/40'
+            ? 'bg-green-950/30 border-green-800/40'
             : 'bg-red-950/30 border-red-800/40'
         }`}>
           {streakType === 'success' ? (
-            <TrendingUp size={13} className="text-emerald-400" />
+            <TrendingUp size={13} className="text-green-400" />
           ) : (
             <TrendingDown size={13} className="text-red-400" />
           )}
-          <span className="text-xs text-slate-300">
+          <span className="text-xs text-foreground">
             {streak} {streakType === 'success'
               ? t(streak === 1 ? 'cards:llmd.consecutivePass' : 'cards:llmd.consecutivePasses')
               : t(streak === 1 ? 'cards:llmd.consecutiveFailure' : 'cards:llmd.consecutiveFailures')}
@@ -751,60 +752,60 @@ function GuideDetailPanel({ guide, hoveredRun, onRunHover }: {
         {hoveredRun && (
           <div className="flex items-center gap-1.5 mb-1">
             <div className={`w-1.5 h-1.5 rounded-full ${
-              hoveredRun.status !== 'completed' ? 'bg-blue-400' : hoveredRun.conclusion === 'success' ? 'bg-emerald-400' : 'bg-red-400'
+              hoveredRun.status !== 'completed' ? 'bg-blue-400' : hoveredRun.conclusion === 'success' ? 'bg-green-400' : 'bg-red-400'
             }`} />
-            <span className="text-[10px] text-slate-400 font-mono">
+            <span className="text-2xs text-muted-foreground font-mono">
               Run #{hoveredRun.runNumber} &middot; {formatTimeAgo(hoveredRun.createdAt)}
             </span>
           </div>
         )}
         <div className="flex items-center justify-between text-[11px]">
-          <span className="text-slate-500">{t('cards:llmd.model')}</span>
-          <span className={`font-mono text-[10px] truncate max-w-[140px] ${hoveredRun ? 'text-slate-200' : 'text-slate-300'}`} title={displayModel}>{displayModel}</span>
+          <span className="text-muted-foreground">{t('cards:llmd.model')}</span>
+          <span className={`font-mono text-2xs truncate max-w-[140px] ${hoveredRun ? 'text-foreground' : 'text-foreground'}`} title={displayModel}>{displayModel}</span>
         </div>
         <div className="flex items-center justify-between text-[11px]">
-          <span className="text-slate-500">{t('cards:llmd.gpu')}</span>
-          <span className={`font-mono text-[10px] ${hoveredRun ? 'text-slate-200' : 'text-slate-300'}`}>
+          <span className="text-muted-foreground">{t('cards:llmd.gpu')}</span>
+          <span className={`font-mono text-2xs ${hoveredRun ? 'text-foreground' : 'text-foreground'}`}>
             {displayGpuCount > 0 ? `${displayGpuCount}× ${displayGpuType}` : displayGpuType}
           </span>
         </div>
         {hoveredRun && runDur !== null ? (
           <div className="flex items-center justify-between text-[11px]">
-            <span className="text-slate-500">{t('cards:llmd.duration')}</span>
-            <span className="text-slate-200 font-mono">{formatDuration(runDur)}</span>
+            <span className="text-muted-foreground">{t('cards:llmd.duration')}</span>
+            <span className="text-foreground font-mono">{formatDuration(runDur)}</span>
           </div>
         ) : avgDur !== null ? (
           <div className="flex items-center justify-between text-[11px]">
-            <span className="text-slate-500">{t('cards:llmd.avgDuration')}</span>
-            <span className="text-slate-300 font-mono">{formatDuration(avgDur)}</span>
+            <span className="text-muted-foreground">{t('cards:llmd.avgDuration')}</span>
+            <span className="text-foreground font-mono">{formatDuration(avgDur)}</span>
           </div>
         ) : null}
-        <div className="h-px bg-slate-700/30 my-0.5" />
+        <div className="h-px bg-border/30 my-0.5" />
         {lastSuccess && (
           <div className="flex items-center justify-between text-[11px]">
-            <span className="text-slate-500">{t('cards:llmd.lastPass')}</span>
-            <span className="text-emerald-400 font-mono">{formatTimeAgo(lastSuccess.updatedAt)}</span>
+            <span className="text-muted-foreground">{t('cards:llmd.lastPass')}</span>
+            <span className="text-green-400 font-mono">{formatTimeAgo(lastSuccess.updatedAt)}</span>
           </div>
         )}
         {lastFailure && (
           <div className="flex items-center justify-between text-[11px]">
-            <span className="text-slate-500">{t('cards:llmd.lastFail')}</span>
+            <span className="text-muted-foreground">{t('cards:llmd.lastFail')}</span>
             <span className="text-red-400 font-mono">{formatTimeAgo(lastFailure.updatedAt)}</span>
           </div>
         )}
         <div className="flex items-center justify-between text-[11px]">
-          <span className="text-slate-500">{t('cards:llmd.totalRuns')}</span>
-          <span className="text-slate-300 font-mono">{guide.runs.length}</span>
+          <span className="text-muted-foreground">{t('cards:llmd.totalRuns')}</span>
+          <span className="text-foreground font-mono">{guide.runs.length}</span>
         </div>
         <div className="flex items-center justify-between text-[11px]">
-          <span className="text-slate-500">{t('cards:llmd.trend')}</span>
+          <span className="text-muted-foreground">{t('cards:llmd.trend')}</span>
           <TrendIndicator trend={guide.trend} passRate={guide.passRate} />
         </div>
       </div>
 
       {/* Run history dots — hover to see per-run details above */}
-      <div className="mt-auto pt-2 border-t border-slate-700/30">
-        <div className="text-[10px] text-slate-500 mb-1.5">
+      <div className="mt-auto pt-2 border-t border-border/30">
+        <div className="text-2xs text-muted-foreground mb-1.5">
           {hoveredRun ? t('cards:llmd.runHistoryNewest') : `${t('cards:llmd.runHistoryNewest')} — ${t('cards:llmd.hoverDotForDetails')}`}
         </div>
         <div className="flex items-center gap-1 flex-wrap">
@@ -826,9 +827,9 @@ function GuideDetailPanel({ guide, hoveredRun, onRunHover }: {
 
 function StatBox({ label, value, color }: { label: string; value: string; color: string }) {
   return (
-    <div className="bg-slate-800/40 border border-slate-700/30 rounded-lg p-2 text-center">
+    <div className="bg-secondary/40 border border-border/30 rounded-lg p-2 text-center">
       <div className={`text-base font-bold ${color}`}>{value}</div>
-      <div className="text-[9px] text-slate-500 uppercase tracking-wider">{label}</div>
+      <div className="text-[9px] text-muted-foreground uppercase tracking-wider">{label}</div>
     </div>
   )
 }
@@ -928,43 +929,43 @@ export function NightlyE2EStatus() {
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.05 }}
-          className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-3 text-center"
+          className="bg-secondary/60 border border-border/50 rounded-xl p-3 text-center"
         >
-          <div className={`text-xl font-bold ${stats.overallPassRate >= 90 ? 'text-emerald-400' : stats.overallPassRate >= 70 ? 'text-yellow-400' : 'text-red-400'}`}>
+          <div className={`text-xl font-bold ${stats.overallPassRate >= 90 ? 'text-green-400' : stats.overallPassRate >= 70 ? 'text-yellow-400' : 'text-red-400'}`}>
             {stats.overallPassRate}%
           </div>
-          <div className="text-[10px] text-slate-400 uppercase tracking-wider mt-0.5">{t('cards:llmd.passRate')}</div>
+          <div className="text-2xs text-muted-foreground uppercase tracking-wider mt-0.5">{t('cards:llmd.passRate')}</div>
         </motion.div>
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.1 }}
-          className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-3 text-center"
+          className="bg-secondary/60 border border-border/50 rounded-xl p-3 text-center"
         >
           <div className="text-xl font-bold text-white">{stats.total}</div>
-          <div className="text-[10px] text-slate-400 uppercase tracking-wider mt-0.5">{t('cards:llmd.guides')}</div>
+          <div className="text-2xs text-muted-foreground uppercase tracking-wider mt-0.5">{t('cards:llmd.guides')}</div>
         </motion.div>
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.15 }}
-          className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-3 text-center"
+          className="bg-secondary/60 border border-border/50 rounded-xl p-3 text-center"
         >
-          <div className={`text-xl font-bold ${stats.failing > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+          <div className={`text-xl font-bold ${stats.failing > 0 ? 'text-red-400' : 'text-green-400'}`}>
             {stats.failing}
           </div>
-          <div className="text-[10px] text-slate-400 uppercase tracking-wider mt-0.5">{t('cards:llmd.failing')}</div>
+          <div className="text-2xs text-muted-foreground uppercase tracking-wider mt-0.5">{t('cards:llmd.failing')}</div>
         </motion.div>
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.2 }}
-          className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-3 text-center"
+          className="bg-secondary/60 border border-border/50 rounded-xl p-3 text-center"
         >
-          <div className="text-xl font-bold text-slate-200">
+          <div className="text-xl font-bold text-foreground">
             {lastRunTime ? formatTimeAgo(lastRunTime) : '—'}
           </div>
-          <div className="text-[10px] text-slate-400 uppercase tracking-wider mt-0.5">{t('cards:llmd.lastRun')}</div>
+          <div className="text-2xs text-muted-foreground uppercase tracking-wider mt-0.5">{t('cards:llmd.lastRun')}</div>
         </motion.div>
       </div>
 
@@ -976,12 +977,12 @@ export function NightlyE2EStatus() {
             <div key={platform}>
               <div className="flex items-center gap-2 px-2 mb-1">
                 <TestTube2 size={12} style={{ color: PLATFORM_COLORS[platform] }} />
-                <span className="text-[10px] font-semibold uppercase tracking-wider"
+                <span className="text-2xs font-semibold uppercase tracking-wider"
                   style={{ color: PLATFORM_COLORS[platform] }}>
                   {platform}
                 </span>
-                <div className="flex-1 h-px bg-slate-700/50" />
-                <span className="text-[10px] text-slate-500">
+                <div className="flex-1 h-px bg-border/50" />
+                <span className="text-2xs text-muted-foreground">
                   {platformGuides.filter(g => g.latestConclusion === 'success').length}/{platformGuides.length} {t('cards:llmd.passing')}
                 </span>
               </div>
@@ -1003,24 +1004,24 @@ export function NightlyE2EStatus() {
         </div>
 
         {/* Detail panel (right side) */}
-        <div className="w-[420px] shrink-0 bg-slate-800/30 border border-slate-700/40 rounded-xl p-3 overflow-y-auto">
+        <div className="w-[420px] shrink-0 bg-secondary/30 border border-border/40 rounded-xl p-3 overflow-y-auto">
           {selectedGuide ? (
             <GuideDetailPanel guide={selectedGuide} hoveredRun={hoveredRun} onRunHover={handleRunHover} />
           ) : shouldSummarize ? (
             <NightlySummaryPanel guides={guides} />
           ) : (
             <div className="h-full flex flex-col items-center justify-center text-center gap-2">
-              <TestTube2 size={20} className="text-slate-600" />
-              <p className="text-[11px] text-slate-500">{t('cards:llmd.hoverTestDetails')}</p>
+              <TestTube2 size={20} className="text-muted-foreground" />
+              <p className="text-[11px] text-muted-foreground">{t('cards:llmd.hoverTestDetails')}</p>
             </div>
           )}
         </div>
       </div>
 
       {/* Legend */}
-      <div className="flex items-center justify-center gap-4 text-[10px] text-slate-500 pt-1 border-t border-slate-700/30">
+      <div className="flex items-center justify-center gap-4 text-2xs text-muted-foreground pt-1 border-t border-border/30">
         <div className="flex items-center gap-1">
-          <div className="w-2 h-2 rounded-full bg-emerald-400" />
+          <div className="w-2 h-2 rounded-full bg-green-400" />
           <span>{t('cards:llmd.pass')}</span>
         </div>
         <div className="flex items-center gap-1">
@@ -1028,7 +1029,7 @@ export function NightlyE2EStatus() {
           <span>{t('cards:llmd.fail')}</span>
         </div>
         <div className="flex items-center gap-1">
-          <div className="w-2 h-2 rounded-full bg-amber-400" />
+          <div className="w-2 h-2 rounded-full bg-yellow-400" />
           <span>GPU</span>
         </div>
         <div className="flex items-center gap-1">
@@ -1036,10 +1037,10 @@ export function NightlyE2EStatus() {
           <span>{t('common:common.running').toLowerCase()}</span>
         </div>
         <div className="flex items-center gap-1">
-          <div className="w-2 h-2 rounded-full bg-slate-500" />
+          <div className="w-2 h-2 rounded-full bg-gray-500" />
           <span>{t('cards:llmd.cancelled')}</span>
         </div>
-        <span className="text-slate-600">|</span>
+        <span className="text-muted-foreground">|</span>
         <span>{t('cards:llmd.newestRunOnLeft')}</span>
       </div>
     </div>

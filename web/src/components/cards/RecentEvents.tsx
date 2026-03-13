@@ -6,6 +6,7 @@ import { ClusterBadge } from '../ui/ClusterBadge'
 import { RefreshButton } from '../ui/RefreshIndicator'
 import { Skeleton } from '../ui/Skeleton'
 import { useCardLoadingState } from './CardDataContext'
+import { useDemoMode } from '../../hooks/useDemoMode'
 import { useCardData, commonComparators } from '../../lib/cards/cardHooks'
 import { CardControlsRow, CardPaginationFooter } from '../../lib/cards/CardComponents'
 import type { ClusterEvent } from '../../hooks/useMCP'
@@ -26,6 +27,7 @@ function getMinutesAgo(timestamp: string | undefined): string {
 
 export function RecentEvents() {
   const { t: _t } = useTranslation()
+  const { isDemoMode } = useDemoMode()
   const {
     events,
     isLoading,
@@ -41,7 +43,7 @@ export function RecentEvents() {
   // Report data state to CardWrapper for failure badge rendering
   const { showSkeleton, showEmptyState } = useCardLoadingState({
     isLoading,
-    isDemoData: isDemoFallback,
+    isDemoData: isDemoMode || isDemoFallback,
     hasAnyData: events.length > 0,
     isFailed,
     consecutiveFailures,
@@ -67,6 +69,8 @@ export function RecentEvents() {
     setItemsPerPage,
     filters,
     sorting,
+    containerRef,
+    containerStyle,
   } = useCardData<ClusterEvent, SortByOption>(recentEventsCandidates, {
     filter: {
       searchFields: ['reason', 'object', 'message', 'namespace'],
@@ -160,7 +164,7 @@ export function RecentEvents() {
           <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
           <div className="flex-1">
             <p className="text-xs font-medium text-red-400">Error loading events</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">Failed to fetch event data ({consecutiveFailures} attempts)</p>
+            <p className="text-2xs text-muted-foreground mt-0.5">Failed to fetch event data ({consecutiveFailures} attempts)</p>
           </div>
         </div>
       )}
@@ -172,7 +176,7 @@ export function RecentEvents() {
           <p className="text-sm text-muted-foreground">No events in the last hour</p>
         </div>
       ) : (
-        <div className="space-y-2">
+        <div ref={containerRef} className="space-y-2" style={containerStyle}>
           {paginatedItems.map((event, i) => (
             <div
               key={`${event.object}-${event.reason}-${i}`}

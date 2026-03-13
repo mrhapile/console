@@ -1,6 +1,8 @@
 import { ChevronDown, ArrowUp, ArrowDown } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 import { cn } from '../../lib/cn'
+import { emitCardSortChanged, emitCardSortDirectionChanged, emitCardLimitChanged } from '../../lib/analytics'
+import { useCardType } from '../cards/CardWrapper'
 
 interface LimitOption {
   value: number | 'unlimited'
@@ -48,6 +50,7 @@ export function CardControls<T extends string = string>({
   showLimit = true,
   showSort = true,
 }: CardControlsProps<T>) {
+  const cardType = useCardType()
   const [limitOpen, setLimitOpen] = useState(false)
   const [sortOpen, setSortOpen] = useState(false)
   const limitRef = useRef<HTMLDivElement>(null)
@@ -55,7 +58,9 @@ export function CardControls<T extends string = string>({
 
   const toggleDirection = () => {
     if (onSortDirectionChange) {
-      onSortDirectionChange(sortDirection === 'asc' ? 'desc' : 'asc')
+      const newDir = sortDirection === 'asc' ? 'desc' : 'asc'
+      onSortDirectionChange(newDir)
+      emitCardSortDirectionChanged(newDir, cardType)
     }
   }
 
@@ -93,7 +98,7 @@ export function CardControls<T extends string = string>({
               {LIMIT_OPTIONS.map(option => (
                 <button
                   key={String(option.value)}
-                  onClick={() => { onLimitChange(option.value); setLimitOpen(false) }}
+                  onClick={() => { onLimitChange(option.value); setLimitOpen(false); emitCardLimitChanged(String(option.value), cardType) }}
                   className={cn(
                     'w-full px-3 py-1.5 text-left text-xs hover:bg-secondary/50 transition-colors',
                     limit === option.value ? 'text-primary bg-primary/10' : 'text-foreground'
@@ -123,7 +128,7 @@ export function CardControls<T extends string = string>({
                 {sortOptions.map(option => (
                   <button
                     key={option.value}
-                    onClick={() => { onSortChange(option.value); setSortOpen(false) }}
+                    onClick={() => { onSortChange(option.value); setSortOpen(false); emitCardSortChanged(option.value, cardType) }}
                     className={cn(
                       'w-full px-3 py-1.5 text-left text-xs hover:bg-secondary/50 transition-colors',
                       sortBy === option.value ? 'text-primary bg-primary/10' : 'text-foreground'
@@ -140,6 +145,7 @@ export function CardControls<T extends string = string>({
               onClick={toggleDirection}
               className="p-1 text-xs rounded bg-secondary/50 hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
               title={sortDirection === 'asc' ? 'Ascending' : 'Descending'}
+              aria-label={sortDirection === 'asc' ? 'Sort ascending, click to sort descending' : 'Sort descending, click to sort ascending'}
             >
               {sortDirection === 'asc' ? (
                 <ArrowUp className="w-3 h-3" />

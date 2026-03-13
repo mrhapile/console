@@ -36,6 +36,7 @@ export type DashboardStatsType =
   | 'deploy'
   | 'ai-agents'
   | 'cluster-admin'
+  | 'insights'
 
 /**
  * Default stat blocks for the Clusters dashboard
@@ -254,7 +255,7 @@ export const OPERATORS_STAT_BLOCKS: StatBlockConfig[] = [
   { id: 'installing', name: 'Installing', icon: 'RefreshCw', visible: true, color: 'blue' },
   { id: 'failing', name: 'Failing', icon: 'XCircle', visible: true, color: 'red' },
   { id: 'upgrades', name: 'Upgrades', icon: 'ArrowUpCircle', visible: true, color: 'orange' },
-  { id: 'subscriptions', name: 'Subscriptions', icon: 'Newspaper', visible: true, color: 'indigo' },
+  { id: 'subscriptions', name: 'Subscriptions', icon: 'Newspaper', visible: true, color: 'blue' },
   { id: 'crds', name: 'CRDs', icon: 'FileCode', visible: true, color: 'cyan' },
   { id: 'clusters', name: 'Clusters', icon: 'Server', visible: true, color: 'blue' },
 ]
@@ -277,7 +278,7 @@ export const DEPLOY_STAT_BLOCKS: StatBlockConfig[] = [
  * Default stat blocks for the Kagenti AI Agents dashboard
  */
 export const KAGENTI_STAT_BLOCKS: StatBlockConfig[] = [
-  { id: 'agents', name: 'Agents', icon: 'Bot', visible: true, color: 'violet' },
+  { id: 'agents', name: 'Agents', icon: 'Bot', visible: true, color: 'purple' },
   { id: 'ready_agents', name: 'Ready', icon: 'CheckCircle2', visible: true, color: 'green' },
   { id: 'active_builds', name: 'Building', icon: 'Hammer', visible: true, color: 'blue' },
   { id: 'tools', name: 'MCP Tools', icon: 'Wrench', visible: true, color: 'cyan' },
@@ -346,6 +347,16 @@ export const AI_AGENTS_STAT_BLOCKS: StatBlockConfig[] = [
 ]
 
 /**
+ * Default stat blocks for the Insights dashboard
+ */
+export const INSIGHTS_STAT_BLOCKS: StatBlockConfig[] = [
+  { id: 'clusters', name: 'Clusters', icon: 'Server', visible: true, color: 'purple' },
+  { id: 'insights', name: 'Insights', icon: 'Lightbulb', visible: true, color: 'blue' },
+  { id: 'critical', name: 'Critical', icon: 'AlertTriangle', visible: true, color: 'red' },
+  { id: 'warnings', name: 'Warnings', icon: 'AlertCircle', visible: true, color: 'yellow' },
+]
+
+/**
  * Get default stat blocks for a specific dashboard type
  */
 export function getDefaultStatBlocks(dashboardType: DashboardStatsType): StatBlockConfig[] {
@@ -386,6 +397,8 @@ export function getDefaultStatBlocks(dashboardType: DashboardStatsType): StatBlo
       return AI_AGENTS_STAT_BLOCKS
     case 'cluster-admin':
       return CLUSTER_ADMIN_STAT_BLOCKS
+    case 'insights':
+      return INSIGHTS_STAT_BLOCKS
     default:
       return []
   }

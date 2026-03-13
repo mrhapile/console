@@ -1,5 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, type ReactNode } from 'react'
-import { useGPUNodes, usePodIssues, useClusters } from '../hooks/useMCP'
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense, type ReactNode } from 'react'
 import { useMissions } from '../hooks/useMissions'
 import { useDemoMode } from '../hooks/useDemoMode'
 import type {
@@ -10,10 +9,16 @@ import type {
 } from '../types/alerts'
 import type { GPUHealthCheckResult } from '../hooks/mcp/types'
 import type { NightlyGuideStatus } from '../lib/llmd/nightlyE2EDemoData'
-import { BACKEND_DEFAULT_URL, STORAGE_KEY_AUTH_TOKEN, FETCH_DEFAULT_TIMEOUT_MS } from '../lib/constants'
+import type { AlertsMCPData } from './AlertsDataFetcher'
+import { STORAGE_KEY_AUTH_TOKEN, FETCH_DEFAULT_TIMEOUT_MS } from '../lib/constants'
 import { INITIAL_FETCH_DELAY_MS, POLL_INTERVAL_SLOW_MS, SECONDARY_FETCH_DELAY_MS } from '../lib/constants/network'
 import { PRESET_ALERT_RULES } from '../types/alerts'
 import { sendNotificationWithDeepLink } from '../hooks/useDeepLink'
+
+// Lazy-load the MCP data fetcher — keeps the 300 KB MCP hook tree out of
+// the main chunk.  The provider renders immediately with empty data; once
+// the fetcher chunk loads, it starts pushing live data via onData callback.
+const AlertsDataFetcher = lazy(() => import('./AlertsDataFetcher'))
 
 // Generate unique ID
 function generateId(): string {
@@ -134,21 +139,29 @@ export function AlertsProvider({ children }: { children: ReactNode }) {
   )
   const [isEvaluating, setIsEvaluating] = useState(false)
 
-  const { nodes: gpuNodes, isLoading: isGPULoading, error: gpuError } = useGPUNodes()
-  const { issues: podIssues, isLoading: isPodIssuesLoading, error: podIssuesError } = usePodIssues()
-  const { deduplicatedClusters: clusters, isLoading: isClustersLoading, error: clustersError } = useClusters()
+  // MCP data arrives from the lazy-loaded AlertsDataFetcher bridge.
+  // Until the fetcher chunk loads, we start with empty arrays (same as
+  // hook loading state).
+  const [mcpData, setMCPData] = useState<AlertsMCPData>({
+    gpuNodes: [],
+    podIssues: [],
+    clusters: [],
+    isLoading: true,
+    error: null,
+  })
+
   const { startMission } = useMissions()
   const { isDemoMode } = useDemoMode()
   const previousDemoMode = useRef(isDemoMode)
 
   // Refs for polling data — lets evaluateConditions read latest data
   // without being recreated on every poll cycle
-  const gpuNodesRef = useRef(gpuNodes)
-  gpuNodesRef.current = gpuNodes
-  const podIssuesRef = useRef(podIssues)
-  podIssuesRef.current = podIssues
-  const clustersRef = useRef(clusters)
-  clustersRef.current = clusters
+  const gpuNodesRef = useRef(mcpData.gpuNodes)
+  gpuNodesRef.current = mcpData.gpuNodes
+  const podIssuesRef = useRef(mcpData.podIssues)
+  podIssuesRef.current = mcpData.podIssues
+  const clustersRef = useRef(mcpData.clusters)
+  clustersRef.current = mcpData.clusters
   const rulesRef = useRef(rules)
   rulesRef.current = rules
 
@@ -167,7 +180,7 @@ export function AlertsProvider({ children }: { children: ReactNode }) {
       const currentClusters = clustersRef.current
       if (!currentClusters.length) return
 
-      const API_BASE = import.meta.env.VITE_API_BASE_URL || BACKEND_DEFAULT_URL
+      const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
       const results: Record<string, GPUHealthCheckResult[]> = {}
 
       await Promise.allSettled(
@@ -206,7 +219,7 @@ export function AlertsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const fetchNightlyE2E = async () => {
       try {
-        const API_BASE = import.meta.env.VITE_API_BASE_URL || BACKEND_DEFAULT_URL
+        const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
         const resp = await fetch(`${API_BASE}/api/public/nightly-e2e/runs`, {
           signal: AbortSignal.timeout(FETCH_DEFAULT_TIMEOUT_MS),
         })
@@ -253,11 +266,9 @@ export function AlertsProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
-  // Aggregate loading and error states from dependencies
-  const isLoadingData = isGPULoading || isPodIssuesLoading || isClustersLoading
-  // Combine errors from multiple sources for better debugging (separated by "; ")
-  const errors = [gpuError, podIssuesError, clustersError].filter(Boolean)
-  const dataError = errors.length > 0 ? errors.join('; ') : null
+  // Aggregate loading and error states from the lazy MCP data bridge
+  const isLoadingData = mcpData.isLoading
+  const dataError = mcpData.error
 
   // Save rules whenever they change
   useEffect(() => {
@@ -463,7 +474,7 @@ export function AlertsProvider({ children }: { children: ReactNode }) {
       // Skip notification if not authenticated - notifications require login
       if (!token) return
 
-      const API_BASE = import.meta.env.VITE_API_BASE_URL || BACKEND_DEFAULT_URL
+      const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
 
       const response = await fetch(`${API_BASE}/api/notifications/send`, {
         method: 'POST',
@@ -838,6 +849,116 @@ Please provide:
     [createAlert]
   )
 
+  // Evaluate disk pressure condition — checks for DiskPressure in cluster issues
+  const evaluateDiskPressure = useCallback(
+    (rule: AlertRule) => {
+      const currentClusters = clustersRef.current
+      const relevantClusters = rule.condition.clusters?.length
+        ? currentClusters.filter(c => rule.condition.clusters!.includes(c.name))
+        : currentClusters
+
+      for (const cluster of relevantClusters) {
+        const diskPressureIssue = (cluster.issues || []).find(issue =>
+          typeof issue === 'string' && issue.includes('DiskPressure')
+        )
+
+        if (diskPressureIssue) {
+          createAlert(
+            rule,
+            `${cluster.name}: ${diskPressureIssue}`,
+            {
+              clusterName: cluster.name,
+              issue: diskPressureIssue,
+              nodeCount: cluster.nodeCount,
+            },
+            cluster.name,
+            undefined,
+            cluster.name,
+            'Cluster'
+          )
+
+          // Send browser notification with deep link
+          if (rule.channels?.some(ch => ch.type === 'browser' && ch.enabled)) {
+            sendNotificationWithDeepLink(
+              `Disk Pressure: ${cluster.name}`,
+              diskPressureIssue,
+              { card: 'cluster_health' }
+            )
+          }
+        } else {
+          // Auto-resolve if DiskPressure clears
+          setAlerts(prev => {
+            const firingAlert = prev.find(
+              a =>
+                a.ruleId === rule.id &&
+                a.status === 'firing' &&
+                a.cluster === cluster.name
+            )
+            if (firingAlert) {
+              return prev.map(a =>
+                a.id === firingAlert.id
+                  ? { ...a, status: 'resolved' as const, resolvedAt: new Date().toISOString() }
+                  : a
+              )
+            }
+            return prev
+          })
+        }
+      }
+    },
+    [createAlert]
+  )
+
+  // Evaluate memory pressure condition — checks for MemoryPressure in cluster issues
+  const evaluateMemoryPressure = useCallback(
+    (rule: AlertRule) => {
+      const currentClusters = clustersRef.current
+      const relevantClusters = rule.condition.clusters?.length
+        ? currentClusters.filter(c => rule.condition.clusters!.includes(c.name))
+        : currentClusters
+
+      for (const cluster of relevantClusters) {
+        const memPressureIssue = (cluster.issues || []).find(issue =>
+          typeof issue === 'string' && issue.includes('MemoryPressure')
+        )
+
+        if (memPressureIssue) {
+          createAlert(
+            rule,
+            `${cluster.name}: ${memPressureIssue}`,
+            {
+              clusterName: cluster.name,
+              issue: memPressureIssue,
+              nodeCount: cluster.nodeCount,
+            },
+            cluster.name,
+            undefined,
+            cluster.name,
+            'Cluster'
+          )
+        } else {
+          setAlerts(prev => {
+            const firingAlert = prev.find(
+              a =>
+                a.ruleId === rule.id &&
+                a.status === 'firing' &&
+                a.cluster === cluster.name
+            )
+            if (firingAlert) {
+              return prev.map(a =>
+                a.id === firingAlert.id
+                  ? { ...a, status: 'resolved' as const, resolvedAt: new Date().toISOString() }
+                  : a
+              )
+            }
+            return prev
+          })
+        }
+      }
+    },
+    [createAlert]
+  )
+
   // Evaluate nightly E2E failures — reads cached run data from ref
   const evaluateNightlyE2EFailure = useCallback(
     (rule: AlertRule) => {
@@ -931,6 +1052,12 @@ Please provide:
           case 'pod_crash':
             evaluatePodCrash(rule)
             break
+          case 'disk_pressure':
+            evaluateDiskPressure(rule)
+            break
+          case 'memory_pressure':
+            evaluateMemoryPressure(rule)
+            break
           case 'weather_alerts':
             evaluateWeatherAlerts(rule)
             break
@@ -945,7 +1072,7 @@ Please provide:
       isEvaluatingRef.current = false
       setIsEvaluating(false)
     }
-  }, [evaluateGPUUsage, evaluateGPUHealthCronJob, evaluateNodeReady, evaluatePodCrash, evaluateWeatherAlerts, evaluateNightlyE2EFailure])
+  }, [evaluateGPUUsage, evaluateGPUHealthCronJob, evaluateNodeReady, evaluatePodCrash, evaluateDiskPressure, evaluateMemoryPressure, evaluateWeatherAlerts, evaluateNightlyE2EFailure])
 
   // Stable ref for evaluateConditions so the interval never resets
   const evaluateConditionsRef = useRef(evaluateConditions)
@@ -990,6 +1117,9 @@ Please provide:
 
   return (
     <AlertsContext.Provider value={value}>
+      <Suspense fallback={null}>
+        <AlertsDataFetcher onData={setMCPData} />
+      </Suspense>
       {children}
     </AlertsContext.Provider>
   )

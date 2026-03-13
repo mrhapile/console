@@ -7,6 +7,7 @@ import { useState, useEffect } from 'react'
 import { X, Server, Check } from 'lucide-react'
 import { cn } from '../../lib/cn'
 import { useClusters } from '../../hooks/mcp/clusters'
+import { Button } from '../ui/Button'
 
 /** Delay before auto-selecting a single online cluster (ms) */
 const AUTO_SELECT_DELAY_MS = 600
@@ -39,7 +40,7 @@ export function ClusterSelectionDialog({ open, missionTitle, onSelect, onCancel 
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-2xl">
       <div className="w-full max-w-md rounded-lg border border-border bg-card shadow-xl">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
@@ -47,9 +48,7 @@ export function ClusterSelectionDialog({ open, missionTitle, onSelect, onCancel 
             <h3 className="text-sm font-semibold text-foreground">Select Target Cluster</h3>
             <p className="text-xs text-muted-foreground mt-0.5 truncate max-w-[320px]">{missionTitle}</p>
           </div>
-          <button onClick={onCancel} className="p-1 rounded hover:bg-secondary transition-colors">
-            <X className="w-4 h-4 text-muted-foreground" />
-          </button>
+          <Button variant="ghost" onClick={onCancel} className="p-1 rounded-md min-h-11 min-w-11" icon={<X className="w-4 h-4" />} />
         </div>
 
         {/* Cluster list */}
@@ -83,7 +82,7 @@ export function ClusterSelectionDialog({ open, missionTitle, onSelect, onCancel 
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-foreground truncate">{cluster.name}</p>
                   {cluster.context !== cluster.name && cluster.context && (
-                    <p className="text-[10px] text-muted-foreground truncate">{cluster.context}</p>
+                    <p className="text-2xs text-muted-foreground truncate">{cluster.context}</p>
                   )}
                 </div>
                 {isSelected && <Check className="w-4 h-4 text-purple-400 flex-shrink-0" />}
@@ -105,7 +104,7 @@ export function ClusterSelectionDialog({ open, missionTitle, onSelect, onCancel 
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-muted-foreground truncate">{cluster.name}</p>
-                  <p className="text-[10px] text-red-400">Offline</p>
+                  <p className="text-2xs text-red-400">Offline</p>
                 </div>
               </div>
             )
@@ -114,12 +113,13 @@ export function ClusterSelectionDialog({ open, missionTitle, onSelect, onCancel 
 
         {/* Actions */}
         <div className="flex items-center justify-between px-4 py-3 border-t border-border">
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => onSelect('')}
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
             Skip (use current context)
-          </button>
+          </Button>
           <button
             onClick={() => selected && onSelect(selected)}
             disabled={!selected}

@@ -6,9 +6,10 @@ import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
 import { X, Bug, Lightbulb, Send, CheckCircle2, ExternalLink, Linkedin } from 'lucide-react'
+import { StatusBadge } from '../ui/StatusBadge'
 import { useRewards, REWARD_ACTIONS } from '../../hooks/useRewards'
 import { useToast } from '../ui/Toast'
-import { emitFeedbackSubmitted } from '../../lib/analytics'
+import { emitFeedbackSubmitted, emitLinkedInShare } from '../../lib/analytics'
 
 type FeedbackType = 'bug' | 'feature'
 
@@ -44,7 +45,7 @@ export function FeedbackModal({ isOpen, onClose, initialType = 'feature' }: Feed
       const githubUrl = `${GITHUB_ISSUES_URL}?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}&labels=${type === 'bug' ? 'bug' : 'enhancement'}`
 
       // Open GitHub in new tab
-      window.open(githubUrl, '_blank')
+      window.open(githubUrl, '_blank', 'noopener,noreferrer')
       emitFeedbackSubmitted(type)
 
       // Award coins based on type
@@ -105,7 +106,7 @@ export function FeedbackModal({ isOpen, onClose, initialType = 'feature' }: Feed
   const coins = type === 'bug' ? REWARD_ACTIONS.bug_report.coins : REWARD_ACTIONS.feature_suggestion.coins
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-2xl">
       <div className="bg-card border border-border rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border bg-secondary/30">
@@ -175,9 +176,7 @@ export function FeedbackModal({ isOpen, onClose, initialType = 'feature' }: Feed
                 >
                   <Bug className="w-4 h-4" />
                   <span className="text-sm font-medium">Bug Report</span>
-                  <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400">
-                    +{REWARD_ACTIONS.bug_report.coins}
-                  </span>
+                  <StatusBadge color="yellow">+{REWARD_ACTIONS.bug_report.coins}</StatusBadge>
                 </button>
                 <button
                   type="button"
@@ -190,9 +189,7 @@ export function FeedbackModal({ isOpen, onClose, initialType = 'feature' }: Feed
                 >
                   <Lightbulb className="w-4 h-4" />
                   <span className="text-sm font-medium">Feature Request</span>
-                  <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400">
-                    +{REWARD_ACTIONS.feature_suggestion.coins}
-                  </span>
+                  <StatusBadge color="yellow">+{REWARD_ACTIONS.feature_suggestion.coins}</StatusBadge>
                 </button>
               </div>
 
@@ -250,7 +247,7 @@ export function FeedbackModal({ isOpen, onClose, initialType = 'feature' }: Feed
           )}
         </div>
         {/* Keyboard hints */}
-        <div className="flex items-center justify-end gap-3 px-4 py-2 border-t border-border/50 text-[10px] text-muted-foreground/50">
+        <div className="flex items-center justify-end gap-3 px-4 py-2 border-t border-border/50 text-2xs text-muted-foreground/50">
           <span><kbd className="px-1 py-0.5 rounded bg-secondary/50 text-[9px]">Esc</kbd> close</span>
           <span><kbd className="px-1 py-0.5 rounded bg-secondary/50 text-[9px]">Space</kbd> close</span>
         </div>
@@ -279,7 +276,8 @@ export function LinkedInShareButton({ onShare, compact = false }: { onShare?: ()
   const { t } = useTranslation()
   const handleShare = () => {
     const linkedInUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent('https://kubestellar.io')}`
-    window.open(linkedInUrl, '_blank', 'width=600,height=600')
+    window.open(linkedInUrl, '_blank', 'noopener,noreferrer,width=600,height=600')
+    emitLinkedInShare('feedback_modal')
     onShare?.()
   }
 
@@ -292,9 +290,7 @@ export function LinkedInShareButton({ onShare, compact = false }: { onShare?: ()
       >
         <Linkedin className="w-4 h-4" />
         <span>{t('feedback.share')}</span>
-        <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400">
-          +{REWARD_ACTIONS.linkedin_share.coins}
-        </span>
+        <StatusBadge color="yellow">+{REWARD_ACTIONS.linkedin_share.coins}</StatusBadge>
       </button>
     )
   }

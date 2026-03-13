@@ -4,7 +4,8 @@ import { Skeleton } from '../../ui/Skeleton'
 import { Pagination } from '../../ui/Pagination'
 import { useCardData, commonComparators } from '../../../lib/cards/cardHooks'
 import type { SortDirection } from '../../../lib/cards/cardHooks'
-import { useClusters, useNamespaces } from '../../../hooks/useMCP'
+import { useClusters } from '../../../hooks/useMCP'
+import { useCachedNamespaces } from '../../../hooks/useCachedData'
 import { useWorkloads } from '../../../hooks/useWorkloads'
 import { useWorkloadMonitor } from '../../../hooks/useWorkloadMonitor'
 import { cn } from '../../../lib/cn'
@@ -22,6 +23,7 @@ import { WorkloadMonitorList } from './WorkloadMonitorList'
 import { WorkloadMonitorAlerts } from './WorkloadMonitorAlerts'
 import { WorkloadMonitorDiagnose } from './WorkloadMonitorDiagnose'
 import { useTranslation } from 'react-i18next'
+import { useDemoMode } from '../../../hooks/useDemoMode'
 
 interface WorkloadMonitorProps {
   config?: Record<string, unknown>
@@ -37,23 +39,25 @@ export function WorkloadMonitor({ config }: WorkloadMonitorProps) {
 
   // Cascading selectors (used when config doesn't pre-specify the workload)
   const { deduplicatedClusters: clusters, isLoading: clustersLoading } = useClusters()
+  const { isDemoMode } = useDemoMode()
   const [selectedCluster, setSelectedCluster] = useState(monitorConfig?.cluster || '')
   const [selectedNamespace, setSelectedNamespace] = useState(monitorConfig?.namespace || '')
   const [selectedWorkload, setSelectedWorkload] = useState(monitorConfig?.workload || '')
+
+  // Fetch namespaces/workloads for selectors
+  const { namespaces, isLoading: nsLoading, isDemoFallback: nsDemoFallback } = useCachedNamespaces(selectedCluster || undefined)
 
   // Report loading state to CardWrapper for skeleton/refresh behavior
   useCardLoadingState({
     isLoading: clustersLoading,
     hasAnyData: clusters.length > 0,
+    isDemoData: isDemoMode || nsDemoFallback,
   })
 
   const isPreConfigured = !!(monitorConfig?.cluster && monitorConfig?.namespace && monitorConfig?.workload)
   const activeCluster = isPreConfigured ? monitorConfig!.cluster! : selectedCluster
   const activeNamespace = isPreConfigured ? monitorConfig!.namespace! : selectedNamespace
   const activeWorkload = isPreConfigured ? monitorConfig!.workload! : selectedWorkload
-
-  // Fetch namespaces/workloads for selectors
-  const { namespaces, isLoading: nsLoading } = useNamespaces(selectedCluster || undefined)
   const hasSelection = !!selectedCluster && !!selectedNamespace
   const workloadOpts = useMemo(() => {
     if (!selectedCluster || !selectedNamespace) return undefined
@@ -103,6 +107,8 @@ export function WorkloadMonitor({ config }: WorkloadMonitorProps) {
     setItemsPerPage,
     filters,
     sorting,
+    containerRef,
+    containerStyle,
   } = useCardData<MonitoredResource, SortField>(preFiltered, {
     filter: {
       searchFields: ['name', 'kind', 'status', 'category', 'message'] as (keyof MonitoredResource)[],
@@ -160,7 +166,7 @@ export function WorkloadMonitor({ config }: WorkloadMonitorProps) {
     healthy: 'bg-green-500/20 text-green-400',
     degraded: 'bg-yellow-500/20 text-yellow-400',
     unhealthy: 'bg-red-500/20 text-red-400',
-    unknown: 'bg-gray-500/20 text-gray-400',
+    unknown: 'bg-gray-500/20 text-muted-foreground',
   }
 
   return (
@@ -175,7 +181,7 @@ export function WorkloadMonitor({ config }: WorkloadMonitorProps) {
               onChange={(e) => handleClusterChange(e.target.value)}
               className="flex-1 text-sm rounded-md bg-secondary/50 border border-border px-2 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-purple-500/50"
             >
-              <option value="">Select cluster...</option>
+              <option value="">{t('selectors.selectCluster')}</option>
               {clusterNames.map(c => (
                 <option key={c} value={c}>{c}</option>
               ))}
@@ -289,7 +295,7 @@ export function WorkloadMonitor({ config }: WorkloadMonitorProps) {
           />
 
           {/* View */}
-          <div className="flex-1 overflow-y-auto">
+          <div ref={containerRef} className="flex-1 overflow-y-auto" style={containerStyle}>
             {viewMode === 'tree' ? (
               <WorkloadMonitorTree resources={items} onResourceClick={handleResourceClick} />
             ) : (

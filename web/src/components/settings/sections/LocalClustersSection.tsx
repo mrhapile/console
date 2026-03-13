@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Container, RefreshCw, Plus, Trash2, Check, AlertCircle, AlertTriangle, Loader2, X } from 'lucide-react'
+import { Button } from '../../ui/Button'
 import { useLocalClusterTools } from '../../../hooks/useLocalClusterTools'
 import { CLUSTER_PROGRESS_AUTO_DISMISS_MS } from '../../../hooks/useClusterProgress'
+import { emitLocalClusterCreated } from '../../../lib/analytics'
 import type { ClusterProgress } from '../../../hooks/useClusterProgress'
 
 // ------------------------------------------------------------------
@@ -108,6 +110,7 @@ export function LocalClustersSection() {
     if (!selectedTool || !clusterName.trim()) return
 
     const result = await createCluster(selectedTool, clusterName.trim())
+    emitLocalClusterCreated(selectedTool)
 
     if (result.status === 'creating') {
       setClusterName('')
@@ -174,14 +177,15 @@ export function LocalClustersSection() {
           </div>
         </div>
         {(isConnected || isDemoMode) && (
-          <button
+          <Button
+            variant="ghost"
+            size="md"
+            icon={<RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />}
             onClick={refresh}
             disabled={isLoading}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-secondary/50 disabled:opacity-50"
           >
-            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
             Refresh
-          </button>
+          </Button>
         )}
       </div>
 
@@ -328,7 +332,7 @@ export function LocalClustersSection() {
                               }`} />
                               <span className={
                                 isRunning ? 'text-green-400' : 
-                                isStopped ? 'text-gray-400' : 
+                                isStopped ? 'text-muted-foreground' : 
                                 'text-orange-400'
                               }>
                                 {cluster.status}

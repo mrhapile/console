@@ -4,6 +4,7 @@ import {
   Clock, Loader2, ExternalLink, Key, Settings, Plus, X, Check,
 } from 'lucide-react'
 import { STORAGE_KEY_GITHUB_TOKEN, FETCH_EXTERNAL_TIMEOUT_MS } from '../../../lib/constants'
+import { Button } from '../../ui/Button'
 import { Skeleton } from '../../ui/Skeleton'
 import { Pagination } from '../../ui/Pagination'
 import { CardControls } from '../../ui/CardControls'
@@ -58,8 +59,8 @@ type SortField = 'name' | 'status' | 'repo' | 'branch'
 const CONCLUSION_BADGE: Record<string, string> = {
   success: 'bg-green-500/20 text-green-400',
   failure: 'bg-red-500/20 text-red-400',
-  cancelled: 'bg-gray-500/20 text-gray-400',
-  skipped: 'bg-gray-500/20 text-gray-400',
+  cancelled: 'bg-gray-500/20 text-muted-foreground',
+  skipped: 'bg-gray-500/20 text-muted-foreground',
   timed_out: 'bg-orange-500/20 text-orange-400',
   action_required: 'bg-yellow-500/20 text-yellow-400',
 }
@@ -270,6 +271,8 @@ export const GitHubCIMonitor = forwardRef<GitHubCIMonitorRef, GitHubCIMonitorPro
     setItemsPerPage,
     filters,
     sorting,
+    containerRef,
+    containerStyle,
   } = useCardData(workflows, {
     filter: {
       searchFields: ['name', 'repo', 'branch', 'event'] as (keyof WorkflowRun)[],
@@ -357,7 +360,7 @@ export const GitHubCIMonitor = forwardRef<GitHubCIMonitorRef, GitHubCIMonitorPro
           'text-xs px-1.5 py-0.5 rounded ml-auto',
           overallHealth === 'healthy' ? 'bg-green-500/20 text-green-400' :
           overallHealth === 'degraded' ? 'bg-yellow-500/20 text-yellow-400' :
-          'bg-gray-500/20 text-gray-400',
+          'bg-gray-500/20 text-muted-foreground',
         )}>
           {overallHealth}
         </span>
@@ -375,21 +378,23 @@ export const GitHubCIMonitor = forwardRef<GitHubCIMonitorRef, GitHubCIMonitorPro
               placeholder="owner/repo (e.g., facebook/react)"
               className="flex-1 px-2 py-1 text-xs rounded bg-secondary border border-border text-foreground"
             />
-            <button
+            <Button
+              variant="accent"
+              size="sm"
+              icon={<Plus className="w-3.5 h-3.5" />}
               onClick={handleAddRepo}
               disabled={!newRepoInput.trim()}
-              className="p-1 rounded bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 disabled:opacity-50 disabled:cursor-not-allowed"
               title="Add repo"
-            >
-              <Plus className="w-3.5 h-3.5" />
-            </button>
-            <button
+              className="p-1 rounded"
+            />
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={<Check className="w-3.5 h-3.5" />}
               onClick={() => setIsEditingRepos(false)}
-              className="p-1 rounded hover:bg-secondary text-muted-foreground"
               title="Done"
-            >
-              <Check className="w-3.5 h-3.5" />
-            </button>
+              className="p-1 rounded hover:bg-secondary"
+            />
           </div>
           <div className="flex flex-wrap gap-1.5">
             {repos.map((repo) => (
@@ -441,19 +446,19 @@ export const GitHubCIMonitor = forwardRef<GitHubCIMonitorRef, GitHubCIMonitorPro
       <div className="grid grid-cols-4 gap-2 mb-3">
         <div className="rounded-md bg-card/50 border border-border p-2 text-center">
           <p className="text-lg font-semibold text-green-400">{stats.successRate}%</p>
-          <p className="text-[10px] text-muted-foreground">Pass Rate</p>
+          <p className="text-2xs text-muted-foreground">Pass Rate</p>
         </div>
         <div className="rounded-md bg-card/50 border border-border p-2 text-center">
           <p className="text-lg font-semibold text-red-400">{stats.failed}</p>
-          <p className="text-[10px] text-muted-foreground">{t('common.failed')}</p>
+          <p className="text-2xs text-muted-foreground">{t('common.failed')}</p>
         </div>
         <div className="rounded-md bg-card/50 border border-border p-2 text-center">
           <p className="text-lg font-semibold text-blue-400">{stats.inProgress}</p>
-          <p className="text-[10px] text-muted-foreground">{t('common.running')}</p>
+          <p className="text-2xs text-muted-foreground">{t('common.running')}</p>
         </div>
         <div className="rounded-md bg-card/50 border border-border p-2 text-center">
           <p className="text-lg font-semibold text-yellow-400">{stats.queued}</p>
-          <p className="text-[10px] text-muted-foreground">Queued</p>
+          <p className="text-2xs text-muted-foreground">Queued</p>
         </div>
       </div>
 
@@ -478,12 +483,12 @@ export const GitHubCIMonitor = forwardRef<GitHubCIMonitorRef, GitHubCIMonitorPro
       />
 
       {/* Workflow runs */}
-      <div className="flex-1 overflow-y-auto space-y-0.5">
+      <div ref={containerRef} className="flex-1 overflow-y-auto space-y-0.5" style={containerStyle}>
         {items.map(w => {
           const status = effectiveStatus(w)
           const badgeClass = w.status === 'completed'
-            ? (CONCLUSION_BADGE[w.conclusion || ''] || 'bg-gray-500/20 text-gray-400')
-            : (STATUS_BADGE[w.status] || 'bg-gray-500/20 text-gray-400')
+            ? (CONCLUSION_BADGE[w.conclusion || ''] || 'bg-gray-500/20 text-muted-foreground')
+            : (STATUS_BADGE[w.status] || 'bg-gray-500/20 text-muted-foreground')
           const StatusIcon = w.conclusion === 'success' ? CheckCircle :
                              w.conclusion === 'failure' ? XCircle :
                              w.status === 'in_progress' ? Loader2 :
@@ -503,14 +508,14 @@ export const GitHubCIMonitor = forwardRef<GitHubCIMonitorRef, GitHubCIMonitorPro
               )} />
               <div className="flex-1 min-w-0">
                 <span className="text-xs text-foreground truncate block">{w.name}</span>
-                <span className="text-[10px] text-muted-foreground truncate block">
+                <span className="text-2xs text-muted-foreground truncate block">
                   {w.repo.split('/')[1]} · {w.branch}
                 </span>
               </div>
-              <span className={cn('text-[10px] px-1 py-0.5 rounded shrink-0', badgeClass)}>
+              <span className={cn('text-2xs px-1 py-0.5 rounded shrink-0', badgeClass)}>
                 {status}
               </span>
-              <span className="text-[10px] text-muted-foreground shrink-0">
+              <span className="text-2xs text-muted-foreground shrink-0">
                 {formatTimeAgo(w.updatedAt)}
               </span>
               {(w.conclusion === 'failure' || w.conclusion === 'timed_out') && (

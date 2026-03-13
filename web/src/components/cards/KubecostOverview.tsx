@@ -25,7 +25,7 @@ const DEMO_COST_TRENDS = [
   { label: 'CPU', value: DEMO_COST_SUMMARY.cpuCost, color: 'bg-blue-500', percent: 42 },
   { label: 'Memory', value: DEMO_COST_SUMMARY.memoryCost, color: 'bg-green-500', percent: 25 },
   { label: 'Storage', value: DEMO_COST_SUMMARY.storageCost, color: 'bg-purple-500', percent: 15 },
-  { label: 'GPU', value: DEMO_COST_SUMMARY.gpuCost, color: 'bg-amber-500', percent: 11 },
+  { label: 'GPU', value: DEMO_COST_SUMMARY.gpuCost, color: 'bg-yellow-500', percent: 11 },
   { label: 'Network', value: DEMO_COST_SUMMARY.networkCost, color: 'bg-cyan-500', percent: 7 },
 ]
 
@@ -36,9 +36,9 @@ const DEMO_RECOMMENDATIONS = [
 ]
 
 export function KubecostOverview({ config: _config }: KubecostOverviewProps) {
-  const { t: _t } = useTranslation()
+  const { t } = useTranslation('cards')
   const { drillToCost } = useDrillDownActions()
-  useReportCardDataState({ hasData: true, isFailed: false, consecutiveFailures: 0 })
+  useReportCardDataState({ hasData: true, isFailed: false, consecutiveFailures: 0, isDemoData: false })
 
   return (
     <div className="h-full flex flex-col min-h-card content-loaded">
@@ -56,13 +56,13 @@ export function KubecostOverview({ config: _config }: KubecostOverviewProps) {
       </div>
 
       {/* Integration notice */}
-      <div className="flex items-start gap-2 p-2 mb-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs">
-        <AlertCircle className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
+      <div className="flex items-start gap-2 p-2 mb-3 rounded-lg bg-green-500/10 border border-green-500/20 text-xs">
+        <AlertCircle className="w-4 h-4 text-green-400 flex-shrink-0 mt-0.5" />
         <div>
-          <p className="text-emerald-400 font-medium">Kubecost Integration</p>
+          <p className="text-green-400 font-medium">Kubecost Integration</p>
           <p className="text-muted-foreground">
             Install Kubecost for detailed cost allocation and optimization recommendations.{' '}
-            <a href="https://docs.kubecost.com/install-and-configure/install/first-time-user-guide" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:underline">
+            <a href="https://docs.kubecost.com/install-and-configure/install/first-time-user-guide" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:underline inline-block py-2">
               Install guide →
             </a>
           </p>
@@ -71,11 +71,11 @@ export function KubecostOverview({ config: _config }: KubecostOverviewProps) {
 
       {/* Cost overview */}
       <div className="grid grid-cols-2 gap-2 mb-3">
-        <div className="p-3 rounded-lg bg-gradient-to-r from-emerald-500/20 to-green-500/20 border border-emerald-500/30">
-          <p className="text-xs text-emerald-400 mb-1">Monthly Cost</p>
+        <div className="p-3 rounded-lg bg-gradient-to-r from-green-500/20 to-green-500/20 border border-green-500/30">
+          <p className="text-xs text-green-400 mb-1">{t('kubecostOverview.monthlyCost')}</p>
           <p className="text-xl font-bold text-foreground">${DEMO_COST_SUMMARY.totalMonthly.toLocaleString()}</p>
         </div>
-        <div className="p-3 rounded-lg bg-gradient-to-r from-purple-500/20 to-pink-500/20 border border-purple-500/30">
+        <div className="p-3 rounded-lg bg-gradient-to-r from-purple-500/20 to-purple-500/20 border border-purple-500/30">
           <div className="flex items-center gap-1 mb-1">
             <p className="text-xs text-purple-400">Efficiency</p>
             <PieChart className="w-3 h-3 text-purple-400" />
@@ -99,7 +99,7 @@ export function KubecostOverview({ config: _config }: KubecostOverviewProps) {
         </div>
         <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2">
           {DEMO_COST_TRENDS.map(trend => (
-            <div key={trend.label} className="flex items-center gap-1 text-[10px]">
+            <div key={trend.label} className="flex items-center gap-1 text-2xs">
               <div className={`w-2 h-2 rounded-full ${trend.color}`} />
               <span className="text-muted-foreground">{trend.label}: ${trend.value}</span>
             </div>
@@ -110,7 +110,7 @@ export function KubecostOverview({ config: _config }: KubecostOverviewProps) {
       {/* Savings recommendations */}
       <div className="flex-1 overflow-y-auto">
         <div className="flex items-center justify-between mb-2">
-          <p className="text-xs text-muted-foreground font-medium">Savings Recommendations</p>
+          <p className="text-xs text-muted-foreground font-medium">{t('kubecostOverview.savingsRecommendations')}</p>
           <span className="flex items-center gap-1 text-xs text-green-400">
             <TrendingDown className="w-3 h-3" aria-hidden="true" />
             ${DEMO_COST_SUMMARY.savings}/mo potential
@@ -130,8 +130,8 @@ export function KubecostOverview({ config: _config }: KubecostOverviewProps) {
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
-                  <span className="text-xs text-foreground group-hover:text-emerald-400">{rec.description}</span>
+                  <AlertTriangle className="w-3.5 h-3.5 text-yellow-400" />
+                  <span className="text-xs text-foreground group-hover:text-green-400">{rec.description}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-green-400 font-medium">-${rec.savings}</span>

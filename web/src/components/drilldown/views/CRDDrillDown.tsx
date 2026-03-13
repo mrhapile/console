@@ -9,6 +9,7 @@ import {
   FileText, Code, Database, List
 } from 'lucide-react'
 import { cn } from '../../../lib/cn'
+import { StatusBadge } from '../../ui/StatusBadge'
 import { LOCAL_AGENT_WS_URL } from '../../../lib/constants'
 import { ConsoleAIIcon } from '../../ui/ConsoleAIIcon'
 import {
@@ -156,9 +157,13 @@ export function CRDDrillDown({ data }: Props) {
         }))
       }
       ws.onmessage = (event) => {
-        const msg = JSON.parse(event.data)
-        if (msg.id === requestId && msg.payload?.output) {
-          output = msg.payload.output
+        try {
+          const msg = JSON.parse(event.data)
+          if (msg.id === requestId && msg.payload?.output) {
+            output = msg.payload.output
+          }
+        } catch (e) {
+          console.error('Failed to parse WebSocket message:', e)
         }
         clearTimeout(timeout)
         ws.close()
@@ -343,7 +348,7 @@ Please:
               <Server className="w-4 h-4 text-blue-400" />
               <span className="text-muted-foreground">{t('drilldown.fields.cluster')}</span>
               <ClusterBadge cluster={cluster.split('/').pop() || cluster} size="sm" />
-              <svg className="w-3 h-3 text-blue-400/50 group-hover:text-blue-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-3 h-3 text-blue-400/70 group-hover:text-blue-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </button>
@@ -405,7 +410,7 @@ Please:
         {activeTab === 'overview' && (
           <div className="space-y-6">
             {/* CRD Info Card */}
-            <div className="p-4 rounded-lg bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-500/20">
+            <div className="p-4 rounded-lg bg-gradient-to-r from-purple-500/10 to-purple-500/10 border border-purple-500/20">
               <div className="flex items-start gap-3">
                 <Package className="w-8 h-8 text-purple-400 mt-1" />
                 <div className="flex-1 min-w-0">
@@ -492,10 +497,10 @@ Please:
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-foreground">{version.name}</span>
                         {version.storage && (
-                          <span className="px-2 py-0.5 rounded text-xs bg-blue-500/20 text-blue-400">{t('common.storage')}</span>
+                          <StatusBadge color="blue" size="xs">{t('common.storage')}</StatusBadge>
                         )}
                         {version.deprecated && (
-                          <span className="px-2 py-0.5 rounded text-xs bg-yellow-500/20 text-yellow-400">Deprecated</span>
+                          <StatusBadge color="yellow" size="xs">Deprecated</StatusBadge>
                         )}
                       </div>
                       <span className={cn(

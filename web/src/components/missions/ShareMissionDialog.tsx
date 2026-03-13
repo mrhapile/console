@@ -5,7 +5,7 @@
  * Runs security scanning before export to detect sensitive data.
  */
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import {
   X,
   Download,
@@ -94,6 +94,13 @@ export function ShareMissionDialog({ resolution, isOpen, onClose }: ShareMission
   const [scanResult, setScanResult] = useState<FileScanResult | null>(null)
   const [scanning, setScanning] = useState(false)
   const [exported, setExported] = useState<ExportChannel | null>(null)
+  const exportedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (exportedTimeoutRef.current !== null) clearTimeout(exportedTimeoutRef.current)
+    }
+  }, [])
 
   const mission = resolutionToMissionExport(resolution)
 
@@ -137,7 +144,8 @@ export function ShareMissionDialog({ resolution, isOpen, onClose }: ShareMission
     }
 
     setExported(channel)
-    setTimeout(() => setExported(null), UI_FEEDBACK_TIMEOUT_MS)
+    if (exportedTimeoutRef.current !== null) clearTimeout(exportedTimeoutRef.current)
+    exportedTimeoutRef.current = setTimeout(() => setExported(null), UI_FEEDBACK_TIMEOUT_MS)
   }, [mission, scanResult, scanning, runScan])
 
   if (!isOpen) return null
@@ -145,7 +153,7 @@ export function ShareMissionDialog({ resolution, isOpen, onClose }: ShareMission
   const hasWarnings = scanResult && scanResult.findings.some(f => f.severity === 'warning' || f.severity === 'error')
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-2xl">
       <div className="bg-card border border-border rounded-lg shadow-xl w-full max-w-md mx-4">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border">
@@ -161,7 +169,7 @@ export function ShareMissionDialog({ resolution, isOpen, onClose }: ShareMission
         {/* Mission preview */}
         <div className="p-4 border-b border-border">
           <p className="text-xs font-medium text-foreground truncate">{resolution.title}</p>
-          <p className="text-[10px] text-muted-foreground mt-1">
+          <p className="text-2xs text-muted-foreground mt-1">
             {resolution.issueSignature.type} · {resolution.resolution.steps.length} steps
           </p>
         </div>
@@ -240,7 +248,7 @@ function ExportButton({ icon, label, description, active, onClick }: {
       <div className="flex-shrink-0">{active ? <CheckCircle className="w-4 h-4 text-green-400" /> : icon}</div>
       <div>
         <p className="text-xs font-medium">{active ? 'Done!' : label}</p>
-        <p className="text-[10px] text-muted-foreground">{description}</p>
+        <p className="text-2xs text-muted-foreground">{description}</p>
       </div>
     </button>
   )

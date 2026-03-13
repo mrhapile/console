@@ -103,7 +103,6 @@ export type StatBlockColor =
   | 'red'
   | 'cyan'
   | 'gray'
-  | 'indigo'
 
 export interface StatBlockValueSource {
   /** Field in data object */
@@ -228,8 +227,7 @@ export const COLOR_CLASSES: Record<StatBlockColor, string> = {
   orange: 'text-orange-400',
   red: 'text-red-400',
   cyan: 'text-cyan-400',
-  gray: 'text-gray-400',
-  indigo: 'text-indigo-400',
+  gray: 'text-muted-foreground',
 }
 
 export const VALUE_COLORS: Record<string, string> = {
@@ -275,6 +273,7 @@ export function formatStatNumber(value: number): string {
  * Format memory/storage values
  */
 export function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
   if (bytes >= 1024 * 1024 * 1024 * 1024) {
     return `${(bytes / (1024 * 1024 * 1024 * 1024)).toFixed(1)} TB`
   }

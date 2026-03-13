@@ -26,7 +26,12 @@ podLabels: {}
 
 podSecurityContext: {}
 
-securityContext: {}
+securityContext:
+  runAsNonRoot: true
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
 
 service:
   type: ClusterIP
@@ -152,6 +157,23 @@ nodeSelector: {}
 tolerations: []
 
 affinity: {}
+
+networkPolicy:
+  enabled: false
+
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+
+# Watchdog reverse proxy — serves a branded "Reconnecting..." page when backend is down
+watchdog:
+  enabled: true
+
+# Self-upgrade: allow the console to upgrade its own Deployment image tag
+# from the UI. Creates a namespaced Role granting patch access to Deployments
+# in the release namespace only.
+selfUpgrade:
+  enabled: true
 
 # Additional environment variables
 extraEnv: []

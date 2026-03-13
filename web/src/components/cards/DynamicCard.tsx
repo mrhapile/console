@@ -118,6 +118,8 @@ export function Tier1CardRuntime({ cardDefinition }: Tier1Props) {
     needsPagination,
     itemsPerPage,
     filters,
+    containerRef,
+    containerStyle,
   } = useCardData(data, {
     filter: {
       searchFields,
@@ -176,7 +178,7 @@ export function Tier1CardRuntime({ cardDefinition }: Tier1Props) {
                 <p className={cn('text-lg font-semibold', stat.color || 'text-foreground')}>
                   {value}
                 </p>
-                <p className="text-[10px] text-muted-foreground">{stat.label}</p>
+                <p className="text-2xs text-muted-foreground">{stat.label}</p>
               </div>
             )
           })}
@@ -198,7 +200,7 @@ export function Tier1CardRuntime({ cardDefinition }: Tier1Props) {
 
       {/* List */}
       {showList && (
-        <div className="flex-1 overflow-y-auto">
+        <div ref={containerRef} className="flex-1 overflow-y-auto" style={containerStyle}>
           {items.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-6 text-center">
               <Database className="w-6 h-6 text-muted-foreground/40 mb-2" />
@@ -214,7 +216,7 @@ export function Tier1CardRuntime({ cardDefinition }: Tier1Props) {
                   {cardDefinition.columns.map(col => (
                     <span
                       key={col.field}
-                      className="text-[10px] font-medium text-muted-foreground uppercase"
+                      className="text-2xs font-medium text-muted-foreground uppercase"
                       style={{ width: col.width, flex: col.width ? 'none' : '1' }}
                     >
                       {col.label}
@@ -228,11 +230,11 @@ export function Tier1CardRuntime({ cardDefinition }: Tier1Props) {
                   {(cardDefinition.columns || []).map(col => {
                     const val = String((item as Record<string, unknown>)[col.field] ?? '-')
                     if (col.format === 'badge') {
-                      const badgeColor = col.badgeColors?.[val] || 'bg-gray-500/20 text-gray-400'
+                      const badgeColor = col.badgeColors?.[val] || 'bg-gray-500/20 text-muted-foreground'
                       return (
                         <span
                           key={col.field}
-                          className={cn('text-[10px] px-1 py-0.5 rounded shrink-0', badgeColor)}
+                          className={cn('text-2xs px-1 py-0.5 rounded shrink-0', badgeColor)}
                           style={{ width: col.width, flex: col.width ? 'none' : undefined }}
                         >
                           {val}

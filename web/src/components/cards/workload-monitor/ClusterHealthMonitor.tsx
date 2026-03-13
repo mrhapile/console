@@ -9,6 +9,7 @@ import { useClusters } from '../../../hooks/useMCP'
 import { useCachedPodIssues, useCachedDeploymentIssues } from '../../../hooks/useCachedData'
 import { useGlobalFilters } from '../../../hooks/useGlobalFilters'
 import { cn } from '../../../lib/cn'
+import { StatusBadge } from '../../ui/StatusBadge'
 import { useCardLoadingState } from '../CardDataContext'
 import { WorkloadMonitorAlerts } from './WorkloadMonitorAlerts'
 import { WorkloadMonitorDiagnose } from './WorkloadMonitorDiagnose'
@@ -32,7 +33,7 @@ const STATUS_BADGE: Record<string, string> = {
   healthy: 'bg-green-500/20 text-green-400',
   degraded: 'bg-yellow-500/20 text-yellow-400',
   unhealthy: 'bg-red-500/20 text-red-400',
-  unknown: 'bg-gray-500/20 text-gray-400',
+  unknown: 'bg-gray-500/20 text-muted-foreground',
 }
 
 const STATUS_DOT: Record<string, string> = {
@@ -248,15 +249,15 @@ export function ClusterHealthMonitor({ config: _config }: ClusterHealthMonitorPr
       <div className="grid grid-cols-3 gap-2 mb-3">
         <div className="rounded-md bg-card/50 border border-border p-2 text-center">
           <p className="text-lg font-semibold text-foreground">{stats.totalNodes}</p>
-          <p className="text-[10px] text-muted-foreground">{t('common.nodes')}</p>
+          <p className="text-2xs text-muted-foreground">{t('common.nodes')}</p>
         </div>
         <div className="rounded-md bg-card/50 border border-border p-2 text-center">
           <p className="text-lg font-semibold text-red-400">{stats.totalPodIssues}</p>
-          <p className="text-[10px] text-muted-foreground">Pod Issues</p>
+          <p className="text-2xs text-muted-foreground">Pod Issues</p>
         </div>
         <div className="rounded-md bg-card/50 border border-border p-2 text-center">
           <p className="text-lg font-semibold text-orange-400">{stats.totalDeployIssues}</p>
-          <p className="text-[10px] text-muted-foreground">Deploy Issues</p>
+          <p className="text-2xs text-muted-foreground">Deploy Issues</p>
         </div>
       </div>
 
@@ -280,7 +281,7 @@ export function ClusterHealthMonitor({ config: _config }: ClusterHealthMonitorPr
                 <Server className="w-3.5 h-3.5 text-purple-400 shrink-0" />
                 <span className="text-sm text-foreground flex-1 truncate">{cluster.name}</span>
                 {cluster.nodes > 0 && (
-                  <span className="text-[10px] text-muted-foreground shrink-0">
+                  <span className="text-2xs text-muted-foreground shrink-0">
                     {cluster.nodes} nodes
                   </span>
                 )}
@@ -296,7 +297,7 @@ export function ClusterHealthMonitor({ config: _config }: ClusterHealthMonitorPr
                     <div className="space-y-0.5">
                       <div className="flex items-center gap-1.5 py-0.5 px-1">
                         <Box className="w-3 h-3 text-orange-400" />
-                        <span className="text-[10px] font-medium text-muted-foreground">
+                        <span className="text-2xs font-medium text-muted-foreground">
                           Pod Issues ({clusterPodIssues.length})
                         </span>
                       </div>
@@ -304,14 +305,14 @@ export function ClusterHealthMonitor({ config: _config }: ClusterHealthMonitorPr
                         <div key={`pod-${i}`} className="flex items-center gap-2 py-0.5 px-1 ml-4 rounded hover:bg-card/30 transition-colors">
                           <XCircle className="w-3 h-3 text-red-400 shrink-0" />
                           <span className="text-xs text-foreground truncate flex-1">{p.name}</span>
-                          <span className="text-[10px] text-muted-foreground shrink-0">{p.namespace}</span>
-                          <span className="text-[10px] px-1 py-0.5 rounded bg-red-500/20 text-red-400 shrink-0">
+                          <span className="text-2xs text-muted-foreground shrink-0">{p.namespace}</span>
+                          <StatusBadge color="red" size="xs" className="shrink-0">
                             {p.status || 'error'}
-                          </span>
+                          </StatusBadge>
                         </div>
                       ))}
                       {clusterPodIssues.length > 5 && (
-                        <p className="text-[10px] text-muted-foreground ml-4 px-1">
+                        <p className="text-2xs text-muted-foreground ml-4 px-1">
                           +{clusterPodIssues.length - 5} more
                         </p>
                       )}
@@ -323,7 +324,7 @@ export function ClusterHealthMonitor({ config: _config }: ClusterHealthMonitorPr
                     <div className="space-y-0.5">
                       <div className="flex items-center gap-1.5 py-0.5 px-1">
                         <Activity className="w-3 h-3 text-yellow-400" />
-                        <span className="text-[10px] font-medium text-muted-foreground">
+                        <span className="text-2xs font-medium text-muted-foreground">
                           Deployment Issues ({clusterDeployIssues.length})
                         </span>
                       </div>
@@ -331,14 +332,14 @@ export function ClusterHealthMonitor({ config: _config }: ClusterHealthMonitorPr
                         <div key={`deploy-${i}`} className="flex items-center gap-2 py-0.5 px-1 ml-4 rounded hover:bg-card/30 transition-colors">
                           <AlertTriangle className="w-3 h-3 text-yellow-400 shrink-0" />
                           <span className="text-xs text-foreground truncate flex-1">{d.name}</span>
-                          <span className="text-[10px] text-muted-foreground shrink-0">{d.namespace}</span>
-                          <span className="text-[10px] px-1 py-0.5 rounded bg-yellow-500/20 text-yellow-400 shrink-0">
+                          <span className="text-2xs text-muted-foreground shrink-0">{d.namespace}</span>
+                          <StatusBadge color="yellow" size="xs" className="shrink-0">
                             {d.readyReplicas ?? 0}/{d.replicas ?? 0}
-                          </span>
+                          </StatusBadge>
                         </div>
                       ))}
                       {clusterDeployIssues.length > 5 && (
-                        <p className="text-[10px] text-muted-foreground ml-4 px-1">
+                        <p className="text-2xs text-muted-foreground ml-4 px-1">
                           +{clusterDeployIssues.length - 5} more
                         </p>
                       )}

@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { CARD_TITLES, CARD_DESCRIPTIONS } from '../components/cards/CardWrapper'
+import { CARD_TITLES, CARD_DESCRIPTIONS } from '../components/cards/cardMetadata'
 import { getDefaultStatBlocks, type DashboardStatsType, type StatBlockConfig } from '../components/ui/StatsBlockDefinitions'
 import { useClusters } from './mcp/clusters'
 import { useDeployments, usePods } from './mcp/workloads'
@@ -76,6 +76,7 @@ const DASHBOARD_NAMES: Record<DashboardStatsType, string> = {
   deploy: 'Deploy',
   'ai-agents': 'AI Agents',
   'cluster-admin': 'Cluster Admin',
+  insights: 'Insights',
 }
 
 const DASHBOARD_ROUTES: Record<DashboardStatsType, string> = {
@@ -97,13 +98,14 @@ const DASHBOARD_ROUTES: Record<DashboardStatsType, string> = {
   deploy: '/deploy',
   'ai-agents': '/ai-agents',
   'cluster-admin': '/cluster-admin',
+  insights: '/insights',
 }
 
 const ALL_STATS_DASHBOARD_TYPES: DashboardStatsType[] = [
   'dashboard', 'clusters', 'workloads', 'pods', 'gitops', 'storage',
   'network', 'security', 'compliance', 'data-compliance', 'compute',
   'events', 'cost', 'alerts', 'operators', 'deploy', 'ai-agents',
-  'cluster-admin',
+  'cluster-admin', 'insights',
 ]
 
 // --- Dashboard storage keys → routes (for scanning placed cards) ---
@@ -133,6 +135,7 @@ const DASHBOARD_STORAGE: { key: string; route: string; name: string }[] = [
   { key: 'kubestellar-arcade-cards', route: '/arcade', name: 'Arcade' },
   { key: 'kubestellar-kagenti-cards', route: '/ai-agents', name: 'AI Agents' },
   { key: 'kubestellar-cluster-admin-cards', route: '/cluster-admin', name: 'Cluster Admin' },
+  { key: 'kubestellar-insights-cards', route: '/insights', name: 'Insights' },
 ]
 
 interface StoredCard {
@@ -290,7 +293,21 @@ const SETTING_ITEMS: SearchItem[] = [
   { id: 'setting-permissions', name: 'Permissions', description: 'Settings · Permission validation and access control', category: 'setting', href: '/settings', keywords: ['permission', 'access', 'rbac'] },
 ]
 
+// All known card types from metadata (makes every card searchable even if not placed)
+// Catalog items navigate to main dashboard and open the Add Card modal
+const CATALOG_CARD_ITEMS: SearchItem[] = Object.entries(CARD_TITLES).map(([type, title]) => ({
+  id: `catalog-card-${type}`,
+  name: title,
+  description: CARD_DESCRIPTIONS[type] || 'Available card',
+  category: 'card' as SearchCategory,
+  href: `/?addCard=true&cardSearch=${encodeURIComponent(title)}`,
+  keywords: [type, type.replace(/_/g, ' ')],
+  meta: 'add card',
+}))
+
 // Static items that don't need localStorage scanning (stats are scanned dynamically now)
+// Note: CATALOG_CARD_ITEMS are NOT included here — they're de-duplicated against
+// placed cards at query time (see filtering logic below)
 const STATIC_ITEMS: SearchItem[] = [
   ...PAGE_ITEMS,
   ...SETTING_ITEMS,
@@ -456,7 +473,12 @@ export function useSearchIndex(query: string) {
     // Scan placed stats from localStorage / defaults
     const placedStats = scanPlacedStats()
 
-    const allItems = [...STATIC_ITEMS, ...dynamicItems, ...placedCards, ...placedStats]
+    // De-duplicate: if a card is placed on a dashboard, prefer the placed version
+    // (which navigates + scrolls to it) over the generic catalog version
+    const placedCardTypes = new Set(placedCards.map(c => c.id.replace(/^card-/, '').replace(/-on-.*$/, '')))
+    const dedupedCatalog = CATALOG_CARD_ITEMS.filter(c => !placedCardTypes.has(c.id.replace('catalog-card-', '')))
+
+    const allItems = [...STATIC_ITEMS, ...dedupedCatalog, ...dynamicItems, ...placedCards, ...placedStats]
     const matched = allItems.filter(item => matchesQuery(item, query))
 
     // Group by category

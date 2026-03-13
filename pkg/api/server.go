@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -73,6 +74,8 @@ type Config struct {
 	BenchmarkFolderID          string // Google Drive folder ID containing benchmark results
 	// Sidebar configuration
 	EnabledDashboards string // Comma-separated list of dashboard IDs to show in sidebar (empty = all)
+	// Watchdog support: when set, the backend listens on this port instead of Port
+	BackendPort int
 }
 
 // Server represents the API server
@@ -87,6 +90,7 @@ type Server struct {
 	persistenceStore    *store.PersistenceStore
 	loadingSrv          *http.Server // temporary loading screen server
 	shuttingDown        int32        // atomic flag: 1 during graceful shutdown
+	gpuUtilWorker       *GPUUtilizationWorker
 }
 
 // NewServer creates a new API server. It starts a temporary loading page
@@ -116,7 +120,12 @@ func NewServer(cfg Config) (*Server, error) {
 
 	// Start a temporary loading page server immediately so the user
 	// sees a loading screen instead of "connection refused" during init.
-	addr := fmt.Sprintf(":%d", cfg.Port)
+	// When BackendPort is set (watchdog mode), listen on that port instead.
+	listenPort := cfg.Port
+	if cfg.BackendPort > 0 {
+		listenPort = cfg.BackendPort
+	}
+	addr := fmt.Sprintf(":%d", listenPort)
 	loadingSrv := startLoadingServer(addr)
 
 	// --- Heavy initialization (loading page is already being served) ---
@@ -140,6 +149,7 @@ func NewServer(cfg Config) (*Server, error) {
 	// WebSocket hub
 	hub := handlers.NewHub()
 	hub.SetJWTSecret(cfg.JWTSecret)
+	hub.SetDevMode(cfg.DevMode)
 	go hub.Run()
 
 	// Initialize Kubernetes multi-cluster client
@@ -226,6 +236,12 @@ func NewServer(cfg Config) (*Server, error) {
 
 	server.setupMiddleware()
 	server.setupRoutes()
+
+	// Start GPU utilization background worker (collects hourly snapshots)
+	if k8sClient != nil {
+		server.gpuUtilWorker = NewGPUUtilizationWorker(db, k8sClient)
+		server.gpuUtilWorker.Start()
+	}
 
 	log.Println("Server initialization complete")
 
@@ -339,6 +355,7 @@ func (s *Server) setupRoutes() {
 			"oauth_configured": s.config.GitHubClientID != "",
 			"in_cluster":       inCluster,
 			"install_method":   detectInstallMethod(inCluster),
+			"self_upgrade":     os.Getenv("SELF_UPGRADE_ENABLED") == "true",
 		}
 		if s.config.EnabledDashboards != "" {
 			dashboards := strings.Split(s.config.EnabledDashboards, ",")
@@ -418,9 +435,12 @@ func (s *Server) setupRoutes() {
 	s.app.Get("/api/public/nightly-e2e/runs", nightlyE2EPublic.GetRuns)
 	s.app.Get("/api/public/nightly-e2e/run-logs", nightlyE2EPublic.GetRunLogs)
 
-	// GA4 analytics proxy (public — no auth required, has its own origin validation)
-	// MUST be registered before the /api group so JWTAuth middleware doesn't intercept it
+	// Analytics proxies (public — no auth required, have their own origin validation)
+	// MUST be registered before the /api group so JWTAuth middleware doesn't intercept them
 	s.app.All("/api/m", handlers.GA4CollectProxy)
+	s.app.Get("/api/gtag", handlers.GA4ScriptProxy)
+	s.app.Get("/api/ksc", handlers.UmamiScriptProxy)
+	s.app.Post("/api/send", handlers.UmamiCollectProxy)
 
 	// MCP handlers (used in protected routes below)
 	mcpHandlers := handlers.NewMCPHandlers(s.bridge, s.k8sClient)
@@ -573,6 +593,7 @@ func (s *Server) setupRoutes() {
 	api.Get("/mcp/configmaps/stream", mcpHandlers.GetConfigMapsStream)
 	api.Get("/mcp/secrets/stream", mcpHandlers.GetSecretsStream)
 	api.Get("/mcp/nvidia-operators/stream", mcpHandlers.GetNVIDIAOperatorStatusStream)
+	api.Get("/mcp/workloads/stream", mcpHandlers.GetWorkloadsStream)
 
 	// GitOps routes (drift detection and sync)
 	// SECURITY: All GitOps routes require authentication in both dev and production modes
@@ -589,6 +610,19 @@ func (s *Server) setupRoutes() {
 	api.Get("/gitops/helm-releases/stream", gitopsHandlers.StreamHelmReleases)
 	api.Post("/gitops/detect-drift", gitopsHandlers.DetectDrift)
 	api.Post("/gitops/sync", gitopsHandlers.Sync)
+	// Helm write operations (rollback, uninstall, upgrade)
+	api.Post("/gitops/helm-rollback", gitopsHandlers.RollbackHelmRelease)
+	api.Post("/gitops/helm-uninstall", gitopsHandlers.UninstallHelmRelease)
+	api.Post("/gitops/helm-upgrade", gitopsHandlers.UpgradeHelmRelease)
+	// Helm self-upgrade (in-cluster Deployment patch)
+	selfUpgradeHandler := handlers.NewSelfUpgradeHandler(s.k8sClient, s.hub)
+	api.Get("/self-upgrade/status", selfUpgradeHandler.GetStatus)
+	api.Post("/self-upgrade/trigger", selfUpgradeHandler.TriggerUpgrade)
+	// ArgoCD routes (Application CRD discovery and sync)
+	api.Get("/gitops/argocd/applications", gitopsHandlers.ListArgoApplications)
+	api.Get("/gitops/argocd/health", gitopsHandlers.GetArgoHealthSummary)
+	api.Get("/gitops/argocd/sync", gitopsHandlers.GetArgoSyncSummary)
+	api.Post("/gitops/argocd/sync", gitopsHandlers.TriggerArgoSync)
 	// Frontend compatibility alias
 	api.Get("/mcp/operator-subscriptions", gitopsHandlers.ListOperatorSubscriptions)
 
@@ -609,6 +643,18 @@ func (s *Server) setupRoutes() {
 	api.Get("/gateway/gateways/:cluster/:namespace/:name", gatewayHandlers.GetGateway)
 	api.Get("/gateway/httproutes", gatewayHandlers.ListHTTPRoutes)
 	api.Get("/gateway/httproutes/:cluster/:namespace/:name", gatewayHandlers.GetHTTPRoute)
+
+	// CRD routes (Custom Resource Definition browser)
+	crdHandlers := handlers.NewCRDHandlers(s.k8sClient)
+	api.Get("/crds", crdHandlers.ListCRDs)
+
+	// MCS ServiceExport routes
+	svcExportHandlers := handlers.NewServiceExportHandlers(s.k8sClient)
+	api.Get("/service-exports", svcExportHandlers.ListServiceExports)
+
+	// Admission webhook routes
+	webhookHandlers := handlers.NewWebhookHandlers(s.k8sClient)
+	api.Get("/admission-webhooks", webhookHandlers.ListWebhooks)
 
 	// Service Topology routes
 	topologyHandlers := handlers.NewTopologyHandlers(s.k8sClient, s.hub)
@@ -681,6 +727,8 @@ func (s *Server) setupRoutes() {
 	api.Get("/gpu/reservations/:id", gpuHandler.GetReservation)
 	api.Put("/gpu/reservations/:id", gpuHandler.UpdateReservation)
 	api.Delete("/gpu/reservations/:id", gpuHandler.DeleteReservation)
+	api.Get("/gpu/reservations/:id/utilization", gpuHandler.GetReservationUtilization)
+	api.Get("/gpu/utilizations", gpuHandler.GetBulkUtilizations)
 
 	// Alert notification routes
 	notificationHandler := handlers.NewNotificationHandler(s.store, s.notificationService)
@@ -722,6 +770,14 @@ func (s *Server) setupRoutes() {
 	s.app.Use("/ws", middleware.WebSocketUpgrade())
 	s.app.Get("/ws", websocket.New(func(c *websocket.Conn) {
 		s.hub.HandleConnection(c)
+	}))
+
+	// WebSocket for pod exec terminal
+	// Registered at /ws/exec (not /api/exec) to avoid the /api group's JWTAuth middleware
+	execHandlers := handlers.NewExecHandlers(s.k8sClient)
+	s.app.Use("/ws/exec", middleware.WebSocketUpgrade())
+	s.app.Get("/ws/exec", websocket.New(func(c *websocket.Conn) {
+		execHandlers.HandleExec(c)
 	}))
 
 	// Serve static files in production
@@ -791,7 +847,7 @@ func preCompressedStatic(root string) fiber.Handler {
 				c.Set("Cache-Control", fmt.Sprintf("public, max-age=%d, immutable", oneYear))
 				c.Set("Content-Length", fmt.Sprintf("%d", brInfo.Size()))
 				c.Set("Vary", "Accept-Encoding")
-				return c.SendFile(brPath, true)
+				return c.SendFile(brPath)
 			}
 		}
 		if strings.Contains(accept, "gzip") {
@@ -802,7 +858,7 @@ func preCompressedStatic(root string) fiber.Handler {
 				c.Set("Cache-Control", fmt.Sprintf("public, max-age=%d, immutable", oneYear))
 				c.Set("Content-Length", fmt.Sprintf("%d", gzInfo.Size()))
 				c.Set("Vary", "Accept-Encoding")
-				return c.SendFile(gzPath, true)
+				return c.SendFile(gzPath)
 			}
 		}
 
@@ -811,7 +867,7 @@ func preCompressedStatic(root string) fiber.Handler {
 			c.Set("Content-Type", contentType)
 		}
 		c.Set("Cache-Control", fmt.Sprintf("public, max-age=%d, immutable", oneYear))
-		return c.SendFile(filePath, true)
+		return c.SendFile(filePath)
 	}
 }
 
@@ -836,7 +892,12 @@ func (s *Server) Start() error {
 		time.Sleep(serverStartupDelay)
 	}
 
-	addr := fmt.Sprintf(":%d", s.config.Port)
+	// When BackendPort is set (watchdog mode), listen on that port instead
+	listenPort := s.config.Port
+	if s.config.BackendPort > 0 {
+		listenPort = s.config.BackendPort
+	}
+	addr := fmt.Sprintf(":%d", listenPort)
 	log.Printf("Starting server on %s (dev=%v)", addr, s.config.DevMode)
 	return s.app.Listen(addr)
 }
@@ -846,6 +907,9 @@ func (s *Server) Start() error {
 // before services are torn down, giving the frontend time to notice.
 func (s *Server) Shutdown() error {
 	atomic.StoreInt32(&s.shuttingDown, 1)
+	if s.gpuUtilWorker != nil {
+		s.gpuUtilWorker.Stop()
+	}
 	s.hub.Close()
 	if s.k8sClient != nil {
 		s.k8sClient.StopWatching()
@@ -880,6 +944,15 @@ func LoadConfigFromEnv() Config {
 	port := 8080
 	if p := os.Getenv("PORT"); p != "" {
 		fmt.Sscanf(p, "%d", &port)
+	}
+
+	var backendPort int
+	if p := os.Getenv("BACKEND_PORT"); p != "" {
+		if v, err := strconv.Atoi(p); err != nil {
+			log.Printf("WARNING: invalid BACKEND_PORT %q, ignoring: %v", p, err)
+		} else {
+			backendPort = v
+		}
 	}
 
 	dbPath := "./data/console.db"
@@ -931,6 +1004,8 @@ func LoadConfigFromEnv() Config {
 		BenchmarkFolderID:          getEnvOrDefault("BENCHMARK_FOLDER_ID", "1r2Z2Xp1L0KonUlvQHvEzed8AO9Xj8IPm"),
 		// Sidebar dashboard filter
 		EnabledDashboards: os.Getenv("ENABLED_DASHBOARDS"),
+		// Watchdog backend port override
+		BackendPort: backendPort,
 	}
 }
 

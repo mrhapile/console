@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback } from 'react'
 import {
   AlertTriangle,
+  Bell,
   CheckCircle,
   Clock,
   ChevronRight,
@@ -11,17 +12,21 @@ import {
   ExternalLink,
 } from 'lucide-react'
 import { useAlerts } from '../../hooks/useAlerts'
+import { StatusBadge } from '../ui/StatusBadge'
 import { useGlobalFilters, type SeverityLevel } from '../../hooks/useGlobalFilters'
 import { useDrillDown } from '../../hooks/useDrillDown'
 import { useMissions } from '../../hooks/useMissions'
 import { getSeverityIcon } from '../../types/alerts'
 import type { Alert, AlertSeverity } from '../../types/alerts'
+import { Button } from '../ui/Button'
 import { CardControls } from '../ui/CardControls'
 import { Pagination } from '../ui/Pagination'
 import { useCardData, CardClusterFilter, CardSearchInput, CardAIActions } from '../../lib/cards'
 import { useCardLoadingState } from './CardDataContext'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
+import { useDemoMode } from '../../hooks/useDemoMode'
+import { isBrowserNotifVerified, setBrowserNotifVerified } from '../../lib/notificationStatus'
 
 // Severity color map — defined at module level to avoid re-creation on each render
 const SEVERITY_COLORS: Record<AlertSeverity, string> = {
@@ -84,22 +89,63 @@ function formatRelativeTime(dateString: string, t: TFunction<'cards'>): string {
   return t('activeAlerts.daysAgo', { count: diffDays })
 }
 
+/** Notification verification flow state */
+type NotifVerifyState = 'idle' | 'asked' | 'verified' | 'failed'
+
 type SortField = 'severity' | 'time'
 
 export function ActiveAlerts() {
   const { t } = useTranslation('cards')
   const { activeAlerts, acknowledgedAlerts, stats, acknowledgeAlert, runAIDiagnosis } = useAlerts()
   const { selectedSeverities, isAllSeveritiesSelected, customFilter } = useGlobalFilters()
+  const { isDemoMode } = useDemoMode()
 
   // Report state to CardWrapper for refresh animation
   useCardLoadingState({
     isLoading: false,
     hasAnyData: true,
+    isDemoData: isDemoMode,
   })
   const { open } = useDrillDown()
   const { missions, setActiveMission, openSidebar } = useMissions()
 
   const [showAcknowledged, setShowAcknowledged] = useState(false)
+
+  // Browser notification verification state
+  const [notifVerifyState, setNotifVerifyState] = useState<NotifVerifyState>('idle')
+  const [notifVerified, setNotifVerified] = useState(() => isBrowserNotifVerified())
+
+  /** Whether the notification indicator should be visible */
+  const showNotifIndicator =
+    typeof Notification !== 'undefined' &&
+    Notification.permission === 'granted' &&
+    !notifVerified &&
+    notifVerifyState !== 'verified'
+
+  /** Send a test notification and ask user to confirm receipt */
+  const handleSendTestNotif = () => {
+    try {
+      new Notification('KubeStellar Console', {
+        body: 'Test notification — can you see this?', // TODO: i18n
+        icon: '/favicon.ico',
+      })
+    } catch {
+      // Notification constructor may throw in some environments
+    }
+    setNotifVerifyState('asked')
+  }
+
+  /** User confirmed they saw the test notification */
+  const handleNotifYes = () => {
+    setBrowserNotifVerified(true)
+    setNotifVerified(true)
+    setNotifVerifyState('verified')
+  }
+
+  /** User did NOT see the test notification */
+  const handleNotifNo = () => {
+    setNotifVerifyState('failed')
+  }
 
   // Combine active and acknowledged alerts when toggle is on
   const allAlertsToShow = useMemo(() => {
@@ -171,6 +217,8 @@ export function ActiveAlerts() {
       sortBy,
       setSortBy,
     },
+    containerRef,
+    containerStyle,
   } = useCardData<Alert, SortField>(severityFilteredAlerts, {
     filter: {
       searchFields: ['ruleName', 'message', 'cluster'],
@@ -234,14 +282,50 @@ export function ActiveAlerts() {
       <div className="flex items-center justify-between mb-2 flex-shrink-0">
         <div className="flex items-center gap-2">
           {stats.firing > 0 && (
-            <span className="px-1.5 py-0.5 text-xs font-medium rounded-full bg-red-500/20 text-red-400 border border-red-500/30">
+            <StatusBadge color="red" variant="outline" rounded="full">
               {t('activeAlerts.firingCount', { count: stats.firing })}
-            </span>
+            </StatusBadge>
           )}
           {localClusterFilter.length > 0 && (
             <span className="flex items-center gap-1 text-xs text-muted-foreground bg-secondary/50 px-1.5 py-0.5 rounded">
               <Server className="w-3 h-3" />
               {localClusterFilter.length}/{availableClustersForFilter.length}
+            </span>
+          )}
+          {/* Subtle browser notification verification indicator */}
+          {showNotifIndicator && notifVerifyState === 'idle' && (
+            <button
+              onClick={handleSendTestNotif}
+              title="Browser notifications not verified — click to test" // TODO: i18n
+              className="relative flex items-center p-1 rounded hover:bg-secondary/60 transition-colors"
+            >
+              <Bell className="w-3.5 h-3.5 text-muted-foreground" />
+              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-amber-400" />
+            </button>
+          )}
+          {notifVerifyState === 'asked' && (
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              {/* TODO: i18n */}
+              <span>Did you see it?</span>
+              <button
+                onClick={handleNotifYes}
+                className="px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-colors text-xs"
+              >
+                Yes
+              </button>
+              <button
+                onClick={handleNotifNo}
+                className="px-1.5 py-0.5 rounded bg-secondary text-muted-foreground hover:text-foreground transition-colors text-xs"
+              >
+                No
+              </button>
+            </span>
+          )}
+          {notifVerifyState === 'failed' && (
+            <span className="flex items-center gap-1 text-xs text-amber-400">
+              <Bell className="w-3 h-3" />
+              {/* TODO: i18n */}
+              <span>Check System Settings &rarr; Notifications &rarr; Chrome</span>
             </span>
           )}
         </div>
@@ -260,9 +344,9 @@ export function ActiveAlerts() {
             {showAcknowledged ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
             <span>{t('activeAlerts.ackd')}</span>
             {acknowledgedAlerts.length > 0 && (
-              <span className="ml-0.5 px-1 py-0 text-[10px] rounded-full bg-green-500/30">
+              <StatusBadge color="green" size="xs" rounded="full" className="ml-0.5">
                 {acknowledgedAlerts.length}
-              </span>
+              </StatusBadge>
             )}
           </button>
           {/* 2. Cluster Filter */}
@@ -302,7 +386,7 @@ export function ActiveAlerts() {
       <AlertStatsRow critical={stats.critical} warning={stats.warning} acknowledged={stats.acknowledged} />
 
       {/* Alerts List */}
-      <div className="flex-1 overflow-y-auto space-y-2">
+      <div ref={containerRef} className="flex-1 overflow-y-auto space-y-2" style={containerStyle}>
         {displayedAlerts.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-muted-foreground text-sm">
             <CheckCircle className="w-8 h-8 mb-2 text-green-400" />
@@ -356,24 +440,28 @@ export function ActiveAlerts() {
               {/* Quick Actions */}
               <div className="flex items-center gap-2 mt-2 pt-2 border-t border-border/30">
                 {!alert.acknowledgedAt && (
-                  <button
+                  <Button
+                    variant="secondary"
+                    size="sm"
                     onClick={e => handleAcknowledge(e, alert.id)}
-                    className="px-2 py-1 text-xs rounded bg-secondary hover:bg-secondary/80 text-foreground transition-colors"
+                    className="rounded"
                   >
                     {t('activeAlerts.acknowledge')}
-                  </button>
+                  </Button>
                 )}
                 {(() => {
                   const mission = getMissionForAlert(alert)
                   if (mission) {
                     return (
-                      <button
+                      <Button
+                        variant="accent"
+                        size="sm"
                         onClick={e => handleOpenMission(e, alert)}
-                        className="px-2 py-1 text-xs rounded bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 transition-colors flex items-center gap-1"
+                        icon={<ExternalLink className="w-3 h-3" />}
+                        className="rounded"
                       >
-                        <ExternalLink className="w-3 h-3" />
                         {t('activeAlerts.viewDiagnosis')}
-                      </button>
+                      </Button>
                     )
                   } else {
                     return (

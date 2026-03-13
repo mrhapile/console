@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
-import { useGPUNodes, useClusters } from '../../hooks/useMCP'
+import { useClusters } from '../../hooks/useMCP'
+import { useCachedGPUNodes } from '../../hooks/useCachedData'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { useDrillDownActions } from '../../hooks/useDrillDown'
 import { Skeleton } from '../ui/Skeleton'
@@ -9,6 +10,7 @@ import { useCardLoadingState } from './CardDataContext'
 import { Activity } from 'lucide-react'
 import { ClusterStatusDot } from '../ui/ClusterStatusBadge'
 import { useTranslation } from 'react-i18next'
+import { useDemoMode } from '../../hooks/useDemoMode'
 
 interface GPUOverviewProps {
   config?: Record<string, unknown>
@@ -26,15 +28,19 @@ export function GPUOverview({ config: _config }: GPUOverviewProps) {
   const {
     nodes: rawNodes,
     isLoading: hookLoading,
-  } = useGPUNodes()
+    isDemoFallback,
+  } = useCachedGPUNodes()
   const { deduplicatedClusters: clusters } = useClusters()
+  const { isDemoMode } = useDemoMode()
 
   const { selectedClusters, isAllClustersSelected } = useGlobalFilters()
 
   // Report state to CardWrapper for refresh animation
+  // useGPUNodes falls back to demo data when isDemoMode is true and no live data is available
   const { showSkeleton } = useCardLoadingState({
     isLoading: hookLoading,
     hasAnyData: rawNodes.length > 0,
+    isDemoData: isDemoMode || isDemoFallback,
   })
   const isLoading = showSkeleton
   const { drillToResources } = useDrillDownActions()
@@ -46,6 +52,8 @@ export function GPUOverview({ config: _config }: GPUOverviewProps) {
     items: filteredNodes,
     filters,
     sorting,
+    containerRef,
+    containerStyle,
   } = useCardData(rawNodes, {
     filter: {
       searchFields: ['gpuType' as keyof typeof rawNodes[number]],
@@ -307,7 +315,7 @@ export function GPUOverview({ config: _config }: GPUOverviewProps) {
       {sortedGpuTypes.length > 0 && (
         <div className="flex-1">
           <p className="text-xs text-muted-foreground mb-2">{t('gpuOverview.gpuTypes')}</p>
-          <div className="space-y-1">
+          <div ref={containerRef} className="space-y-1" style={containerStyle}>
             {sortedGpuTypes.map(([type, count]) => (
               <div
                 key={type}

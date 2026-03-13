@@ -22,7 +22,7 @@ const statusConfig: Record<Status, {
   critical: { icon: XCircle, color: 'text-red-500', bg: 'bg-red-600', label: 'Critical' },
   pending: { icon: Clock, color: 'text-blue-400', bg: 'bg-blue-500', label: 'Pending' },
   loading: { icon: Loader2, color: 'text-purple-400', bg: 'bg-purple-500', label: 'Loading' },
-  unknown: { icon: AlertTriangle, color: 'text-gray-400', bg: 'bg-gray-500', label: 'Unknown' },
+  unknown: { icon: AlertTriangle, color: 'text-muted-foreground', bg: 'bg-gray-500', label: 'Unknown' },
   unreachable: { icon: WifiOff, color: 'text-yellow-400', bg: 'bg-yellow-500', label: 'Offline' },
 }
 
@@ -52,7 +52,7 @@ export function StatusIndicator({
           }`}
         />
         {pulse && status === 'healthy' && (
-          <span className={`absolute inset-0 ${config.bg} rounded-full animate-ping opacity-30`} />
+          <span className={`absolute inset-0 ${config.bg} rounded-full animate-pulse opacity-20`} />
         )}
       </div>
       {showLabel && (
@@ -80,7 +80,7 @@ export function StatusDot({ status, size = 'md', pulse = false }: StatusDotProps
       <div className={`${sizeConfig.dot} ${config.bg} rounded-full`} />
       {pulse && (
         <span
-          className={`absolute inset-0 ${config.bg} rounded-full animate-ping opacity-50`}
+          className={`absolute inset-0 ${config.bg} rounded-full animate-pulse opacity-20`}
         />
       )}
     </div>

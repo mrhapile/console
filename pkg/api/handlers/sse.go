@@ -90,7 +90,8 @@ func streamClusters(
 ) error {
 	healthy, offline, err := h.k8sClient.HealthyClusters(c.Context())
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		log.Printf("internal error: %v", err)
+		return c.Status(500).JSON(fiber.Map{"error": "internal server error"})
 	}
 
 	c.Set("Content-Type", "text/event-stream")
@@ -502,6 +503,29 @@ func (h *MCPHandlers) GetSecretsStream(c *fiber.Ctx) error {
 		clusterTimeout: ssePerClusterTimeout,
 	}, func(ctx context.Context, cluster string) (interface{}, error) {
 		return h.k8sClient.GetSecrets(ctx, cluster, namespace)
+	})
+}
+
+// GetWorkloadsStream streams workloads per cluster via SSE.
+func (h *MCPHandlers) GetWorkloadsStream(c *fiber.Ctx) error {
+	if isDemoMode(c) {
+		return streamDemoSSE(c, "workloads", getDemoWorkloads())
+	}
+	if h.k8sClient == nil {
+		return c.Status(503).JSON(fiber.Map{"error": "No cluster access"})
+	}
+
+	namespace := c.Query("namespace")
+	workloadType := c.Query("type")
+	return streamClusters(c, h, sseClusterStreamConfig{
+		demoKey:        "workloads",
+		clusterTimeout: ssePerClusterTimeout,
+	}, func(ctx context.Context, cluster string) (interface{}, error) {
+		workloads, err := h.k8sClient.ListWorkloadsForCluster(ctx, cluster, namespace, workloadType)
+		if err != nil {
+			return nil, err
+		}
+		return workloads, nil
 	})
 }
 

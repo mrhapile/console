@@ -106,6 +106,11 @@ export function RemediationConsole({
     logsEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [logs])
 
+  // Abort any running remediation on unmount
+  useEffect(() => {
+    return () => { abortRef.current = true }
+  }, [])
+
   const addLog = (entry: Omit<LogEntry, 'id' | 'timestamp'>) => {
     setLogs(prev => [...prev, {
       ...entry,
@@ -335,7 +340,7 @@ Labels:       app=${resourceName.split('-')[0]}
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60]">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-2xl flex items-center justify-center z-[60]">
       <div className="w-[800px] max-h-[80vh] glass rounded-xl flex flex-col overflow-hidden animate-fade-in-up">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border">
@@ -436,14 +441,14 @@ Labels:       app=${resourceName.split('-')[0]}
                           <span className="text-red-400">❌</span>
                         )}
                         {log.type === 'info' && (
-                          <span className="text-gray-400">ℹ️</span>
+                          <span className="text-muted-foreground">ℹ️</span>
                         )}
                         <span className={cn(
                           log.type === 'thinking' && 'text-purple-300',
                           log.type === 'action' && 'text-blue-300',
                           log.type === 'result' && 'text-green-300',
                           log.type === 'error' && 'text-red-300',
-                          log.type === 'info' && 'text-gray-300',
+                          log.type === 'info' && 'text-muted-foreground',
                         )}>
                           {log.message}
                         </span>
@@ -498,7 +503,7 @@ Labels:       app=${resourceName.split('-')[0]}
                     ) : log.type === 'error' ? (
                       <pre className="text-red-400 whitespace-pre-wrap">{log.message}</pre>
                     ) : (
-                      <pre className="text-gray-300 whitespace-pre-wrap">{log.message}</pre>
+                      <pre className="text-muted-foreground whitespace-pre-wrap">{log.message}</pre>
                     )}
                   </div>
                 ))

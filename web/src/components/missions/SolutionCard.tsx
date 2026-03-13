@@ -3,9 +3,10 @@
  * Shows type badge, category, tags, description, and import button.
  */
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link, Check } from 'lucide-react'
 import { cn } from '../../lib/cn'
+import { StatusBadge } from '../ui/StatusBadge'
 import { UI_FEEDBACK_TIMEOUT_MS } from '../../lib/constants/network'
 import type { MissionExport } from '../../lib/missions/types'
 
@@ -15,7 +16,7 @@ const TYPE_COLORS: Record<string, { bg: string; color: string }> = {
   analyze: { bg: 'bg-blue-500/15', color: 'text-blue-400' },
   upgrade: { bg: 'bg-green-500/15', color: 'text-green-400' },
   deploy: { bg: 'bg-purple-500/15', color: 'text-purple-400' },
-  custom: { bg: 'bg-gray-500/15', color: 'text-gray-400' },
+  custom: { bg: 'bg-gray-500/15', color: 'text-muted-foreground' },
 }
 
 interface SolutionCardProps {
@@ -29,6 +30,13 @@ interface SolutionCardProps {
 export function SolutionCard({ mission, onImport, onSelect, onCopyLink, compact }: SolutionCardProps) {
   const [linkCopied, setLinkCopied] = useState(false)
   const typeStyle = TYPE_COLORS[mission.type] ?? TYPE_COLORS.custom
+  const linkCopiedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (linkCopiedTimeoutRef.current !== null) clearTimeout(linkCopiedTimeoutRef.current)
+    }
+  }, [])
 
   if (compact) {
     return (
@@ -36,21 +44,21 @@ export function SolutionCard({ mission, onImport, onSelect, onCopyLink, compact 
         className="flex items-center gap-3 px-3 py-2 rounded-lg border border-border bg-card hover:border-purple-500/30 transition-all cursor-pointer group"
         onClick={onSelect}
       >
-        <span className={cn('flex-shrink-0 px-1.5 py-0.5 text-[10px] font-medium rounded-full', typeStyle.bg, typeStyle.color)}>
+        <span className={cn('flex-shrink-0 px-1.5 py-0.5 text-2xs font-medium rounded-full', typeStyle.bg, typeStyle.color)}>
           {mission.type}
         </span>
         <h4 className="flex-1 text-sm font-medium text-foreground truncate group-hover:text-purple-400 transition-colors">
           {mission.title}
         </h4>
         {mission.category && (
-          <span className="px-1.5 py-0.5 text-[10px] rounded bg-purple-500/10 text-purple-400 border border-purple-500/20 flex-shrink-0">
+          <StatusBadge color="purple" size="xs" variant="outline" className="flex-shrink-0">
             {mission.category}
-          </span>
+          </StatusBadge>
         )}
-        <span className="text-[10px] text-muted-foreground flex-shrink-0">{mission.steps?.length ?? 0} steps</span>
+        <span className="text-2xs text-muted-foreground flex-shrink-0">{mission.steps?.length ?? 0} steps</span>
         <button
           onClick={(e) => { e.stopPropagation(); onImport() }}
-          className="px-2 py-1 text-[10px] font-medium rounded bg-purple-600 hover:bg-purple-500 text-white transition-colors flex-shrink-0"
+          className="px-2 py-1 text-2xs font-medium rounded bg-purple-600 hover:bg-purple-500 text-white transition-colors flex-shrink-0"
         >
           Import
         </button>
@@ -74,15 +82,17 @@ export function SolutionCard({ mission, onImport, onSelect, onCopyLink, compact 
                 e.stopPropagation()
                 onCopyLink(e)
                 setLinkCopied(true)
-                setTimeout(() => setLinkCopied(false), UI_FEEDBACK_TIMEOUT_MS)
+                if (linkCopiedTimeoutRef.current !== null) clearTimeout(linkCopiedTimeoutRef.current)
+                linkCopiedTimeoutRef.current = setTimeout(() => setLinkCopied(false), UI_FEEDBACK_TIMEOUT_MS)
               }}
               className="p-0.5 rounded text-muted-foreground/50 hover:text-purple-400 transition-colors"
               title="Copy shareable link"
+              aria-label={linkCopied ? 'Link copied' : 'Copy shareable link'}
             >
               {linkCopied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Link className="w-3.5 h-3.5" />}
             </button>
           )}
-          <span className={cn('px-1.5 py-0.5 text-[10px] font-medium rounded-full', typeStyle.bg, typeStyle.color)}>
+          <span className={cn('px-1.5 py-0.5 text-2xs font-medium rounded-full', typeStyle.bg, typeStyle.color)}>
             {mission.type}
           </span>
         </div>
@@ -93,12 +103,12 @@ export function SolutionCard({ mission, onImport, onSelect, onCopyLink, compact 
       {/* Tags */}
       <div className="flex flex-wrap gap-1 mb-2 mt-auto">
         {mission.category && (
-          <span className="px-1.5 py-0.5 text-[10px] rounded bg-purple-500/10 text-purple-400 border border-purple-500/20">
+          <StatusBadge color="purple" size="xs" variant="outline">
             {mission.category}
-          </span>
+          </StatusBadge>
         )}
         {mission.tags?.slice(0, 3).map(tag => (
-          <span key={tag} className="px-1.5 py-0.5 text-[10px] rounded bg-secondary text-muted-foreground">
+          <span key={tag} className="px-1.5 py-0.5 text-2xs rounded bg-secondary text-muted-foreground">
             {tag}
           </span>
         ))}
@@ -113,7 +123,7 @@ export function SolutionCard({ mission, onImport, onSelect, onCopyLink, compact 
               target="_blank"
               rel="noopener noreferrer"
               onClick={e => e.stopPropagation()}
-              className="inline-flex items-center gap-1 text-[10px] hover:text-purple-400 transition-colors"
+              className="inline-flex items-center gap-1 text-2xs hover:text-purple-400 transition-colors"
               title={mission.author ?? mission.authorGithub}
             >
               <img
@@ -124,7 +134,7 @@ export function SolutionCard({ mission, onImport, onSelect, onCopyLink, compact 
               <span className="truncate max-w-[80px]">{mission.authorGithub}</span>
             </a>
           ) : (
-            <span className="text-[10px]">{mission.steps?.length ?? 0} steps</span>
+            <span className="text-2xs">{mission.steps?.length ?? 0} steps</span>
           )}
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
@@ -134,9 +144,10 @@ export function SolutionCard({ mission, onImport, onSelect, onCopyLink, compact 
                 e.stopPropagation()
                 onCopyLink(e)
                 setLinkCopied(true)
-                setTimeout(() => setLinkCopied(false), UI_FEEDBACK_TIMEOUT_MS)
+                if (linkCopiedTimeoutRef.current !== null) clearTimeout(linkCopiedTimeoutRef.current)
+                linkCopiedTimeoutRef.current = setTimeout(() => setLinkCopied(false), UI_FEEDBACK_TIMEOUT_MS)
               }}
-              className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded border border-border text-muted-foreground hover:text-foreground transition-colors"
+              className="inline-flex items-center gap-1 px-2 py-1 text-2xs font-medium rounded border border-border text-muted-foreground hover:text-foreground transition-colors"
               title="Copy shareable link"
             >
               {linkCopied ? <Check className="w-3 h-3 text-green-400" /> : <Link className="w-3 h-3" />}
@@ -148,7 +159,7 @@ export function SolutionCard({ mission, onImport, onSelect, onCopyLink, compact 
               e.stopPropagation()
               onImport()
             }}
-            className="px-2 py-1 text-[10px] font-medium rounded bg-purple-600 hover:bg-purple-500 text-white transition-colors"
+            className="px-2 py-1 text-2xs font-medium rounded bg-purple-600 hover:bg-purple-500 text-white transition-colors"
           >
             Import
           </button>

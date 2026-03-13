@@ -1,11 +1,11 @@
-import { ReactNode, Suspense, useState, useEffect, useRef, useCallback } from 'react'
+import { ReactNode, Suspense, lazy, useState, useEffect, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useLocation } from 'react-router-dom'
 import { Box, Wifi, WifiOff, X, Settings, Rocket, RotateCcw, Check, Loader2, RefreshCw, Plug } from 'lucide-react'
+import { Button } from '../ui/Button'
 import { Navbar } from './navbar/index'
 import { Sidebar } from './Sidebar'
-import { MissionSidebar, MissionSidebarToggle } from './mission-sidebar'
-import { useSidebarConfig } from '../../hooks/useSidebarConfig'
+import { useSidebarConfig, SIDEBAR_COLLAPSED_WIDTH_PX, SIDEBAR_DEFAULT_WIDTH_PX } from '../../hooks/useSidebarConfig'
 import { useMobile } from '../../hooks/useMobile'
 import { useNavigationHistory } from '../../hooks/useNavigationHistory'
 import { useLastRoute } from '../../hooks/useLastRoute'
@@ -13,19 +13,31 @@ import { useMissions } from '../../hooks/useMissions'
 import { useDemoMode, isDemoModeForced, hasRealToken } from '../../hooks/useDemoMode'
 import { setDemoMode } from '../../lib/demoMode'
 import { useLocalAgent } from '../../hooks/useLocalAgent'
+import { useClusters } from '../../hooks/mcp/clusters'
+import { emitClusterInventory } from '../../lib/analytics'
 import { useNetworkStatus } from '../../hooks/useNetworkStatus'
 import { useBackendHealth } from '../../hooks/useBackendHealth'
 import { useDeepLink } from '../../hooks/useDeepLink'
 import { cn } from '../../lib/cn'
 import { LOCAL_AGENT_HTTP_URL, FETCH_DEFAULT_TIMEOUT_MS } from '../../lib/constants'
-import { CLOSE_ANIMATION_MS, TICK_INTERVAL_MS, NAV_AFTER_ANIMATION_MS, UI_FEEDBACK_TIMEOUT_MS, TOAST_DISMISS_MS } from '../../lib/constants/network'
+import { CLOSE_ANIMATION_MS, UI_FEEDBACK_TIMEOUT_MS, TOAST_DISMISS_MS } from '../../lib/constants/network'
 import { TourOverlay, TourPrompt } from '../onboarding/Tour'
 import { TourProvider } from '../../hooks/useTour'
 import { SetupInstructionsDialog } from '../setup/SetupInstructionsDialog'
+import { InClusterAgentDialog } from '../setup/InClusterAgentDialog'
 import { KeepAliveOutlet } from './KeepAliveOutlet'
 import { UpdateProgressBanner } from '../updates/UpdateProgressBanner'
 import { useUpdateProgress } from '../../hooks/useUpdateProgress'
 import { VersionCheckProvider } from '../../hooks/useVersionCheck'
+
+// Lazy-load the AI mission sidebar so react-markdown and remark plugins are
+// not part of the initial bundle — they only load when the sidebar is first rendered.
+const MissionSidebar = lazy(() =>
+  import('./mission-sidebar').then(m => ({ default: m.MissionSidebar }))
+)
+const MissionSidebarToggle = lazy(() =>
+  import('./mission-sidebar').then(m => ({ default: m.MissionSidebarToggle }))
+)
 
 
 // Module-level constant — computed once, never changes on re-render.
@@ -55,48 +67,16 @@ function NavigationProgress() {
   }, [location.pathname])
 
   if (!isNavigating) return null
-  return <div className="absolute top-0 left-0 right-0 h-0.5 bg-purple-500 animate-pulse z-50" />
+  return <div className="absolute top-0 left-0 right-0 h-0.5 bg-primary z-50" />
 }
 
 // Lightweight fallback shown while a lazy route chunk loads.
-const LOADING_STAGES = [
-  'Loading application modules…',
-  'Initializing React components…',
-  'Preparing dashboard layout…',
-  'Connecting to backend API…',
-  'Discovering Kubernetes clusters…',
-  'Loading card components…',
-  'Fetching cluster health data…',
-  'Resolving MCP agent connection…',
-  'Hydrating cached state…',
-  'Rendering dashboard cards…',
-  'Finalizing layout…',
-]
-
 export function ContentLoadingSkeleton() {
-  const [elapsed, setElapsed] = useState(0)
-  const [stageIndex, setStageIndex] = useState(0)
-
-  useEffect(() => {
-    const timer = setInterval(() => setElapsed(t => t + 1), TICK_INTERVAL_MS)
-    return () => clearInterval(timer)
-  }, [])
-
-  useEffect(() => {
-    if (stageIndex < LOADING_STAGES.length - 1) {
-      const timer = setTimeout(() => setStageIndex(i => i + 1), NAV_AFTER_ANIMATION_MS)
-      return () => clearTimeout(timer)
-    }
-  }, [stageIndex])
-
   return (
     <div className="flex items-center justify-center h-64">
       <div className="flex flex-col items-center gap-3">
-        <div className="h-8 w-8 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />
-        <span className="text-sm text-muted-foreground transition-opacity duration-300">
-          {LOADING_STAGES[stageIndex]}
-        </span>
-        <span className="text-xs text-muted-foreground/50 tabular-nums">{elapsed}s</span>
+        <div className="h-6 w-6 border-2 border-muted border-t-foreground rounded-full animate-spin" />
+        <span className="text-sm text-muted-foreground">Loading…</span>
       </div>
     </div>
   )
@@ -110,14 +90,17 @@ export function Layout({ children }: LayoutProps) {
   const { t } = useTranslation()
   const { config } = useSidebarConfig()
   const { isMobile } = useMobile()
+  const sidebarWidthPx = isMobile ? 0 : (config.collapsed ? SIDEBAR_COLLAPSED_WIDTH_PX : (config.width ?? SIDEBAR_DEFAULT_WIDTH_PX))
   const { isSidebarOpen: isMissionSidebarOpen, isSidebarMinimized: isMissionSidebarMinimized, isFullScreen: isMissionFullScreen } = useMissions()
   const { isDemoMode, toggleDemoMode } = useDemoMode()
   const { status: agentStatus } = useLocalAgent()
+  const { deduplicatedClusters } = useClusters()
   const { progress: updateProgress, dismiss: dismissUpdateProgress } = useUpdateProgress()
   const { isOnline, wasOffline } = useNetworkStatus()
   const { status: backendStatus, versionChanged, isInClusterMode } = useBackendHealth()
   const [offlineBannerDismissed, setOfflineBannerDismissed] = useState(false)
   const [showSetupDialog, setShowSetupDialog] = useState(false)
+  const [showInClusterAgentDialog, setShowInClusterAgentDialog] = useState(false)
   const [wasBackendDown, setWasBackendDown] = useState(false)
   const [restartState, setRestartState] = useState<'idle' | 'restarting' | 'waiting' | 'copied'>('idle')
   const [restartError, setRestartError] = useState<string | null>(null)
@@ -212,6 +195,34 @@ export function Layout({ children }: LayoutProps) {
     return () => { if (demoReEnableTimerRef.current) clearTimeout(demoReEnableTimerRef.current) }
   }, [agentStatus, isInClusterMode, isDemoMode])
 
+  // Emit cluster inventory when cluster count changes (counts only, never names).
+  // Sets GA4 user property "cluster_count" so you can compute averages across users.
+  const prevClusterCountRef = useRef<number>(-1)
+  useEffect(() => {
+    const total = deduplicatedClusters.length
+    if (total === 0 || total === prevClusterCountRef.current) return
+    prevClusterCountRef.current = total
+
+    let healthy = 0
+    let unhealthy = 0
+    let unreachable = 0
+    const distributions: Record<string, number> = {}
+
+    for (const c of deduplicatedClusters) {
+      if (c.reachable === false) {
+        unreachable++
+      } else if (c.healthy === false) {
+        unhealthy++
+      } else {
+        healthy++
+      }
+      const dist = c.distribution || 'unknown'
+      distributions[dist] = (distributions[dist] || 0) + 1
+    }
+
+    emitClusterInventory({ total, healthy, unhealthy, unreachable, distributions })
+  }, [deduplicatedClusters])
+
   // Startup snackbar — shows while backend health is in initial 'connecting' state
   const showStartupSnackbar = !isDemoModeForced && backendStatus === 'connecting'
 
@@ -220,17 +231,21 @@ export function Layout({ children }: LayoutProps) {
   // Show offline banner only when agent is confirmed disconnected (not during 'connecting' state)
   // This prevents flickering during initial connection attempts
   const showOfflineBanner = !isDemoMode && agentStatus === 'disconnected' && backendStatus !== 'connected' && !offlineBannerDismissed
+  // Show in-cluster agent banner when running in a cluster (Helm) and no agent connection detected.
+  // This is distinct from the offline banner (which requires backend to be down too).
+  const showInClusterBanner = isInClusterMode && agentStatus === 'disconnected' && !isDemoMode
 
   // Banner stacking: each banner's top offset depends on how many banners above it are visible.
   // Navbar is 64px (top-16). Each banner is ~36px tall.
-  // Z-index hierarchy: Navbar + dropdowns (z-50) > Network banner (z-40) > Demo banner (z-30) > Offline banner (z-20)
+  // Z-index hierarchy: Navbar + dropdowns (z-50) > Network banner (z-40) > Demo banner (z-30) > In-cluster / Offline banner (z-20)
   const NAVBAR_HEIGHT = 64
   const BANNER_HEIGHT = 36
-  // Stack order: Network (top) → Demo → Agent Offline (bottom)
+  // Stack order: Network (top) → Demo → In-cluster agent / Agent Offline (bottom)
   const networkBannerTop = NAVBAR_HEIGHT
   const demoBannerTop = NAVBAR_HEIGHT + (showNetworkBanner ? BANNER_HEIGHT : 0)
-  const offlineBannerTop = NAVBAR_HEIGHT + (showNetworkBanner ? BANNER_HEIGHT : 0) + (isDemoMode ? BANNER_HEIGHT : 0)
-  const activeBannerCount = (showNetworkBanner ? 1 : 0) + (isDemoMode ? 1 : 0) + (showOfflineBanner ? 1 : 0)
+  const inClusterBannerTop = NAVBAR_HEIGHT + (showNetworkBanner ? BANNER_HEIGHT : 0) + (isDemoMode ? BANNER_HEIGHT : 0)
+  const offlineBannerTop = NAVBAR_HEIGHT + (showNetworkBanner ? BANNER_HEIGHT : 0) + (isDemoMode ? BANNER_HEIGHT : 0) + (showInClusterBanner ? BANNER_HEIGHT : 0)
+  const activeBannerCount = (showNetworkBanner ? 1 : 0) + (isDemoMode ? 1 : 0) + (showInClusterBanner ? 1 : 0) + (showOfflineBanner ? 1 : 0)
   const totalBannerHeight = activeBannerCount * BANNER_HEIGHT
 
   // Show bottom snackbar when backend is down, or briefly after reconnecting.
@@ -291,11 +306,9 @@ export function Layout({ children }: LayoutProps) {
       {/* Network Disconnected Banner */}
       {showNetworkBanner && (
         <div
-          style={{ top: networkBannerTop }}
+          style={{ top: networkBannerTop, left: sidebarWidthPx }}
           className={cn(
             "fixed right-0 z-40 border-b transition-[left] duration-300",
-            // Mobile: full width
-            isMobile ? "left-0" : (config.collapsed ? "left-20" : "left-64"),
             isOnline
               ? "bg-green-500/10 border-green-500/20"
               : "bg-red-500/10 border-red-500/20",
@@ -330,11 +343,9 @@ export function Layout({ children }: LayoutProps) {
         const isAuthenticatedNoAgent = hasRealToken() && agentStatus !== 'connected'
         return (
           <div
-            style={{ top: demoBannerTop }}
+            style={{ top: demoBannerTop, left: sidebarWidthPx }}
             className={cn(
               "fixed right-0 z-30 bg-background border-b border-yellow-500/20 transition-[left] duration-300",
-              // Mobile: full width
-              isMobile ? "left-0" : (config.collapsed ? "left-20" : "left-64"),
             )}>
             <div className="flex flex-wrap items-center justify-center gap-2 md:gap-3 py-1.5 px-3 md:px-4">
               {isAuthenticatedNoAgent
@@ -350,9 +361,11 @@ export function Layout({ children }: LayoutProps) {
                   : 'Showing sample data only — install locally to monitor your real clusters'
                 }
               </span>
-              <button
+              <Button
+                variant="accent"
+                size="sm"
                 onClick={() => setShowSetupDialog(true)}
-                className="hidden sm:flex ml-2 items-center gap-1.5 px-3 py-1 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 rounded-full text-xs font-medium transition-colors"
+                className="hidden sm:flex ml-2 rounded-full"
               >
                 {isAuthenticatedNoAgent ? (
                   <>
@@ -367,7 +380,7 @@ export function Layout({ children }: LayoutProps) {
                     <span className="lg:hidden">Get Console</span>
                   </>
                 )}
-              </button>
+              </Button>
               <button
                 onClick={() => isDemoModeForced ? setShowSetupDialog(true) : toggleDemoMode()}
                 className="ml-1 md:ml-2 p-2 min-h-11 min-w-11 hover:bg-yellow-500/20 rounded transition-colors"
@@ -381,16 +394,51 @@ export function Layout({ children }: LayoutProps) {
         )
       })()}
 
+      {/* In-Cluster Agent Banner — shown when running in a Kubernetes cluster (Helm) with no agent connection */}
+      {showInClusterBanner && (
+        <div
+          style={{ top: inClusterBannerTop, left: sidebarWidthPx }}
+          className={cn(
+            "fixed right-0 z-20 bg-background border-b border-blue-500/20 transition-[left] duration-300",
+          )}>
+          <div className="flex flex-wrap items-center justify-center gap-2 md:gap-3 py-1.5 px-3 md:px-4">
+            <Plug className="w-4 h-4 text-blue-400" aria-hidden="true" />
+            <span className="text-sm text-blue-400 font-medium">
+              Agent Not Detected
+            </span>
+            <span className="hidden md:inline text-xs text-blue-400/70">
+              Install the kc-agent or configure CORS to connect your clusters
+            </span>
+            <Button
+              variant="accent"
+              size="sm"
+              onClick={() => setShowInClusterAgentDialog(true)}
+              className="hidden sm:flex ml-2 rounded-full"
+            >
+              <Plug className="w-3.5 h-3.5" aria-hidden="true" />
+              <span className="hidden lg:inline">Setup Guide</span>
+              <span className="lg:hidden">Setup</span>
+            </Button>
+            <button
+              onClick={() => setShowInClusterAgentDialog(true)}
+              className="sm:hidden ml-1 p-2 min-h-11 min-w-11 hover:bg-blue-500/20 rounded transition-colors"
+              aria-label="Open agent setup guide"
+              title="Open agent setup guide"
+            >
+              <Plug className="w-3.5 h-3.5 text-blue-400" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Offline Mode Banner - positioned in main content area only */}
       {showOfflineBanner && (
         <div
-          style={{ top: offlineBannerTop }}
+          style={{ top: offlineBannerTop, left: sidebarWidthPx }}
           className={cn(
             "fixed z-20 bg-background border-b border-orange-500/20 transition-[right] duration-300",
-            // Mobile: full width
-            isMobile ? "left-0" : (config.collapsed ? "left-20" : "left-64"),
           // Adjust right edge when mission sidebar is open (desktop only)
-          !isMobile && isMissionSidebarOpen && !isMissionSidebarMinimized && !isMissionFullScreen ? "right-[500px]" : "right-0",
+          !isMobile && isMissionSidebarOpen && !isMissionSidebarMinimized && !isMissionFullScreen ? "right-[580px]" : "right-0",
           !isMobile && isMissionSidebarOpen && isMissionSidebarMinimized && !isMissionFullScreen && "right-12"
         )}>
           <div className="flex flex-wrap items-center justify-between gap-2 py-1.5 px-3 md:px-4">
@@ -431,13 +479,11 @@ export function Layout({ children }: LayoutProps) {
         <Sidebar />
         <main
           id="main-content"
+          style={{ marginLeft: sidebarWidthPx }}
           className={cn(
-            'relative flex-1 p-4 md:p-6 transition-[margin] duration-300 overflow-y-auto scroll-enhanced min-w-0',
-            // Mobile: no left margin (sidebar overlays)
-            // Desktop: respect collapsed state
-            isMobile ? 'ml-0' : (config.collapsed ? 'ml-20' : 'ml-64'),
+            'relative flex-1 p-4 pb-24 md:p-6 md:pb-28 transition-[margin] duration-300 overflow-y-auto scroll-enhanced min-w-0',
             // Don't apply right margin when fullscreen is active or on mobile
-            !isMobile && isMissionSidebarOpen && !isMissionSidebarMinimized && !isMissionFullScreen && 'mr-[500px]',
+            !isMobile && isMissionSidebarOpen && !isMissionSidebarMinimized && !isMissionFullScreen && 'mr-[580px]',
             !isMobile && isMissionSidebarOpen && isMissionSidebarMinimized && !isMissionFullScreen && 'mr-12'
           )}>
           <NavigationProgress />
@@ -451,14 +497,22 @@ export function Layout({ children }: LayoutProps) {
         </main>
       </div>
 
-      {/* AI Mission sidebar */}
-      <MissionSidebar />
-      <MissionSidebarToggle />
+      {/* AI Mission sidebar — lazy loaded to keep react-markdown out of initial bundle */}
+      <Suspense fallback={null}>
+        <MissionSidebar />
+        <MissionSidebarToggle />
+      </Suspense>
 
       {/* Setup Instructions Dialog — also shown when user tries to exit forced demo mode */}
       <SetupInstructionsDialog
         isOpen={showSetupDialog}
         onClose={() => setShowSetupDialog(false)}
+      />
+
+      {/* In-Cluster Agent Dialog — install agent or configure CORS */}
+      <InClusterAgentDialog
+        isOpen={showInClusterAgentDialog}
+        onClose={() => setShowInClusterAgentDialog(false)}
       />
 
       {/* Backend connection lost snackbar — fixed bottom center */}
@@ -467,7 +521,7 @@ export function Layout({ children }: LayoutProps) {
           <div className={cn(
             "flex items-center gap-2 px-4 py-3 rounded-lg border shadow-lg text-sm",
             backendDown
-              ? "bg-zinc-800 border-zinc-700 text-zinc-200"
+              ? "bg-secondary border-border text-foreground"
               : "bg-green-900/80 border-green-700/50 text-green-200"
           )}>
             {backendDown ? (
@@ -475,12 +529,12 @@ export function Layout({ children }: LayoutProps) {
                 <div className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
                 <span>Connection lost</span>
                 {restartState === 'restarting' ? (
-                  <button disabled className="ml-1 flex items-center gap-1.5 px-2.5 py-1 bg-zinc-700 text-zinc-400 rounded text-xs cursor-wait">
+                  <button disabled className="ml-1 flex items-center gap-1.5 px-2.5 py-1 bg-muted text-muted-foreground rounded text-xs cursor-wait">
                     <Loader2 className="w-3 h-3 animate-spin" />
                     Restarting&hellip;
                   </button>
                 ) : restartState === 'waiting' ? (
-                  <span className="ml-1 flex items-center gap-1.5 px-2.5 py-1 bg-zinc-700 text-zinc-400 rounded text-xs">
+                  <span className="ml-1 flex items-center gap-1.5 px-2.5 py-1 bg-muted text-muted-foreground rounded text-xs">
                     <Loader2 className="w-3 h-3 animate-spin" />
                     Restarted, waiting for connection&hellip;
                   </span>
@@ -492,7 +546,7 @@ export function Layout({ children }: LayoutProps) {
                 ) : (
                   <button
                     onClick={handleRestartBackend}
-                    className="ml-1 flex items-center gap-1.5 px-2.5 py-1 bg-zinc-700 hover:bg-zinc-600 text-zinc-200 rounded text-xs transition-colors"
+                    className="ml-1 flex items-center gap-1.5 px-2.5 py-1 bg-muted hover:bg-muted/80 text-foreground rounded text-xs transition-colors"
                     title={restartError ?? 'Restart the backend server'}
                   >
                     <RotateCcw className="w-3 h-3" />
@@ -525,12 +579,14 @@ export function Layout({ children }: LayoutProps) {
           <div className="flex items-center gap-3 px-4 py-3 rounded-lg border shadow-lg text-sm bg-blue-950/90 border-blue-800/50 text-blue-200">
             <RefreshCw className="w-4 h-4 text-blue-400" />
             <span>A new version is available</span>
-            <button
+            <Button
+              variant="primary"
+              size="sm"
               onClick={() => window.location.reload()}
-              className="ml-1 px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded text-xs font-medium transition-colors"
+              className="ml-1 rounded"
             >
               Reload
-            </button>
+            </Button>
           </div>
         </div>
       )}

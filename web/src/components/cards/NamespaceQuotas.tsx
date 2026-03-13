@@ -1,9 +1,9 @@
 import { useState, useMemo } from 'react'
-import { Gauge, Cpu, HardDrive, Box, Loader2, ChevronRight, Plus, Pencil, Trash2, Zap } from 'lucide-react'
+import { Gauge, Cpu, HardDrive, Box, ChevronRight, Plus, Pencil, Trash2, Zap } from 'lucide-react'
 import { BaseModal } from '../../lib/modals'
+import { Button } from '../ui/Button'
 import {
   useClusters,
-  useNamespaces,
   useResourceQuotas,
   useLimitRanges,
   LimitRange,
@@ -13,6 +13,7 @@ import {
   COMMON_RESOURCE_TYPES,
   GPU_RESOURCE_TYPES,
 } from '../../hooks/useMCP'
+import { useCachedNamespaces } from '../../hooks/useCachedData'
 import { Skeleton } from '../ui/Skeleton'
 import { ClusterBadge } from '../ui/ClusterBadge'
 import { useCardLoadingState } from './CardDataContext'
@@ -26,6 +27,7 @@ import {
   type SortDirection,
 } from '../../lib/cards'
 import { useTranslation } from 'react-i18next'
+import { StatusBadge } from '../ui/StatusBadge'
 
 interface NamespaceQuotasProps {
   config?: {
@@ -120,7 +122,7 @@ function QuotaModal({
   const [showGpuPresets, setShowGpuPresets] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const { namespaces: clusterNamespaces } = useNamespaces(cluster || undefined)
+  const { namespaces: clusterNamespaces } = useCachedNamespaces(cluster || undefined)
   const availableNamespaces = cluster ? clusterNamespaces : namespaces
 
   const addResource = () => {
@@ -238,13 +240,15 @@ function QuotaModal({
               <label className="text-sm font-medium text-muted-foreground">{t('namespaceQuotas.resourceLimits')}</label>
               <div className="flex items-center gap-2">
                 <div className="relative">
-                  <button
+                  <Button
+                    variant="accent"
+                    size="sm"
+                    icon={<Zap className="w-3 h-3" />}
                     onClick={() => setShowGpuPresets(!showGpuPresets)}
-                    className="flex items-center gap-1 px-2 py-1 text-xs rounded bg-purple-500/20 text-purple-400 hover:bg-purple-500/30"
+                    className="rounded"
                   >
-                    <Zap className="w-3 h-3" />
                     GPU
-                  </button>
+                  </Button>
                   {showGpuPresets && (
                     <div className="absolute right-0 top-full mt-1 w-56 bg-popover border border-border rounded-lg shadow-lg z-10">
                       {GPU_RESOURCE_TYPES.map(rt => (
@@ -315,20 +319,22 @@ function QuotaModal({
       <BaseModal.Footer>
         <div className="flex-1" />
         <div className="flex items-center gap-2">
-          <button
+          <Button
+            variant="secondary"
+            size="lg"
             onClick={onClose}
-            className="px-4 py-2 text-sm rounded-lg bg-secondary text-foreground hover:bg-secondary/80"
           >
             {t('common:common.cancel')}
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="primary"
+            size="lg"
             onClick={handleSave}
             disabled={isLoading}
-            className="flex items-center gap-2 px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+            loading={isLoading}
           >
-            {isLoading && <Loader2 className="w-4 h-4 animate-spin" />}
             {editingQuota ? t('common:common.update') : t('common:common.create')}
-          </button>
+          </Button>
         </div>
       </BaseModal.Footer>
     </BaseModal>
@@ -350,7 +356,7 @@ export function NamespaceQuotas({ config }: NamespaceQuotasProps) {
   const [deleteConfirm, setDeleteConfirm] = useState<{ cluster: string; namespace: string; name: string } | null>(null)
 
   // Fetch namespaces for the selected cluster (only when specific cluster selected)
-  const { namespaces } = useNamespaces(selectedCluster !== 'all' ? selectedCluster : undefined)
+  const { namespaces, isDemoFallback } = useCachedNamespaces(selectedCluster !== 'all' ? selectedCluster : undefined)
 
   // Filter clusters based on global filter (useCardData handles global filtering internally)
   const clusters = allClusters
@@ -373,7 +379,7 @@ export function NamespaceQuotas({ config }: NamespaceQuotasProps) {
   useCardLoadingState({
     isLoading: isInitialLoading || isFetchingData,
     hasAnyData: allClusters.length > 0 || resourceQuotas.length > 0 || limitRanges.length > 0,
-    isDemoData: isDemoMode,
+    isDemoData: isDemoMode || isDemoFallback,
   })
 
   // Handle save quota
@@ -491,6 +497,8 @@ export function NamespaceQuotas({ config }: NamespaceQuotasProps) {
     setItemsPerPage: quotaSetItemsPerPage,
     filters: quotaFilters,
     sorting: quotaSorting,
+    containerRef,
+    containerStyle,
   } = useCardData<QuotaUsage, SortByOption>(quotaUsages, {
     filter: {
       searchFields: ['resource', 'rawResource', 'cluster', 'namespace', 'quotaName'] as (keyof QuotaUsage)[],
@@ -574,9 +582,9 @@ export function NamespaceQuotas({ config }: NamespaceQuotasProps) {
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400">
+          <StatusBadge color="yellow">
             {activeTab === 'quotas' ? `${totalQuotas} quotas` : `${totalLimits} limits`}
-          </span>
+          </StatusBadge>
         </div>
         <div className="flex items-center gap-2">
           <CardControlsRow
@@ -663,13 +671,13 @@ export function NamespaceQuotas({ config }: NamespaceQuotasProps) {
         {/* Scope badge */}
         <div className="flex items-center gap-2 mb-4 min-w-0 overflow-hidden">
           {selectedCluster === 'all' ? (
-            <span className="text-xs px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 shrink-0">All Clusters</span>
+            <StatusBadge color="blue" size="md" className="shrink-0">All Clusters</StatusBadge>
           ) : (
             <div className="shrink-0"><ClusterBadge cluster={selectedCluster} /></div>
           )}
           <span className="text-muted-foreground shrink-0">/</span>
           {selectedNamespace === 'all' ? (
-            <span className="text-xs px-2 py-0.5 rounded bg-purple-500/20 text-purple-400 shrink-0">All Namespaces</span>
+            <StatusBadge color="purple" size="md" className="shrink-0">All Namespaces</StatusBadge>
           ) : (
             <span className="text-sm text-foreground truncate min-w-0">{selectedNamespace}</span>
           )}
@@ -694,7 +702,7 @@ export function NamespaceQuotas({ config }: NamespaceQuotasProps) {
           </div>
 
           {/* Content */}
-          <div className="flex-1 space-y-3 overflow-y-auto">
+          <div ref={containerRef} className="flex-1 space-y-3 overflow-y-auto" style={containerStyle}>
             {isFetchingData && activePagination.items.length === 0 ? (
               <>
                 <Skeleton variant="rounded" height={70} />
@@ -713,7 +721,7 @@ export function NamespaceQuotas({ config }: NamespaceQuotasProps) {
                     className="mt-3 flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg bg-blue-500/20 text-blue-400 hover:bg-blue-500/30"
                   >
                     <Plus className="w-4 h-4" />
-                    Create GPU Quota
+                    {t('namespaceQuotas.createGpuQuota')}
                   </button>
                 )}
               </div>
@@ -812,9 +820,9 @@ export function NamespaceQuotas({ config }: NamespaceQuotasProps) {
                       <div className="flex items-center gap-2">
                         <Gauge className="w-4 h-4 text-blue-400" />
                         <span className="text-sm text-foreground">{item.name}</span>
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400">
+                        <StatusBadge color="blue">
                           {item.type}
-                        </span>
+                        </StatusBadge>
                       </div>
                       <ChevronRight className="w-4 h-4 text-muted-foreground" />
                     </div>
@@ -904,20 +912,22 @@ export function NamespaceQuotas({ config }: NamespaceQuotasProps) {
         <BaseModal.Footer>
           <div className="flex-1" />
           <div className="flex items-center gap-2">
-            <button
+            <Button
+              variant="secondary"
+              size="lg"
               onClick={() => setDeleteConfirm(null)}
-              className="px-4 py-2 text-sm rounded-lg bg-secondary text-foreground hover:bg-secondary/80"
             >
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="danger"
+              size="lg"
               onClick={() => deleteConfirm && handleDeleteQuota(deleteConfirm.cluster, deleteConfirm.namespace, deleteConfirm.name)}
               disabled={isSaving}
-              className="flex items-center gap-2 px-4 py-2 text-sm rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+              loading={isSaving}
             >
-              {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
               Delete
-            </button>
+            </Button>
           </div>
         </BaseModal.Footer>
       </BaseModal>

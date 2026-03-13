@@ -4,6 +4,7 @@ import { CardComponentProps } from './cardRegistry'
 import { useCardExpanded } from './CardWrapper'
 import { useReportCardDataState } from './CardDataContext'
 import { useTranslation } from 'react-i18next'
+import { emitGameStarted, emitGameEnded } from '../../lib/analytics'
 
 // 5-letter Kubernetes-themed words
 const WORD_LIST = [
@@ -123,8 +124,8 @@ const KEYBOARD_ROWS = [
 ]
 
 export function Kubedle(_props: CardComponentProps) {
-  const { t: _t } = useTranslation()
-  useReportCardDataState({ hasData: true, isFailed: false, consecutiveFailures: 0 })
+  const { t } = useTranslation()
+  useReportCardDataState({ hasData: true, isFailed: false, consecutiveFailures: 0, isDemoData: false })
   const { isExpanded } = useCardExpanded()
 
   const [targetWord, setTargetWord] = useState(getTodaysWord)
@@ -182,6 +183,7 @@ export function Kubedle(_props: CardComponentProps) {
       if (currentGuess === targetWord) {
         setGameOver(true)
         setMessage('Excellent!')
+        emitGameEnded('kubedle', 'win', newGuesses.length)
 
         // Update stats
         setStats(prev => {
@@ -200,6 +202,7 @@ export function Kubedle(_props: CardComponentProps) {
       } else if (newGuesses.length >= 6) {
         setGameOver(true)
         setMessage(`The word was ${targetWord}`)
+        emitGameEnded('kubedle', 'loss', newGuesses.length)
 
         // Update stats
         setStats(prev => {
@@ -238,6 +241,7 @@ export function Kubedle(_props: CardComponentProps) {
     setCurrentGuess('')
     setGameOver(false)
     setMessage('')
+    emitGameStarted('kubedle')
   }, [])
 
   const states = letterStates()
@@ -305,10 +309,10 @@ export function Kubedle(_props: CardComponentProps) {
                   } else if (results[colIdx] === 'present') {
                     bgColor = 'bg-yellow-600 border-yellow-600'
                   } else {
-                    bgColor = 'bg-zinc-700 border-zinc-700'
+                    bgColor = 'bg-gray-700 border-gray-700'
                   }
                 } else if (letter !== ' ') {
-                  bgColor = 'bg-secondary border-zinc-500'
+                  bgColor = 'bg-secondary border-gray-500'
                 }
 
                 return (
@@ -330,13 +334,13 @@ export function Kubedle(_props: CardComponentProps) {
         {KEYBOARD_ROWS.map((row, rowIdx) => (
           <div key={rowIdx} className="flex gap-1">
             {row.map(key => {
-              let bgColor = 'bg-zinc-600 hover:bg-zinc-500'
+              let bgColor = 'bg-gray-600 hover:bg-gray-500'
               if (states[key] === 'correct') {
                 bgColor = 'bg-green-600'
               } else if (states[key] === 'present') {
                 bgColor = 'bg-yellow-600'
               } else if (states[key] === 'absent') {
-                bgColor = 'bg-zinc-800'
+                bgColor = 'bg-gray-800'
               }
 
               const isSpecial = key === 'ENTER' || key === '⌫'
@@ -366,20 +370,20 @@ export function Kubedle(_props: CardComponentProps) {
               </button>
             </div>
             <div className="text-sm text-muted-foreground space-y-2">
-              <p>Guess the Kubernetes word in 6 tries!</p>
-              <p>Each guess must be a 5-letter word.</p>
+              <p>{t('kubedle.guessInstructions')}</p>
+              <p>{t('kubedle.letterInstructions')}</p>
               <div className="space-y-1 mt-3">
                 <div className="flex items-center gap-2">
                   <div className="w-6 h-6 bg-green-600 rounded flex items-center justify-center text-white text-xs font-bold">N</div>
-                  <span>Correct letter, correct spot</span>
+                  <span>{t('kubedle.correctSpot')}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="w-6 h-6 bg-yellow-600 rounded flex items-center justify-center text-white text-xs font-bold">O</div>
-                  <span>Correct letter, wrong spot</span>
+                  <span>{t('kubedle.wrongSpot')}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 bg-zinc-700 rounded flex items-center justify-center text-white text-xs font-bold">D</div>
-                  <span>Letter not in word</span>
+                  <div className="w-6 h-6 bg-gray-700 rounded flex items-center justify-center text-white text-xs font-bold">D</div>
+                  <span>{t('kubedle.notInWord')}</span>
                 </div>
               </div>
             </div>

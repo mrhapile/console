@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CheckCircle, AlertTriangle, XCircle, Clock, ChevronRight, Server } from 'lucide-react'
-import { useClusters, useBuildpackImages, BuildpackImage } from '../../../hooks/useMCP'
+import { useClusters, BuildpackImage } from '../../../hooks/useMCP'
+import { useCachedBuildpackImages } from '../../../hooks/useCachedData'
 import { Skeleton } from '../../ui/Skeleton'
 import { ClusterBadge } from '../../ui/ClusterBadge'
 import { useCardData, CardSearchInput, CardControlsRow, CardPaginationFooter, CardAIActions } from '../../../lib/cards'
@@ -85,8 +86,8 @@ export function BuildpacksStatus({ config }: BuildpacksStatusProps) {
     isFailed,
     consecutiveFailures,
     error,
-    isDemoData,
-  } = useBuildpackImages(config?.cluster)
+    isDemoFallback: isDemoData,
+  } = useCachedBuildpackImages(config?.cluster)
 
   const { drillToBuildpack } = useDrillDownActions()
 
@@ -140,6 +141,8 @@ export function BuildpacksStatus({ config }: BuildpacksStatusProps) {
       sortDirection,
       setSortDirection,
     },
+    containerRef,
+    containerStyle,
   } = useCardData<BuildpackImage, SortByOption>(namespacedBuilds, {
     filter: {
       searchFields: ['name', 'namespace', 'builder', 'image'],
@@ -289,7 +292,7 @@ export function BuildpacksStatus({ config }: BuildpacksStatusProps) {
       </div>
 
       {/* List */}
-      <div className="flex-1 space-y-2 overflow-y-auto">
+      <div ref={containerRef} className="flex-1 space-y-2 overflow-y-auto" style={containerStyle}>
         {builds.map(build => {
           const Icon =
             build.status === 'succeeded'

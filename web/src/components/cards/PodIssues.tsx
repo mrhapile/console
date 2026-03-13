@@ -4,6 +4,7 @@ import type { PodIssue } from '../../hooks/useMCP'
 import { useDrillDownActions } from '../../hooks/useDrillDown'
 import { ClusterBadge } from '../ui/ClusterBadge'
 import { LimitedAccessWarning } from '../ui/LimitedAccessWarning'
+import { StatusBadge } from '../ui/StatusBadge'
 import { useCardLoadingState } from './CardDataContext'
 import {
   useCardData, commonComparators, getStatusColors,
@@ -22,7 +23,8 @@ const SORT_OPTIONS = [
   { value: 'cluster' as const, label: 'Cluster' },
 ]
 
-const getIssueIcon = (status: string): { icon: typeof MemoryStick; tooltip: string } => {
+const getIssueIcon = (status: string | undefined): { icon: typeof MemoryStick; tooltip: string } => {
+  if (!status) return { icon: RefreshCw, tooltip: 'Unknown status' }
   if (status.includes('OOM')) return { icon: MemoryStick, tooltip: 'Out of Memory - Pod exceeded memory limits' }
   if (status.includes('Image')) return { icon: ImageOff, tooltip: 'Image Pull Error - Failed to pull container image' }
   if (status.includes('Pending')) return { icon: Clock, tooltip: 'Pending - Pod is waiting to be scheduled' }
@@ -77,6 +79,8 @@ export function PodIssues() {
       sortDirection,
       setSortDirection,
     },
+    containerRef,
+    containerStyle,
   } = useCardData<PodIssue, SortByOption>(rawIssues, {
     filter: {
       searchFields: ['name', 'namespace', 'cluster', 'status'],
@@ -127,9 +131,9 @@ export function PodIssues() {
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <span className="text-xs px-1.5 py-0.5 rounded bg-red-500/20 text-red-400" title={`${rawIssues.length} pods with issues`}>
+          <StatusBadge color="red" title={`${rawIssues.length} pods with issues`}>
             {rawIssues.length} issues
-          </span>
+          </StatusBadge>
         </div>
         <CardControlsRow
           clusterIndicator={{
@@ -167,7 +171,7 @@ export function PodIssues() {
       />
 
       {/* Issues list */}
-      <div className="flex-1 space-y-2 overflow-y-auto min-h-card-content">
+      <div ref={containerRef} className="flex-1 space-y-2 overflow-y-auto min-h-card-content" style={containerStyle}>
         {issues.map((issue: PodIssue, idx: number) => {
           const { icon: Icon, tooltip: iconTooltip } = getIssueIcon(issue.status)
           const colors = getStatusColors(issue.status)

@@ -1,10 +1,11 @@
-import { useEffect, useState, useRef } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { useAuth } from "../../lib/auth";
-import { getLastRoute } from "../../hooks/useLastRoute";
-import { ROUTES, getLoginWithError } from "../../config/routes";
-import { useTranslation } from "react-i18next";
-import { useToast } from "../ui/Toast";
+import { useEffect, useState, useRef } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useAuth } from '../../lib/auth'
+import { getLastRoute } from '../../hooks/useLastRoute'
+import { ROUTES, getLoginWithError } from '../../config/routes'
+import { useTranslation } from 'react-i18next'
+import { useToast } from '../ui/Toast'
+import { safeGetItem, safeRemoveItem } from '../../lib/utils/localStorage'
 
 export function AuthCallback() {
   const { t } = useTranslation("common");
@@ -34,10 +35,10 @@ export function AuthCallback() {
 
       // Check for a return-to URL saved by ProtectedRoute (deep-link through OAuth),
       // then fall back to the last visited dashboard route, then '/'.
-      const RETURN_TO_KEY = "kubestellar-return-to";
-      const returnTo = localStorage.getItem(RETURN_TO_KEY);
-      if (returnTo) localStorage.removeItem(RETURN_TO_KEY);
-      const destination = returnTo || getLastRoute() || ROUTES.HOME;
+      const RETURN_TO_KEY = 'kubestellar-return-to'
+      const returnTo = safeGetItem(RETURN_TO_KEY)
+      if (returnTo) safeRemoveItem(RETURN_TO_KEY)
+      const destination = returnTo || getLastRoute() || ROUTES.HOME
 
       // Add timeout to prevent hanging forever
       const timeoutId = setTimeout(() => {

@@ -4,6 +4,7 @@ import { CardComponentProps } from './cardRegistry'
 import { useCardExpanded } from './CardWrapper'
 import { useReportCardDataState } from './CardDataContext'
 import { useTranslation } from 'react-i18next'
+import { emitGameStarted, emitGameEnded } from '../../lib/analytics'
 
 type Grid = (number | null)[][]
 
@@ -13,14 +14,14 @@ const TILE_COLORS: Record<number, { bg: string; text: string }> = {
   4: { bg: 'bg-blue-600/80', text: 'text-white' },
   8: { bg: 'bg-cyan-500/80', text: 'text-white' },
   16: { bg: 'bg-cyan-600/80', text: 'text-white' },
-  32: { bg: 'bg-teal-500/80', text: 'text-white' },
-  64: { bg: 'bg-teal-600/80', text: 'text-white' },
+  32: { bg: 'bg-cyan-500/80', text: 'text-white' },
+  64: { bg: 'bg-cyan-600/80', text: 'text-white' },
   128: { bg: 'bg-green-500/80', text: 'text-white' },
   256: { bg: 'bg-green-600/80', text: 'text-white' },
   512: { bg: 'bg-yellow-500/80', text: 'text-black' },
   1024: { bg: 'bg-orange-500/80', text: 'text-white' },
   2048: { bg: 'bg-purple-500/80', text: 'text-white' },
-  4096: { bg: 'bg-pink-500/80', text: 'text-white' },
+  4096: { bg: 'bg-purple-500/80', text: 'text-white' },
   8192: { bg: 'bg-red-500/80', text: 'text-white' },
 }
 
@@ -174,7 +175,7 @@ function hasWon(grid: Grid): boolean {
 
 export function Game2048(_props: CardComponentProps) {
   const { t: _t } = useTranslation()
-  useReportCardDataState({ hasData: true, isFailed: false, consecutiveFailures: 0 })
+  useReportCardDataState({ hasData: true, isFailed: false, consecutiveFailures: 0, isDemoData: false })
   const { isExpanded } = useCardExpanded()
   const [grid, setGrid] = useState<Grid>(initGame)
   const [score, setScore] = useState(0)
@@ -209,11 +210,13 @@ export function Game2048(_props: CardComponentProps) {
       // Check win
       if (!won && !keepPlaying && hasWon(newGrid)) {
         setWon(true)
+        emitGameEnded('2048', 'win', newScore)
       }
 
       // Check game over
       if (!canMove(newGrid)) {
         setGameOver(true)
+        emitGameEnded('2048', 'loss', newScore)
       }
     }
   }, [grid, score, bestScore, gameOver, won, keepPlaying])
@@ -262,6 +265,7 @@ export function Game2048(_props: CardComponentProps) {
     setGameOver(false)
     setWon(false)
     setKeepPlaying(false)
+    emitGameStarted('2048')
   }, [])
 
   // Continue after winning

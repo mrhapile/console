@@ -9,15 +9,16 @@ import { Skeleton } from '../../ui/Skeleton'
 import { Pagination } from '../../ui/Pagination'
 import { CardControls } from '../../ui/CardControls'
 import { CardSearchInput, CardAIActions } from '../../../lib/cards'
-import { useCachedLLMdServers } from '../../../hooks/useCachedData'
+import { useCachedLLMdServers, useCachedGPUNodes } from '../../../hooks/useCachedData'
 import { useWorkloadMonitor } from '../../../hooks/useWorkloadMonitor'
 import { useDiagnoseRepairLoop } from '../../../hooks/useDiagnoseRepairLoop'
 import { useApiKeyCheck, ApiKeyPromptModal } from '../console-missions/shared'
 import { cn } from '../../../lib/cn'
 // WorkloadMonitorAlerts replaced with inline issue cards in Issues tab
 import { useLLMdClusters } from '../workload-detection/shared'
-import { useClusters, useGPUNodes } from '../../../hooks/useMCP'
+import { useClusters } from '../../../hooks/useMCP'
 import { ClusterStatusDot, getClusterState } from '../../ui/ClusterStatusBadge'
+import { StatusBadge } from '../../ui/StatusBadge'
 import { useCardLoadingState } from '../CardDataContext'
 import type { MonitorIssue, MonitoredResource } from '../../../types/workloadMonitor'
 import { useTranslation } from 'react-i18next'
@@ -102,13 +103,13 @@ const STATUS_BADGE: Record<string, string> = {
   healthy: 'bg-green-500/20 text-green-400',
   degraded: 'bg-yellow-500/20 text-yellow-400',
   unhealthy: 'bg-red-500/20 text-red-400',
-  unknown: 'bg-gray-500/20 text-gray-400',
+  unknown: 'bg-gray-500/20 text-muted-foreground',
 }
 
 export function LLMdStackMonitor({ config: _config }: LLMdStackMonitorProps) {
   const { t } = useTranslation()
   const { deduplicatedClusters } = useClusters()
-  const { nodes: gpuNodes } = useGPUNodes()
+  const { nodes: gpuNodes } = useCachedGPUNodes()
 
   // Dynamically discover clusters that likely have llm-d stacks
   const gpuClusterNames = useMemo(() => new Set(gpuNodes.map(n => n.cluster)), [gpuNodes])
@@ -583,7 +584,7 @@ export function LLMdStackMonitor({ config: _config }: LLMdStackMonitorProps) {
                         <ClusterStatusDot state={clusterState} size="sm" />
                         <span className="flex-1 truncate">{cluster.name}</span>
                         {stateLabel && (
-                          <span className="text-[10px] text-muted-foreground shrink-0">{stateLabel}</span>
+                          <span className="text-2xs text-muted-foreground shrink-0">{stateLabel}</span>
                         )}
                       </button>
                     )
@@ -620,7 +621,7 @@ export function LLMdStackMonitor({ config: _config }: LLMdStackMonitorProps) {
           <Layers className="w-3 h-3" />
           Components
           <span className={cn(
-            'px-1.5 py-0.5 rounded text-[10px]',
+            'px-1.5 py-0.5 rounded text-2xs',
             activeTab === 'components' ? 'bg-purple-500/20 text-purple-400' : 'bg-secondary'
           )}>
             {totalComponents}
@@ -639,7 +640,7 @@ export function LLMdStackMonitor({ config: _config }: LLMdStackMonitorProps) {
           Issues
           {allIssues.length > 0 && (
             <span className={cn(
-              'px-1.5 py-0.5 rounded text-[10px]',
+              'px-1.5 py-0.5 rounded text-2xs',
               activeTab === 'issues' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-yellow-500/20 text-yellow-400'
             )}>
               {allIssues.length}
@@ -719,17 +720,17 @@ export function LLMdStackMonitor({ config: _config }: LLMdStackMonitorProps) {
                           <div className={cn('w-1.5 h-1.5 rounded-full shrink-0', STATUS_DOT[item.status] || 'bg-gray-400')} />
                           <span className="text-xs text-foreground truncate flex-1">{item.name}</span>
                           {item.namespace && (
-                            <span className="text-[10px] px-1 py-0.5 rounded bg-purple-500/20 text-purple-400 shrink-0">
+                            <StatusBadge color="purple" size="xs" className="shrink-0">
                               {item.namespace}
-                            </span>
+                            </StatusBadge>
                           )}
                           {item.detail && (
-                            <span className="text-[10px] text-muted-foreground shrink-0 truncate max-w-[150px]">
+                            <span className="text-2xs text-muted-foreground shrink-0 truncate max-w-[150px]">
                               {item.detail}
                             </span>
                           )}
                           {item.cluster && (
-                            <span className="text-[10px] px-1 py-0.5 rounded bg-secondary text-muted-foreground shrink-0">
+                            <span className="text-2xs px-1 py-0.5 rounded bg-secondary text-muted-foreground shrink-0">
                               {item.cluster}
                             </span>
                           )}
@@ -822,19 +823,19 @@ export function LLMdStackMonitor({ config: _config }: LLMdStackMonitorProps) {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className={cn('text-sm font-medium', config.text)}>{issue.title}</span>
-                          <span className={cn('text-[10px] px-1.5 py-0.5 rounded', config.badge)}>{issue.severity}</span>
+                          <span className={cn('text-2xs px-1.5 py-0.5 rounded', config.badge)}>{issue.severity}</span>
                         </div>
                         {issue.description && (
                           <p className="text-xs text-muted-foreground mt-1">{issue.description}</p>
                         )}
                         <div className="flex items-center gap-2 mt-2 flex-wrap">
                           {issue.resource?.namespace && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400">
+                            <StatusBadge color="purple" size="xs">
                               {issue.resource.namespace}
-                            </span>
+                            </StatusBadge>
                           )}
                           {issue.resource?.cluster && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">
+                            <span className="text-2xs px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">
                               {issue.resource.cluster}
                             </span>
                           )}

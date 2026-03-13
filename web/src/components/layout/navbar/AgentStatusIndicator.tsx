@@ -274,7 +274,7 @@ export function AgentStatusIndicator() {
                     )} />
                     <div className="flex-1 min-w-0">
                       <p className="text-xs text-foreground">{event.message}</p>
-                      <p className="text-[10px] text-muted-foreground">
+                      <p className="text-2xs text-muted-foreground">
                         {event.timestamp.toLocaleTimeString()}
                       </p>
                     </div>
@@ -294,11 +294,17 @@ export function AgentStatusIndicator() {
               {t('agent.localAgentDesc')}
             </p>
             <div className="bg-black/50 rounded p-2 font-mono text-[11px] text-green-400 mb-2 space-y-1">
-              <div className="text-muted-foreground">{t('agent.installViaHomebrew')}</div>
+              <div className="text-muted-foreground">{t('agent.installViaHomebrewMacOS')}</div>
               <code className="block">{t('agent.tapKubestellar')}</code>
               <code className="block">{t('agent.installKcAgent')}</code>
             </div>
-            <p className="text-[10px] text-muted-foreground">
+            <div className="bg-black/50 rounded p-2 font-mono text-[11px] text-green-400 mb-2 space-y-1">
+              <div className="text-muted-foreground">{t('agent.installLinuxBuildFromSource')}</div>
+              <code className="block">git clone https://github.com/kubestellar/console.git</code>
+              <code className="block">cd console &amp;&amp; go build -o bin/kc-agent ./cmd/kc-agent</code>
+              <code className="block">./bin/kc-agent</code>
+            </div>
+            <p className="text-2xs text-muted-foreground">
               {t('agent.visitGithub')}{' '}
               <a
                 href="https://github.com/kubestellar/homebrew-tap"

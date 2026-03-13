@@ -15,14 +15,20 @@ import {
   Bot,
   Package,
   HardDrive,
-  Sparkles,
 } from 'lucide-react'
 import { useSearchIndex, CATEGORY_ORDER, type SearchCategory, type SearchItem } from '../../../hooks/useSearchIndex'
 import { useMissions } from '../../../hooks/useMissions'
+import { useSidebarConfig, DISCOVERABLE_DASHBOARDS } from '../../../hooks/useSidebarConfig'
 import { scrollToCard } from '../../../lib/scrollToCard'
+import { useFeatureHints } from '../../../hooks/useFeatureHints'
+import { FeatureHintTooltip } from '../../ui/FeatureHintTooltip'
+import { emitGlobalSearchOpened, emitGlobalSearchQueried, emitGlobalSearchSelected, emitGlobalSearchAskAI } from '../../../lib/analytics'
+
+/** Routes for dashboards that are discoverable but not shown by default in the sidebar */
+const DISCOVERABLE_ROUTES = new Set(DISCOVERABLE_DASHBOARDS.map(d => d.href))
 
 const CATEGORY_CONFIG: Record<SearchCategory, { label: string; icon: typeof Server }> = {
-  page: { label: 'Pages', icon: LayoutDashboard },
+  page: { label: 'Dashboards', icon: LayoutDashboard },
   card: { label: 'Cards', icon: LayoutGrid },
   stat: { label: 'Stats', icon: BarChart3 },
   setting: { label: 'Settings', icon: Settings },
@@ -32,7 +38,7 @@ const CATEGORY_CONFIG: Record<SearchCategory, { label: string; icon: typeof Serv
   pod: { label: 'Pods', icon: Container },
   service: { label: 'Services', icon: Globe },
   mission: { label: 'AI Missions', icon: Bot },
-  dashboard: { label: 'Dashboards', icon: LayoutDashboard },
+  dashboard: { label: 'Custom Dashboards', icon: LayoutDashboard },
   helm: { label: 'Helm Releases', icon: Package },
   node: { label: 'Nodes', icon: HardDrive },
 }
@@ -41,12 +47,16 @@ export function SearchDropdown() {
   const navigate = useNavigate()
   const location = useLocation()
   const { openSidebar, setActiveMission, startMission } = useMissions()
+  const { config: sidebarConfig } = useSidebarConfig()
   const [searchQuery, setSearchQuery] = useState('')
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(0)
   const searchRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const resultsRef = useRef<HTMLDivElement>(null)
+  const cmdKHint = useFeatureHints('cmd-k')
+  const isMac = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform || '')
+  const searchShortcut = isMac ? '⌘K' : 'Ctrl+K'
 
   const { results, totalCount } = useSearchIndex(searchQuery)
 
@@ -55,6 +65,7 @@ export function SearchDropdown() {
     if (!searchQuery.trim()) return
 
     const query = searchQuery.trim()
+    emitGlobalSearchAskAI(query.length)
     startMission({
       title: query.length > 50 ? query.substring(0, 47) + '...' : query,
       description: 'Custom AI mission from search',
@@ -81,7 +92,14 @@ export function SearchDropdown() {
   const totalSelectableItems = flatResults.length + 1
   const askAIIndex = flatResults.length // "Ask AI" is always the last item
 
-  const handleSelect = useCallback((item: SearchItem) => {
+  // Check if a page route is a discoverable dashboard not currently in the sidebar
+  const sidebarHrefs = useMemo(() => {
+    if (!sidebarConfig) return new Set<string>()
+    return new Set(sidebarConfig.primaryNav.map(item => item.href))
+  }, [sidebarConfig])
+
+  const handleSelect = useCallback((item: SearchItem, index?: number) => {
+    emitGlobalSearchSelected(item.category, index ?? 0)
     // Mission items open the sidebar instead of navigating
     if (item.category === 'mission' && item.href?.startsWith('#mission:')) {
       const missionId = item.href.replace('#mission:', '')
@@ -90,10 +108,32 @@ export function SearchDropdown() {
     } else if (item.href) {
       // If we're already on the target route and there's a scroll target,
       // just scroll directly without navigating
-      if (item.scrollTarget && location.pathname === item.href) {
+      const baseHref = item.href.split('?')[0]
+      if (item.scrollTarget && location.pathname === baseHref) {
         scrollToCard(item.scrollTarget)
       } else {
-        navigate(item.href)
+        // For discoverable dashboards not in the sidebar, append customizeSidebar
+        // param so the page auto-opens the sidebar customizer
+        const isDiscoverableNotInSidebar =
+          item.category === 'page' &&
+          DISCOVERABLE_ROUTES.has(item.href) &&
+          !sidebarHrefs.has(item.href)
+
+        // Dashboard search results should open the sidebar customizer
+        const isDashboardResult = item.category === 'dashboard'
+
+        let targetHref = item.href
+        if (isDiscoverableNotInSidebar || isDashboardResult) {
+          targetHref = `${item.href}${item.href.includes('?') ? '&' : '?'}customizeSidebar=true`
+        }
+
+        // If already on the same path, force navigation by using replace
+        // so ?addCard=true or ?customizeSidebar=true params are picked up
+        if (location.pathname === baseHref) {
+          navigate(targetHref, { replace: true })
+        } else {
+          navigate(targetHref)
+        }
         // After navigation, scroll to the card if there's a scroll target
         if (item.scrollTarget) {
           scrollToCard(item.scrollTarget)
@@ -102,7 +142,7 @@ export function SearchDropdown() {
     }
     setSearchQuery('')
     setIsSearchOpen(false)
-  }, [navigate, location.pathname, setActiveMission, openSidebar])
+  }, [navigate, location.pathname, setActiveMission, openSidebar, sidebarHrefs])
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -123,6 +163,7 @@ export function SearchDropdown() {
         event.preventDefault()
         inputRef.current?.focus()
         setIsSearchOpen(true)
+        emitGlobalSearchOpened('keyboard')
       }
 
       if (!isSearchOpen) return
@@ -138,7 +179,7 @@ export function SearchDropdown() {
         if (selectedIndex === askAIIndex) {
           handleAskAI()
         } else if (flatResults[selectedIndex]) {
-          handleSelect(flatResults[selectedIndex])
+          handleSelect(flatResults[selectedIndex], selectedIndex)
         }
       } else if (event.key === 'Escape') {
         setIsSearchOpen(false)
@@ -182,13 +223,23 @@ export function SearchDropdown() {
             setSearchQuery(e.target.value)
             setIsSearchOpen(true)
           }}
-          onFocus={() => setIsSearchOpen(true)}
+          onFocus={() => { setIsSearchOpen(true); cmdKHint.action(); emitGlobalSearchOpened('click') }}
+          onBlur={() => { if (searchQuery.trim()) emitGlobalSearchQueried(searchQuery.trim().length, totalCount) }}
           placeholder="Search or ask AI anything..."
           className="w-full pl-10 pr-16 py-2 bg-secondary rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-purple-500/50"
         />
         <kbd className="absolute right-3 top-1/2 -translate-y-1/2 hidden sm:flex items-center gap-1 px-1.5 py-0.5 text-xs text-muted-foreground bg-secondary rounded">
           <Command className="w-3 h-3" />K
         </kbd>
+
+        {/* Cmd+K feature hint tooltip */}
+        {cmdKHint.isVisible && !isSearchOpen && (
+          <FeatureHintTooltip
+            message={`Press ${searchShortcut} to search dashboards, cards, clusters, and more`}
+            onDismiss={cmdKHint.dismiss}
+            placement="bottom"
+          />
+        )}
 
         {/* Search results dropdown */}
         {isSearchOpen && searchQuery.trim() && (
@@ -218,7 +269,7 @@ export function SearchDropdown() {
                           <button
                             key={item.id}
                             data-selected={isSelected}
-                            onClick={() => handleSelect(item)}
+                            onClick={() => handleSelect(item, currentIndex)}
                             className={`w-full flex items-center gap-3 px-4 py-1.5 text-left transition-colors ${
                               isSelected
                                 ? 'bg-purple-900 text-foreground'
@@ -231,7 +282,7 @@ export function SearchDropdown() {
                                 <p className="text-xs text-muted-foreground truncate">{item.description}</p>
                               )}
                             </div>
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-secondary text-muted-foreground/70 shrink-0">
+                            <span className="text-2xs px-1.5 py-0.5 rounded bg-secondary text-muted-foreground/70 shrink-0">
                               {config.label.toLowerCase()}
                             </span>
                           </button>
@@ -258,12 +309,12 @@ export function SearchDropdown() {
                         : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
                     }`}
                   >
-                    <Sparkles className="w-4 h-4 text-purple-400 shrink-0" />
+                    <Bot className="w-4 h-4 text-muted-foreground shrink-0" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium">Ask AI about this</p>
                       <p className="text-xs text-muted-foreground truncate">&quot;{searchQuery}&quot;</p>
                     </div>
-                    <kbd className="text-[10px] px-1.5 py-0.5 rounded bg-secondary text-muted-foreground/70 shrink-0">
+                    <kbd className="text-2xs px-1.5 py-0.5 rounded bg-secondary text-muted-foreground/70 shrink-0">
                       ↵
                     </kbd>
                   </button>
@@ -285,12 +336,12 @@ export function SearchDropdown() {
                         : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
                     }`}
                   >
-                    <Sparkles className="w-5 h-5 text-purple-400 shrink-0" />
+                    <Bot className="w-5 h-5 text-muted-foreground shrink-0" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium">Ask AI instead</p>
                       <p className="text-xs text-muted-foreground truncate">Start a mission: &quot;{searchQuery}&quot;</p>
                     </div>
-                    <kbd className="text-[10px] px-1.5 py-0.5 rounded bg-secondary text-muted-foreground/70 shrink-0">
+                    <kbd className="text-2xs px-1.5 py-0.5 rounded bg-secondary text-muted-foreground/70 shrink-0">
                       ↵
                     </kbd>
                   </button>

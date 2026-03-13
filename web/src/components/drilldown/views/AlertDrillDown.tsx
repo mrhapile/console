@@ -52,7 +52,7 @@ const getStateStyle = (state: string) => {
   if (lower === 'resolved' || lower === 'inactive') {
     return { bg: 'bg-green-500/20', text: 'text-green-400' }
   }
-  return { bg: 'bg-gray-500/20', text: 'text-gray-400' }
+  return { bg: 'bg-secondary', text: 'text-muted-foreground' }
 }
 
 export function AlertDrillDown({ data }: Props) {
@@ -261,7 +261,7 @@ Please:
                 <Layers className="w-4 h-4 text-purple-400" />
                 <span className="text-muted-foreground">{t('drilldown.fields.namespace')}</span>
                 <span className="font-mono text-purple-400 group-hover:text-purple-300 transition-colors">{namespace}</span>
-                <svg className="w-3 h-3 text-purple-400/50 group-hover:text-purple-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="w-3 h-3 text-purple-400/70 group-hover:text-purple-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
               </button>
@@ -273,7 +273,7 @@ Please:
               <Server className="w-4 h-4 text-blue-400" />
               <span className="text-muted-foreground">{t('drilldown.fields.cluster')}</span>
               <ClusterBadge cluster={cluster.split('/').pop() || cluster} size="sm" />
-              <svg className="w-3 h-3 text-blue-400/50 group-hover:text-blue-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-3 h-3 text-blue-400/70 group-hover:text-blue-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </button>
@@ -395,7 +395,7 @@ Please:
                 {alertRuleName && (
                   <button
                     onClick={() => drillToAlertRule(cluster, namespace || 'monitoring', alertRuleName)}
-                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20 transition-colors text-sm"
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/20 transition-colors text-sm"
                   >
                     <Bell className="w-3 h-3" />
                     <span>Alert Rule</span>

@@ -6,6 +6,7 @@
  */
 
 import { Shield, CheckCircle2, AlertTriangle, Clock, AlertCircle } from 'lucide-react'
+import { StatusBadge } from '../ui/StatusBadge'
 import { useCertManager } from '../../hooks/useCertManager'
 import { useCardLoadingState } from './CardDataContext'
 import { useTranslation } from 'react-i18next'
@@ -262,14 +263,14 @@ export function CertManager({ config: _config }: CardConfig) {
       {(status.pending > 0 || status.failed > 0) && (
         <div className="flex items-center gap-2 text-xs">
           {status.pending > 0 && (
-            <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400">
+            <StatusBadge color="blue" rounded="full">
               {status.pending} pending
-            </span>
+            </StatusBadge>
           )}
           {status.failed > 0 && (
-            <span className="px-2 py-0.5 rounded-full bg-red-500/20 text-red-400">
+            <StatusBadge color="red" rounded="full">
               {status.failed} failed
-            </span>
+            </StatusBadge>
           )}
         </div>
       )}
@@ -290,7 +291,7 @@ export function CertManager({ config: _config }: CardConfig) {
                 <span className="text-xs text-foreground truncate max-w-[120px]">{issuer.name}</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] text-muted-foreground">{issuer.kind}</span>
+                <span className="text-2xs text-muted-foreground">{issuer.kind}</span>
                 <span className="text-xs font-medium text-foreground">{issuer.certificateCount}</span>
               </div>
             </div>

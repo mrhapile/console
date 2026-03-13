@@ -9,11 +9,11 @@ const GlobeLoader = () => {
           <div className="absolute -top-1 left-1/2 w-2 h-2 bg-cyan-400 rounded-full transform -translate-x-1/2"></div>
           <div className="absolute top-1/2 -right-1 w-2 h-2 bg-yellow-400 rounded-full transform -translate-y-1/2"></div>
           <div className="absolute -bottom-1 left-1/2 w-2 h-2 bg-green-400 rounded-full transform -translate-x-1/2"></div>
-          <div className="absolute top-1/2 -left-1 w-2 h-2 bg-pink-400 rounded-full transform -translate-y-1/2"></div>
+          <div className="absolute top-1/2 -left-1 w-2 h-2 bg-purple-400 rounded-full transform -translate-y-1/2"></div>
         </div>
       </div>
       <div className="text-center">
-        <div className="text-blue-400 font-semibold text-lg">KubeStellar</div>
+        <div className="text-blue-400 font-semibold text-lg">Console</div>
         <div className="text-muted-foreground text-sm">Initializing clusters...</div>
         <div className="flex space-x-1 mt-2 justify-center">
           <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce"></div>

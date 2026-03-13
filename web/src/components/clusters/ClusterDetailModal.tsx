@@ -4,6 +4,7 @@ import { BaseModal } from '../../lib/modals'
 import { useClusterHealth, usePodIssues, useDeploymentIssues, useGPUNodes, useNodes, useNamespaceStats, useDeployments, useClusters } from '../../hooks/useMCP'
 import { useDrillDownActions } from '../../hooks/useDrillDown'
 import { useMissions } from '../../hooks/useMissions'
+import { emitClusterAction } from '../../lib/analytics'
 import { Gauge } from '../charts/Gauge'
 import { NodeListItem } from './NodeListItem'
 import { NodeDetailPanel } from './NodeDetailPanel'
@@ -11,6 +12,8 @@ import { NamespaceResources } from './components'
 import { CPUDetailModal, MemoryDetailModal, StorageDetailModal, GPUDetailModal } from './ResourceDetailModals'
 import { CloudProviderIcon, detectCloudProvider as detectCloudProviderShared, getProviderLabel, CloudProvider as CloudProviderType } from '../ui/CloudProviderIcon'
 import { useTranslation } from 'react-i18next'
+import { StatusBadge } from '../ui/StatusBadge'
+import { Button } from '../ui/Button'
 
 // Cloud provider types
 type CloudProvider = 'eks' | 'gke' | 'aks' | 'openshift' | 'oci' | 'alibaba' | 'digitalocean' | 'rancher' | 'coreweave' | 'kind' | 'minikube' | 'k3s' | 'unknown'
@@ -72,7 +75,7 @@ function getProviderInfo(provider: CloudProvider): { color: string; bgColor: str
     case 'alibaba': return { color: 'text-orange-300', bgColor: 'bg-orange-500/20' }
     case 'digitalocean': return { color: 'text-blue-400', bgColor: 'bg-blue-500/20' }
     case 'rancher': return { color: 'text-green-400', bgColor: 'bg-green-500/20' }
-    case 'coreweave': return { color: 'text-indigo-400', bgColor: 'bg-indigo-500/20' }
+    case 'coreweave': return { color: 'text-blue-400', bgColor: 'bg-blue-500/20' }
     case 'kind': return { color: 'text-blue-300', bgColor: 'bg-blue-500/20' }
     case 'minikube': return { color: 'text-purple-400', bgColor: 'bg-purple-500/20' }
     case 'k3s': return { color: 'text-green-300', bgColor: 'bg-green-500/20' }
@@ -161,6 +164,7 @@ export function ClusterDetailModal({ clusterName, clusterUser, onClose, onRename
 
   // AI diagnose/repair handlers
   const handleDiagnose = () => {
+    emitClusterAction('diagnose', clusterName)
     const issuesSummary = [
       ...podIssues.map(p => `Pod ${p.name} in ${p.namespace}: ${p.status}`),
       ...clusterDeploymentIssues.map(d => `Deployment ${d.name} in ${d.namespace}: ${d.readyReplicas}/${d.replicas} ready`)
@@ -199,6 +203,7 @@ Please analyze this cluster and provide:
   }
 
   const handleRepair = () => {
+    emitClusterAction('repair', clusterName)
     const issuesList = [
       ...podIssues.slice(0, 5).map(p => `- Pod "${p.name}" in namespace "${p.namespace}": ${p.status} (${p.restarts} restarts)`),
       ...clusterDeploymentIssues.slice(0, 5).map(d => `- Deployment "${d.name}" in namespace "${d.namespace}": ${d.readyReplicas}/${d.replicas} ready - ${d.reason || 'Unknown reason'}`)
@@ -262,17 +267,11 @@ After I approve, help me execute the repairs step by step.`,
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             {isUnreachable ? (
-              <span className="flex items-center gap-1.5 px-2 py-1 rounded bg-yellow-500/20 text-yellow-400" title={t('clusterDetail.offlineStatus')}>
-                <WifiOff className="w-4 h-4" />
-              </span>
+              <StatusBadge color="yellow" icon={<WifiOff className="w-4 h-4" />} className="px-2 py-1" />
             ) : isHealthy ? (
-              <span className="flex items-center gap-1.5 px-2 py-1 rounded bg-green-500/20 text-green-400" title={t('clusterDetail.healthy')}>
-                <CheckCircle className="w-4 h-4" />
-              </span>
+              <StatusBadge color="green" icon={<CheckCircle className="w-4 h-4" />} className="px-2 py-1" />
             ) : (
-              <span className="flex items-center gap-1.5 px-2 py-1 rounded bg-red-500/20 text-red-400" title={t('clusterDetail.unhealthy')}>
-                <AlertTriangle className="w-4 h-4" />
-              </span>
+              <StatusBadge color="red" icon={<AlertTriangle className="w-4 h-4" />} className="px-2 py-1" />
             )}
             <div className="flex flex-col">
               <h2 className="text-xl font-semibold text-foreground">{clusterName.split('/').pop()}</h2>
@@ -361,13 +360,16 @@ After I approve, help me execute the repairs step by step.`,
               <Wrench className="w-3.5 h-3.5" />
               {t('clusterDetail.repair')}
               {(podIssues.length > 0 || clusterDeploymentIssues.length > 0) && (
-                <span className="px-1.5 py-0.5 rounded bg-red-500/30 text-xs">
+                <StatusBadge color="red" size="xs">
                   {podIssues.length + clusterDeploymentIssues.length}
-                </span>
+                </StatusBadge>
               )}
             </button>
-            <button
+            <Button
+              variant="accent"
+              size="sm"
               onClick={() => {
+                emitClusterAction('ask', clusterName)
                 startMission({
                   title: `Ask about ${clusterName.split('/').pop()}`,
                   description: 'Custom question about the cluster',
@@ -379,12 +381,11 @@ After I approve, help me execute the repairs step by step.`,
                 onClose()
               }}
               disabled={isUnreachable}
-              className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              icon={<Wand2 className="w-3.5 h-3.5" />}
               title={t('clusterDetail.askTitle')}
             >
-              <Wand2 className="w-3.5 h-3.5" />
               {t('clusterDetail.ask')}
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -413,7 +414,7 @@ After I approve, help me execute the repairs step by step.`,
                 </div>
                 <div className="text-xs text-green-400">{!isUnreachable ? `${health?.readyNodes || 0} ${t('clusterDetail.ready')}` : t('clusterDetail.offline')}</div>
                 {!isUnreachable && !showNodeDetails && (
-                  <div className="text-[10px] text-muted-foreground/50 mt-2 group-hover:text-cyan-400/70 transition-colors">{t('clusterDetail.clickToExpand')}</div>
+                  <div className="text-2xs text-muted-foreground/50 mt-2 group-hover:text-cyan-400/70 transition-colors">{t('clusterDetail.clickToExpand')}</div>
                 )}
               </>
             )}
@@ -422,13 +423,13 @@ After I approve, help me execute the repairs step by step.`,
             onClick={() => !isUnreachable && !isLoading && setShowPodsByNamespace(!showPodsByNamespace)}
             disabled={isUnreachable || isLoading}
             className={`group p-4 rounded-lg bg-card/50 border text-left transition-all duration-200 ${
-              !isUnreachable && !isLoading ? 'border-border hover:border-indigo-500/50 hover:bg-indigo-500/5 hover:shadow-lg hover:shadow-indigo-500/10 cursor-pointer' : 'border-border cursor-default'
-            } ${showPodsByNamespace ? 'border-indigo-500/50 bg-indigo-500/10 shadow-lg shadow-indigo-500/10' : ''}`}
+              !isUnreachable && !isLoading ? 'border-border hover:border-blue-500/50 hover:bg-blue-500/5 hover:shadow-lg hover:shadow-blue-500/10 cursor-pointer' : 'border-border cursor-default'
+            } ${showPodsByNamespace ? 'border-blue-500/50 bg-blue-500/10 shadow-lg shadow-blue-500/10' : ''}`}
             title={!isUnreachable && !isLoading ? t('clusterDetail.clickToViewWorkloads') : undefined}
           >
             <div className="text-sm text-muted-foreground flex items-center gap-1 mb-1">
               {t('clusterDetail.workloads')}
-              {!isUnreachable && !isLoading && <ChevronDown className={`w-4 h-4 transition-transform text-indigo-400 ${showPodsByNamespace ? 'rotate-180' : 'group-hover:translate-y-0.5'}`} />}
+              {!isUnreachable && !isLoading && <ChevronDown className={`w-4 h-4 transition-transform text-blue-400 ${showPodsByNamespace ? 'rotate-180' : 'group-hover:translate-y-0.5'}`} />}
             </div>
             {isLoading ? (
               <div className="space-y-1.5">
@@ -459,7 +460,7 @@ After I approve, help me execute the repairs step by step.`,
                   )}
                 </div>
                 {!isUnreachable && !showPodsByNamespace && (
-                  <div className="text-[10px] text-muted-foreground/50 mt-2 group-hover:text-indigo-400/70 transition-colors">{t('clusterDetail.clickToExpand')}</div>
+                  <div className="text-2xs text-muted-foreground/50 mt-2 group-hover:text-blue-400/70 transition-colors">{t('clusterDetail.clickToExpand')}</div>
                 )}
               </>
             )}
@@ -484,7 +485,7 @@ After I approve, help me execute the repairs step by step.`,
                 <div className="text-sm text-muted-foreground">{t('common.gpus')}</div>
                 <div className="text-xs text-yellow-400">{!isUnreachable ? `${clusterGPUs.reduce((sum, n) => sum + n.gpuAllocated, 0)} ${t('clusterDetail.allocated')}` : ''}</div>
                 {!isUnreachable && clusterGPUs.length > 0 && (
-                  <div className="text-[10px] text-muted-foreground/50 mt-2 group-hover:text-yellow-400/70 transition-colors">{t('clusterDetail.clickForDetails')}</div>
+                  <div className="text-2xs text-muted-foreground/50 mt-2 group-hover:text-yellow-400/70 transition-colors">{t('clusterDetail.clickForDetails')}</div>
                 )}
               </>
             )}
@@ -515,7 +516,7 @@ After I approve, help me execute the repairs step by step.`,
                 <div className="text-2xl font-bold text-foreground">{!isUnreachable ? (health?.cpuCores || 0) : '-'}</div>
                 <div className="text-xs text-muted-foreground">{t('clusterDetail.coresAllocatable')}</div>
                 {!isUnreachable && (
-                  <div className="text-[10px] text-muted-foreground/50 mt-2 group-hover:text-blue-400/70 transition-colors">{t('clusterDetail.clickForDetails')}</div>
+                  <div className="text-2xs text-muted-foreground/50 mt-2 group-hover:text-blue-400/70 transition-colors">{t('clusterDetail.clickForDetails')}</div>
                 )}
               </>
             )}
@@ -544,7 +545,7 @@ After I approve, help me execute the repairs step by step.`,
                 </div>
                 <div className="text-xs text-muted-foreground">{t('clusterDetail.allocatable')}</div>
                 {!isUnreachable && (
-                  <div className="text-[10px] text-muted-foreground/50 mt-2 group-hover:text-green-400/70 transition-colors">{t('clusterDetail.clickForDetails')}</div>
+                  <div className="text-2xs text-muted-foreground/50 mt-2 group-hover:text-green-400/70 transition-colors">{t('clusterDetail.clickForDetails')}</div>
                 )}
               </>
             )}
@@ -573,7 +574,7 @@ After I approve, help me execute the repairs step by step.`,
                 </div>
                 <div className="text-xs text-muted-foreground">{t('clusterDetail.ephemeral')}</div>
                 {!isUnreachable && (
-                  <div className="text-[10px] text-muted-foreground/50 mt-2 group-hover:text-purple-400/70 transition-colors">{t('clusterDetail.clickForDetails')}</div>
+                  <div className="text-2xs text-muted-foreground/50 mt-2 group-hover:text-purple-400/70 transition-colors">{t('clusterDetail.clickForDetails')}</div>
                 )}
               </>
             )}
@@ -584,7 +585,7 @@ After I approve, help me execute the repairs step by step.`,
         {!isUnreachable && showPodsByNamespace && namespaceStats.length > 0 && (
           <div className="mb-6">
             <h3 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
-              <Layers className="w-4 h-4 text-indigo-400" />
+              <Layers className="w-4 h-4 text-blue-400" />
               {t('clusterDetail.workloadsCount', { count: namespaceStats.length })}
             </h3>
             <div className="rounded-lg bg-card/50 border border-border overflow-hidden">
@@ -599,7 +600,7 @@ After I approve, help me execute the repairs step by step.`,
                       >
                         <div className="flex items-center gap-2">
                           {isExpanded ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
-                          <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-400 font-medium"><FolderOpen className="w-3 h-3" />{t('clusterDetail.ns')}</span>
+                          <StatusBadge color="blue" size="xs" icon={<FolderOpen className="w-3 h-3" />}>{t('clusterDetail.ns')}</StatusBadge>
                           <span className="font-mono text-sm text-foreground">{ns.name}</span>
                         </div>
                         <div className="flex items-center gap-4 text-sm">
@@ -671,14 +672,12 @@ After I approve, help me execute the repairs step by step.`,
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 font-medium flex-shrink-0">
-                        <Box className="w-3 h-3" />{t('clusterDetail.pod')}
-                      </span>
+                      <StatusBadge color="blue" size="xs" icon={<Box className="w-3 h-3" />} className="flex-shrink-0">{t('clusterDetail.pod')}</StatusBadge>
                       <span className="font-medium text-foreground truncate">{issue.name}</span>
                       <span className="text-xs text-muted-foreground flex-shrink-0">({issue.namespace})</span>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                      <span className="text-xs px-2 py-1 rounded bg-red-500/20 text-red-400">{issue.status}</span>
+                      <StatusBadge color="red" size="xs">{issue.status}</StatusBadge>
                       <ChevronRight className="w-4 h-4 text-muted-foreground" />
                     </div>
                   </div>
@@ -694,16 +693,14 @@ After I approve, help me execute the repairs step by step.`,
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 font-medium flex-shrink-0">
-                        <Layers className="w-3 h-3" />{t('clusterDetail.deploy')}
-                      </span>
+                      <StatusBadge color="purple" size="xs" icon={<Layers className="w-3 h-3" />} className="flex-shrink-0">{t('clusterDetail.deploy')}</StatusBadge>
                       <span className="font-medium text-foreground truncate">{issue.name}</span>
                       <span className="text-xs text-muted-foreground flex-shrink-0">({issue.namespace})</span>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                      <span className="text-xs px-2 py-1 rounded bg-red-500/20 text-red-400">
+                      <StatusBadge color="red" size="xs">
                         {issue.readyReplicas}/{issue.replicas} ready
-                      </span>
+                      </StatusBadge>
                       <ChevronRight className="w-4 h-4 text-muted-foreground" />
                     </div>
                   </div>

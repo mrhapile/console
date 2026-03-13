@@ -420,7 +420,10 @@ func (h *BenchmarkHandlers) driveGetWithRetry(url string) (*http.Response, error
 			continue
 		}
 		if resp.StatusCode == 403 || resp.StatusCode == 429 {
-			body, _ := io.ReadAll(resp.Body)
+			body, readErr := io.ReadAll(resp.Body)
+			if readErr != nil {
+				body = []byte("(failed to read response body)")
+			}
 			resp.Body.Close()
 			lastErr = fmt.Errorf("Drive API returned %d: %s", resp.StatusCode, string(body))
 			continue
@@ -464,9 +467,9 @@ func (h *BenchmarkHandlers) GetReports(c *fiber.Ctx) error {
 		stale := h.cache.reports
 		h.cache.mu.RUnlock()
 		if stale != nil {
-			return c.JSON(fiber.Map{"reports": stale, "source": "stale-cache", "error": err.Error()})
+			return c.JSON(fiber.Map{"reports": stale, "source": "stale-cache", "error": "failed to refresh benchmark data"})
 		}
-		return c.Status(502).JSON(fiber.Map{"error": fmt.Sprintf("failed to fetch benchmark data: %v", err)})
+		return c.Status(502).JSON(fiber.Map{"error": "failed to fetch benchmark data"})
 	}
 
 	h.cache.set(reports, since)
@@ -496,7 +499,10 @@ func (h *BenchmarkHandlers) StreamReports(c *fiber.Ctx) error {
 		c.Set("Content-Type", "text/event-stream")
 		c.Set("Cache-Control", "no-cache")
 		c.Set("Connection", "keep-alive")
-		batch, _ := json.Marshal(reports)
+		batch, err := json.Marshal(reports)
+		if err != nil {
+			return fiber.NewError(fiber.StatusInternalServerError, "failed to marshal benchmark reports")
+		}
 		fmt.Fprintf(c, "event: batch\ndata: %s\n\n", batch)
 		fmt.Fprintf(c, "event: done\ndata: {\"total\":%d,\"source\":\"cache\"}\n\n", len(reports))
 		return nil
@@ -526,7 +532,11 @@ func (h *BenchmarkHandlers) StreamReports(c *fiber.Ctx) error {
 			if len(pendingBatch) == 0 {
 				return
 			}
-			batch, _ := json.Marshal(pendingBatch)
+			batch, err := json.Marshal(pendingBatch)
+			if err != nil {
+				log.Printf("[benchmarks] Failed to marshal batch: %v", err)
+				return
+			}
 			fmt.Fprintf(w, "event: batch\ndata: %s\n\n", batch)
 			w.Flush()
 			log.Printf("[benchmarks] Flushed batch of %d (total: %d)", len(pendingBatch), totalSent)
@@ -556,7 +566,8 @@ func (h *BenchmarkHandlers) StreamReports(c *fiber.Ctx) error {
 
 		topLevel, err := h.listDriveFolder(h.folderID)
 		if err != nil {
-			fmt.Fprintf(w, "event: error\ndata: {\"error\":%q}\n\n", err.Error())
+			log.Printf("error listing drive folder: %v", err)
+			fmt.Fprintf(w, "event: error\ndata: {\"error\":\"failed to fetch benchmark data\"}\n\n")
 			w.Flush()
 			return
 		}
@@ -829,6 +840,9 @@ func (h *BenchmarkHandlers) listDriveFolder(folderID string) ([]driveFile, error
 	if err != nil {
 		return nil, err
 	}
+	if resp == nil {
+		return nil, fmt.Errorf("driveGetWithRetry returned nil response without error (should not happen)")
+	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
@@ -860,7 +874,10 @@ func (h *BenchmarkHandlers) downloadDriveFile(fileID string) ([]byte, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		body, _ := io.ReadAll(resp.Body)
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			body = []byte("(failed to read response body)")
+		}
 		return nil, fmt.Errorf("Drive download returned %d: %s", resp.StatusCode, string(body))
 	}
 

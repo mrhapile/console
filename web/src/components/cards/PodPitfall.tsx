@@ -4,6 +4,7 @@ import { CardComponentProps } from './cardRegistry'
 import { useCardExpanded } from './CardWrapper'
 import { useReportCardDataState } from './CardDataContext'
 import { useTranslation } from 'react-i18next'
+import { emitGameStarted, emitGameEnded } from '../../lib/analytics'
 
 // Game constants
 const CANVAS_WIDTH = 320
@@ -52,7 +53,7 @@ interface Vine {
 
 export function PodPitfall(_props: CardComponentProps) {
   const { t: _t } = useTranslation()
-  useReportCardDataState({ hasData: true, isFailed: false, consecutiveFailures: 0 })
+  useReportCardDataState({ hasData: true, isFailed: false, consecutiveFailures: 0, isDemoData: false })
   const { isExpanded } = useCardExpanded()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const gameLoopRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -327,6 +328,7 @@ export function PodPitfall(_props: CardComponentProps) {
           if (t <= 0) {
             setGameOver(true)
             setIsPlaying(false)
+            setScore(s => { emitGameEnded('pod_pitfall', 'loss', s); return s })
             return 0
           }
           return t - 1
@@ -420,6 +422,7 @@ export function PodPitfall(_props: CardComponentProps) {
             if (l <= 1) {
               setGameOver(true)
               setIsPlaying(false)
+              setScore(s => { emitGameEnded('pod_pitfall', 'loss', s); return s })
               return 0
             }
             return l - 1
@@ -470,6 +473,7 @@ export function PodPitfall(_props: CardComponentProps) {
             if (l <= 1) {
               setGameOver(true)
               setIsPlaying(false)
+              setScore(s => { emitGameEnded('pod_pitfall', 'loss', s); return s })
               return 0
             }
             return l - 1
@@ -485,7 +489,11 @@ export function PodPitfall(_props: CardComponentProps) {
         setWon(true)
         setGameOver(true)
         setIsPlaying(false)
-        setScore(s => s + time * 10)
+        setScore(s => {
+          const finalScore = s + time * 10
+          emitGameEnded('pod_pitfall', 'win', finalScore)
+          return finalScore
+        })
       }
 
       draw()
@@ -538,6 +546,7 @@ export function PodPitfall(_props: CardComponentProps) {
     setGameOver(false)
     setWon(false)
     setIsPlaying(true)
+    emitGameStarted('pod_pitfall')
   }, [generateWorld])
 
   const scale = isExpanded ? 1.5 : 1

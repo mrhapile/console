@@ -1,11 +1,13 @@
 import { useState, useMemo, useEffect } from 'react'
 import { Server, Activity, Box, Cpu, ChevronRight } from 'lucide-react'
-import { useClusters, useGPUNodes } from '../../hooks/useMCP'
+import { useClusters } from '../../hooks/useMCP'
+import { useCachedGPUNodes } from '../../hooks/useCachedData'
 import { useDrillDownActions } from '../../hooks/useDrillDown'
 import { useGlobalFilters } from '../../hooks/useGlobalFilters'
 import { Skeleton } from '../ui/Skeleton'
 import { useCardLoadingState } from './CardDataContext'
 import { useTranslation } from 'react-i18next'
+import { useDemoMode } from '../../hooks/useDemoMode'
 
 interface ClusterComparisonProps {
   config?: {
@@ -16,13 +18,15 @@ interface ClusterComparisonProps {
 export function ClusterComparison({ config }: ClusterComparisonProps) {
   const { t } = useTranslation(['cards', 'common'])
   const { deduplicatedClusters: rawClusters, isLoading: clustersLoading } = useClusters()
-  const { nodes: gpuNodes } = useGPUNodes()
+  const { nodes: gpuNodes, isDemoFallback } = useCachedGPUNodes()
   const [selectedClusters, setSelectedClusters] = useState<string[]>(config?.clusters || [])
+  const { isDemoMode } = useDemoMode()
 
   // Report loading state to CardWrapper for skeleton/refresh behavior
   const { showSkeleton, showEmptyState } = useCardLoadingState({
     isLoading: clustersLoading,
     hasAnyData: rawClusters.length > 0,
+    isDemoData: isDemoMode || isDemoFallback,
   })
   const {
     selectedClusters: globalSelectedClusters,
@@ -166,7 +170,7 @@ export function ClusterComparison({ config }: ClusterComparisonProps) {
                   >
                     <Server className="w-3 h-3 text-muted-foreground shrink-0" />
                     <span className="text-foreground font-medium group-hover:text-purple-400 truncate">{c.name}</span>
-                    <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${c.healthy ? 'bg-green-500' : 'bg-red-500'}`} />
+                    <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${c.healthy ? 'bg-green-400' : 'bg-red-400'}`} />
                     <ChevronRight className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
                   </button>
                 </th>

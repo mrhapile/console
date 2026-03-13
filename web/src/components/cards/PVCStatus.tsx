@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { CheckCircle, AlertTriangle, Clock, ChevronRight } from 'lucide-react'
-import { usePVCs } from '../../hooks/useMCP'
 import type { PVC } from '../../hooks/useMCP'
+import { useCachedPVCs } from '../../hooks/useCachedData'
 import { useDrillDownActions } from '../../hooks/useDrillDown'
 import { useDemoMode } from '../../hooks/useDemoMode'
 import { useCardLoadingState } from './CardDataContext'
@@ -71,7 +71,7 @@ function getStatusColor(status: string) {
 
 function PVCStatusInternal() {
   const { t } = useTranslation()
-  const { pvcs, isLoading, error, consecutiveFailures, isFailed } = usePVCs()
+  const { pvcs, isLoading, error, consecutiveFailures, isFailed, isDemoFallback } = useCachedPVCs()
   const { drillToPVC } = useDrillDownActions()
   const { isDemoMode: demoMode } = useDemoMode()
 
@@ -81,7 +81,7 @@ function PVCStatusInternal() {
     hasAnyData: pvcs.length > 0,
     isFailed,
     consecutiveFailures,
-    isDemoData: demoMode,
+    isDemoData: isDemoFallback || demoMode,
   })
 
   const {
@@ -110,6 +110,8 @@ function PVCStatusInternal() {
       sortDirection,
       setSortDirection,
     },
+    containerRef,
+    containerStyle,
   } = useCardData<PVC, SortByOption>(pvcs, {
     filter: {
       searchFields: ['name', 'namespace', 'cluster', 'storageClass'],
@@ -233,7 +235,7 @@ function PVCStatusInternal() {
       </div>
 
       {/* PVC List */}
-      <div className="flex-1 space-y-1.5 overflow-y-auto">
+      <div ref={containerRef} className="flex-1 space-y-1.5 overflow-y-auto" style={containerStyle}>
         {displayPVCs.length === 0 ? (
           <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
             {error ? 'Failed to load PVCs' : 'No PVCs found'}

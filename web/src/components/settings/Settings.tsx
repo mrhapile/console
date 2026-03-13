@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
@@ -50,45 +50,45 @@ const SYNC_ICONS: Record<SyncStatus, { icon: typeof CheckCircle; className: stri
 // Labels use i18n keys resolved at render time
 const SETTINGS_NAV = [
   {
-    groupKey: 'settings.groups.aiIntelligence',
+    groupKey: 'settings.groups.aiIntelligence' as const,
     items: [
-      { id: 'ai-mode-settings', labelKey: 'settings.nav.aiMode', icon: Cpu },
-      { id: 'prediction-settings', labelKey: 'settings.nav.predictions', icon: TrendingUp },
-      { id: 'agent-settings', labelKey: 'settings.nav.localAgent', icon: Plug },
-      { id: 'api-keys-settings', labelKey: 'settings.nav.apiKeys', icon: Key },
-      { id: 'token-usage-settings', labelKey: 'settings.nav.tokenUsage', icon: Coins },
+      { id: 'ai-mode-settings', labelKey: 'settings.nav.aiMode' as const, icon: Cpu },
+      { id: 'prediction-settings', labelKey: 'settings.nav.predictions' as const, icon: TrendingUp },
+      { id: 'agent-settings', labelKey: 'settings.nav.localAgent' as const, icon: Plug },
+      { id: 'api-keys-settings', labelKey: 'settings.nav.apiKeys' as const, icon: Key },
+      { id: 'token-usage-settings', labelKey: 'settings.nav.tokenUsage' as const, icon: Coins },
     ],
   },
   {
-    groupKey: 'settings.groups.integrations',
+    groupKey: 'settings.groups.integrations' as const,
     items: [
-      { id: 'github-token-settings', labelKey: 'settings.nav.github', icon: Github },
-      { id: 'widget-settings', labelKey: 'settings.nav.desktopWidget', icon: LayoutGrid },
-      { id: 'persistence-settings', labelKey: 'settings.nav.deployPersistence', icon: Database },
+      { id: 'github-token-settings', labelKey: 'settings.nav.github' as const, icon: Github },
+      { id: 'widget-settings', labelKey: 'settings.nav.desktopWidget' as const, icon: LayoutGrid },
+      { id: 'persistence-settings', labelKey: 'settings.nav.deployPersistence' as const, icon: Database },
     ],
   },
   {
-    groupKey: 'settings.groups.userAlerts',
+    groupKey: 'settings.groups.userAlerts' as const,
     items: [
-      { id: 'profile-settings', labelKey: 'settings.nav.profile', icon: User },
-      { id: 'notifications-settings', labelKey: 'settings.nav.notifications', icon: Bell },
+      { id: 'profile-settings', labelKey: 'settings.nav.profile' as const, icon: User },
+      { id: 'notifications-settings', labelKey: 'settings.nav.notifications' as const, icon: Bell },
     ],
   },
   {
-    groupKey: 'settings.groups.appearance',
+    groupKey: 'settings.groups.appearance' as const,
     items: [
-      { id: 'theme-settings', labelKey: 'settings.nav.theme', icon: Palette },
-      { id: 'accessibility-settings', labelKey: 'settings.nav.accessibility', icon: Eye },
+      { id: 'theme-settings', labelKey: 'settings.nav.theme' as const, icon: Palette },
+      { id: 'accessibility-settings', labelKey: 'settings.nav.accessibility' as const, icon: Eye },
     ],
   },
   {
-    groupKey: 'settings.groups.utilities',
+    groupKey: 'settings.groups.utilities' as const,
     items: [
-      { id: 'settings-backup', labelKey: 'settings.nav.backupSync', icon: HardDrive },
-      { id: 'local-clusters-settings', labelKey: 'settings.nav.localClusters', icon: Container },
-      { id: 'permissions-settings', labelKey: 'settings.nav.permissions', icon: Shield },
-      { id: 'analytics-settings', labelKey: 'settings.nav.analytics', icon: BarChart3 },
-      { id: 'system-updates-settings', labelKey: 'settings.nav.updates', icon: Download },
+      { id: 'settings-backup', labelKey: 'settings.nav.backupSync' as const, icon: HardDrive },
+      { id: 'local-clusters-settings', labelKey: 'settings.nav.localClusters' as const, icon: Container },
+      { id: 'permissions-settings', labelKey: 'settings.nav.permissions' as const, icon: Shield },
+      { id: 'analytics-settings', labelKey: 'settings.nav.analytics' as const, icon: BarChart3 },
+      { id: 'system-updates-settings', labelKey: 'settings.nav.updates' as const, icon: Download },
     ],
   },
 ]
@@ -110,6 +110,16 @@ export function Settings() {
   const [activeSection, setActiveSection] = useState<string>('ai-mode-settings')
   const [showRestoredToast, setShowRestoredToast] = useState(false)
 
+  // Suppresses IntersectionObserver updates during programmatic scrolls
+  // so the sidebar highlight stays on the clicked item instead of flickering
+  // through intermediate sections while the smooth scroll animates.
+  const isNavScrollingRef = useRef(false)
+  const navScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  /** Duration to suppress observer after a nav click (covers smooth scroll animation).
+   *  Long scrolls (e.g. AI Mode → Updates) can exceed 800ms on some browsers. */
+  const NAV_SCROLL_SUPPRESS_MS = 1200
+
   // Show toast when settings are restored from backup file (after cache clear)
   useEffect(() => {
     if (restoredFromFile) {
@@ -120,12 +130,12 @@ export function Settings() {
   }, [restoredFromFile])
   const contentRef = useRef<HTMLDivElement>(null)
 
-  // Offset for section headers inside the scroll container (px)
-  const SCROLL_OFFSET = 16
+  // Offset so scrolled-to sections land with breathing room (accounts for demo banner + visual centering)
+  const SCROLL_OFFSET = 80
 
   const getScrollContainer = () => document.getElementById('main-content')
 
-  const scrollToSection = (sectionId: string, smooth = true) => {
+  const scrollToSection = useCallback((sectionId: string, smooth = true) => {
     const element = document.getElementById(sectionId)
     const container = getScrollContainer()
     if (!element || !container) return
@@ -133,14 +143,16 @@ export function Settings() {
     const elementRect = element.getBoundingClientRect()
     const y = elementRect.top - containerRect.top + container.scrollTop - SCROLL_OFFSET
     container.scrollTo({ top: y, behavior: smooth ? 'smooth' : 'auto' })
-  }
+  }, [])
 
-  // Handle deep linking - scroll to section based on URL hash.
+  // Handle deep linking — scroll to section based on URL hash.
   // Depends on both pathname and hash so it fires when navigating TO settings
   // from another page (KeepAlive keeps Settings mounted, so location updates
   // for all routes — we only act when actually on /settings).
+  // Skipped when isNavScrollingRef is set (handleNavClick already scrolled).
   useEffect(() => {
     if (location.pathname !== '/settings') return
+    if (isNavScrollingRef.current) return
     const hash = location.hash.replace('#', '')
     if (!hash) return
 
@@ -152,6 +164,11 @@ export function Settings() {
       const element = document.getElementById(hash)
       const container = getScrollContainer()
       if (element && container && element.getBoundingClientRect().height > 0) {
+        // Suppress observer while deep-link scroll settles
+        isNavScrollingRef.current = true
+        if (navScrollTimerRef.current) clearTimeout(navScrollTimerRef.current)
+        navScrollTimerRef.current = setTimeout(() => { isNavScrollingRef.current = false }, NAV_SCROLL_SUPPRESS_MS)
+
         scrollToSection(hash, false)
         setActiveSection(hash)
         element.classList.add('ring-2', 'ring-purple-500/50')
@@ -163,7 +180,7 @@ export function Settings() {
     // Initial delay for route transition, then retry with rAF
     const timer = setTimeout(tryScroll, TOOLTIP_HIDE_DELAY_MS)
     return () => clearTimeout(timer)
-  }, [location.pathname, location.hash])
+  }, [location.pathname, location.hash, scrollToSection])
 
   // Track active section on scroll using IntersectionObserver
   useEffect(() => {
@@ -175,6 +192,8 @@ export function Settings() {
 
     const observer = new IntersectionObserver(
       (entries) => {
+        // Always keep visibleSections accurate so stale data doesn't
+        // cause wrong highlights after programmatic scrolls end.
         for (const entry of entries) {
           if (entry.isIntersecting) {
             visibleSections.set(entry.target.id, entry.intersectionRatio)
@@ -182,6 +201,10 @@ export function Settings() {
             visibleSections.delete(entry.target.id)
           }
         }
+        // Skip activeSection updates during programmatic scrolls
+        // (nav click or deep link) — handleNavClick already set it.
+        if (isNavScrollingRef.current) return
+
         // Pick the first visible section in document order
         for (const id of allSectionIds) {
           if (visibleSections.has(id)) {
@@ -206,9 +229,33 @@ export function Settings() {
   }, [])
 
   const handleNavClick = (sectionId: string) => {
+    // Suppress IntersectionObserver while the smooth scroll animates
+    isNavScrollingRef.current = true
+    if (navScrollTimerRef.current) clearTimeout(navScrollTimerRef.current)
+    navScrollTimerRef.current = setTimeout(() => { isNavScrollingRef.current = false }, NAV_SCROLL_SUPPRESS_MS)
+
     scrollToSection(sectionId)
     setActiveSection(sectionId)
+    // Update URL hash without triggering the deep link effect (isNavScrollingRef guards it)
     navigate(`#${sectionId}`, { replace: true })
+
+    // Keep the clicked item visible in the sidebar's own scroll area.
+    // NOTE: scrollIntoView cascades to ALL ancestor scroll containers
+    // (including #main-content), which cancels the smooth scroll set by
+    // scrollToSection above. Instead, manually scroll only the sidebar's
+    // own overflow container so #main-content is unaffected.
+    requestAnimationFrame(() => {
+      const btn = document.querySelector<HTMLElement>(`[data-settings-nav="${sectionId}"]`)
+      if (!btn) return
+      const sidebar = btn.closest<HTMLElement>('.overflow-y-auto')
+      if (!sidebar || sidebar.id === 'main-content') return
+      const btnRect = btn.getBoundingClientRect()
+      const sidebarRect = sidebar.getBoundingClientRect()
+      if (btnRect.top < sidebarRect.top || btnRect.bottom > sidebarRect.bottom) {
+        const scrollDelta = btnRect.top - sidebarRect.top - sidebarRect.height / 2 + btnRect.height / 2
+        sidebar.scrollBy({ top: scrollDelta, behavior: 'smooth' })
+      }
+    })
   }
 
   const SYNC_LABELS: Record<SyncStatus, string> = {
@@ -232,7 +279,7 @@ export function Settings() {
       )}
       {/* Sidebar Navigation */}
       <nav className="hidden lg:block w-56 shrink-0">
-        <div className="sticky top-20 space-y-4">
+        <div className="sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto scroll-enhanced space-y-4">
           <div className="mb-4">
             <h1 data-testid="settings-title" className="text-xl font-bold text-foreground">{t('settings.title')}</h1>
             <p className="text-sm text-muted-foreground">{t('settings.subtitle')}</p>
@@ -243,9 +290,8 @@ export function Settings() {
           </div>
           {SETTINGS_NAV.map((group) => (
             <div key={group.groupKey}>
-              <h3 className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1 px-2">
-                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                {t(group.groupKey as any)}
+              <h3 className="text-2xs uppercase tracking-wider text-muted-foreground font-semibold mb-1 px-2">
+                {t(group.groupKey)}
               </h3>
               <div className="space-y-0.5">
                 {group.items.map((item) => {
@@ -254,6 +300,7 @@ export function Settings() {
                   return (
                     <button
                       key={item.id}
+                      data-settings-nav={item.id}
                       onClick={() => handleNavClick(item.id)}
                       className={cn(
                         'w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-colors text-left',
@@ -263,8 +310,7 @@ export function Settings() {
                       )}
                     >
                       <Icon className={cn('w-4 h-4 shrink-0', isActive ? 'text-purple-400' : 'text-muted-foreground')} />
-                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                      <span className="truncate">{t(item.labelKey as any)}</span>
+                      <span className="truncate">{t(item.labelKey)}</span>
                     </button>
                   )
                 })}

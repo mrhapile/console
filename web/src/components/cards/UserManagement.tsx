@@ -24,7 +24,10 @@ import type { ConsoleUser, UserRole, OpenShiftUser } from '../../types/users'
 import { Skeleton } from '../ui/Skeleton'
 import { useCardLoadingState } from './CardDataContext'
 import { useTranslation } from 'react-i18next'
+import { StatusBadge } from '../ui/StatusBadge'
 import { useToast } from '../ui/Toast'
+import { useDemoMode } from '../../hooks/useDemoMode'
+import { emitUserRoleChanged, emitUserRemoved } from '../../lib/analytics'
 
 interface UserManagementProps {
   config?: Record<string, unknown>
@@ -81,6 +84,7 @@ export function UserManagement({ config: _config }: UserManagementProps) {
   const { user: currentUser } = useAuth()
   const { users: allUsers, isLoading: usersLoading, error: usersError, updateUserRole, deleteUser } = useConsoleUsers()
   const { deduplicatedClusters: allClusters, isLoading: clustersLoading } = useClusters()
+  const { isDemoMode } = useDemoMode()
   // Fetch ALL SAs from ALL clusters upfront, filter locally
   const { serviceAccounts: allServiceAccounts, isLoading: sasInitialLoading, failedClusters: _saFailedClusters } = useAllK8sServiceAccounts(allClusters)
   // Fetch ALL OpenShift users from ALL clusters upfront, filter locally
@@ -96,6 +100,7 @@ export function UserManagement({ config: _config }: UserManagementProps) {
     hasAnyData: allClusters.length > 0 || allUsers.length > 0 || allServiceAccounts.length > 0,
     isFailed: Boolean(usersError),
     consecutiveFailures: usersError ? 1 : 0,
+    isDemoData: isDemoMode,
   })
 
   const { selectedClusters, isAllClustersSelected } = useGlobalFilters()
@@ -183,6 +188,8 @@ export function UserManagement({ config: _config }: UserManagementProps) {
     setItemsPerPage: setOpenShiftUserItemsPerPage,
     filters: openshiftUserFilters,
     sorting: openshiftUserSorting,
+    containerRef,
+    containerStyle,
   } = useCardData<OpenShiftUser, OpenShiftUserSortBy>(openshiftUsersPreFiltered, {
     filter: {
       searchFields: ['name', 'cluster'] as (keyof OpenShiftUser)[],
@@ -291,6 +298,7 @@ export function UserManagement({ config: _config }: UserManagementProps) {
     try {
       await updateUserRole(userId, newRole)
       showToast('User role updated successfully', 'success')
+      emitUserRoleChanged(newRole)
     } catch (error) {
       console.error('Failed to update role:', error)
       showToast('Failed to update user role', 'error')
@@ -302,6 +310,7 @@ export function UserManagement({ config: _config }: UserManagementProps) {
     try {
       await deleteUser(userId)
       showToast('User deleted successfully', 'success')
+      emitUserRemoved()
     } catch (error) {
       console.error('Failed to delete user:', error)
       showToast('Failed to delete user', 'error')
@@ -315,7 +324,7 @@ export function UserManagement({ config: _config }: UserManagementProps) {
       case 'editor':
         return 'bg-blue-500/20 text-blue-400 border-blue-500/30'
       default:
-        return 'bg-gray-500/20 text-gray-400 border-gray-500/30'
+        return 'bg-gray-500/20 text-muted-foreground border-gray-500/30'
     }
   }
 
@@ -450,7 +459,7 @@ export function UserManagement({ config: _config }: UserManagementProps) {
       </div>
 
       {/* Content - fixed height to prevent jumping, p-px prevents border clipping */}
-      <div className="flex-1 overflow-y-auto min-h-0 p-px">
+      <div ref={containerRef} className="flex-1 overflow-y-auto min-h-0 p-px" style={containerStyle}>
         {activeTab === 'clusterUsers' && (
           <ClusterUsersTab
             clusters={clusters}
@@ -750,9 +759,9 @@ function ClusterUsersTab({
                     <span className="text-muted-foreground text-xs">({user.fullName})</span>
                   )}
                   {showClusterBadge && (
-                    <span className="px-1.5 py-0.5 rounded text-xs bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
+                    <StatusBadge color="cyan" variant="outline">
                       {user.cluster}
-                    </span>
+                    </StatusBadge>
                   )}
                 </div>
                 <ChevronRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -878,9 +887,9 @@ function ServiceAccountsTab({
                 <div className="flex items-center gap-2">
                   <span className="text-foreground font-medium group-hover:text-purple-400">{sa.name}</span>
                   {showClusterBadge && (
-                    <span className="px-1.5 py-0.5 rounded text-xs bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
+                    <StatusBadge color="cyan" variant="outline">
                       {sa.cluster}
-                    </span>
+                    </StatusBadge>
                   )}
                 </div>
                 <div className="flex items-center gap-2">

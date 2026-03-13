@@ -4,6 +4,7 @@ import { Play, RotateCcw, Pause, Trophy, Cpu, User } from 'lucide-react'
 import { useCardExpanded } from './CardWrapper'
 import { useReportCardDataState } from './CardDataContext'
 import { useTranslation } from 'react-i18next'
+import { emitGameStarted, emitGameEnded } from '../../lib/analytics'
 
 // Game constants
 const CANVAS_WIDTH = 400
@@ -41,7 +42,7 @@ interface Paddle {
 
 export function KubePong() {
   const { t: _t } = useTranslation()
-  useReportCardDataState({ hasData: true, isFailed: false, consecutiveFailures: 0 })
+  useReportCardDataState({ hasData: true, isFailed: false, consecutiveFailures: 0, isDemoData: false })
   const { isExpanded } = useCardExpanded()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [gameState, setGameState] = useState<'idle' | 'playing' | 'paused' | 'finished'>('idle')
@@ -189,6 +190,7 @@ export function KubePong() {
       if (newAiScore >= WINNING_SCORE) {
         setWinner('ai')
         setGameState('finished')
+        emitGameEnded('pong', 'loss', playerScore)
         return
       }
       resetBall(-1)
@@ -202,6 +204,7 @@ export function KubePong() {
         setWins(newWins)
         localStorage.setItem('kubePongWins', newWins.toString())
         setGameState('finished')
+        emitGameEnded('pong', 'win', newPlayerScore)
         return
       }
       resetBall(1)
@@ -305,6 +308,7 @@ export function KubePong() {
   const startGame = () => {
     initGame()
     setGameState('playing')
+    emitGameStarted('pong')
   }
 
   const togglePause = () => {

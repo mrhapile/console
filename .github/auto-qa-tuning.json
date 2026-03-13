@@ -1,99 +1,111 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-03-05T03:47:00Z",
+  "last_updated": "2026-03-13T03:47:07Z",
   "rolling_window_days": 30,
   "categories": {
     "other": {
-      "merged": 38,
-      "closed": 18,
-      "acceptance_rate": 0.68,
+      "merged": 55,
+      "closed": 59,
+      "acceptance_rate": 0.48,
       "status": "normal",
-      "last_evaluated": "2026-03-05T03:47:00Z"
+      "last_evaluated": "2026-03-13T03:47:07Z"
     },
     "security": {
-      "merged": 9,
-      "closed": 5,
-      "acceptance_rate": 0.64,
+      "merged": 12,
+      "closed": 12,
+      "acceptance_rate": 0.5,
       "status": "normal",
-      "last_evaluated": "2026-02-28T03:35:47Z"
+      "last_evaluated": "2026-03-13T03:47:07Z"
     },
     "resilience": {
-      "merged": 9,
-      "closed": 4,
-      "acceptance_rate": 0.69,
+      "merged": 11,
+      "closed": 11,
+      "acceptance_rate": 0.5,
       "status": "normal",
-      "last_evaluated": "2026-02-27T03:47:26Z"
+      "last_evaluated": "2026-03-13T03:47:07Z"
     },
     "performance": {
-      "merged": 3,
-      "closed": 0,
-      "acceptance_rate": 1,
-      "status": "normal",
-      "last_evaluated": "2026-02-18T03:50:02Z"
-    },
-    "consistency": {
-      "merged": 9,
-      "closed": 1,
-      "acceptance_rate": 0.9,
-      "status": "boosted",
-      "last_evaluated": "2026-02-27T03:47:26Z"
-    },
-    "dom-errors": {
       "merged": 4,
       "closed": 0,
       "acceptance_rate": 1,
       "status": "normal",
-      "last_evaluated": "2026-02-27T03:47:26Z"
+      "last_evaluated": "2026-03-06T03:46:36Z"
+    },
+    "consistency": {
+      "merged": 11,
+      "closed": 7,
+      "acceptance_rate": 0.61,
+      "status": "normal",
+      "last_evaluated": "2026-03-13T03:47:07Z"
+    },
+    "dom-errors": {
+      "merged": 4,
+      "closed": 1,
+      "acceptance_rate": 0.8,
+      "status": "normal",
+      "last_evaluated": "2026-03-08T03:46:25Z"
     },
     "a11y": {
-      "merged": 6,
-      "closed": 9,
-      "acceptance_rate": 0.4,
+      "merged": 10,
+      "closed": 12,
+      "acceptance_rate": 0.45,
       "status": "normal",
-      "last_evaluated": "2026-03-03T03:47:31Z"
+      "last_evaluated": "2026-03-11T03:46:33Z"
     },
     "ui-design": {
       "merged": 3,
-      "closed": 5,
-      "acceptance_rate": 0.38,
+      "closed": 7,
+      "acceptance_rate": 0.3,
       "status": "normal",
-      "last_evaluated": "2026-02-28T03:35:47Z"
+      "last_evaluated": "2026-03-10T03:46:12Z"
     },
     "testing": {
-      "merged": 2,
-      "closed": 2,
-      "acceptance_rate": 0.5,
+      "merged": 9,
+      "closed": 10,
+      "acceptance_rate": 0.47,
       "status": "normal",
-      "last_evaluated": "2026-02-28T03:35:47Z"
+      "last_evaluated": "2026-03-13T03:47:07Z"
     }
   },
   "weekly_insights": {
-    "best_pr_size": "M",
+    "best_pr_size": "L",
     "size_acceptance": {},
     "type_acceptance": {},
     "common_rejection_reasons": [
-      "- PR #1508: Closing — we do not want to upgrade React or other major framework dependencies at this time. Too risky for the stability of the codebase.",
-      "- PR #1440: Closing — merge conflicts with main. The auto-QA workflow will re-detect and re-file if still relevant.",
-      "- PR #1428: Closing — no code changes in this PR (all reverted due to TS 5.6.3 compiler bug). The documented findings are useful context for a future attempt after upgrading TypeScript. Thanks for the thorough investigation!",
-      "- PR #1415: Closing — merge conflicts with main. The auto-QA workflow will re-detect and re-file if still relevant.",
-      "- PR #1406: Closing — merge conflicts with main. The auto-QA workflow will re-detect and re-file if still relevant."
+      "- PR #2029: Closing: replacing `<button>` with `<div role=\"button\">` in AlertBadge.tsx and CardControls.tsx is an accessibility regression. Native `<button>` elements are the correct semantic choice. Also conflicts with #2028 on CloudProviderIcon.tsx.",
+      "- PR #2027: Closing: multi-major-version bumps are too risky in a single PR. Splitting into individual upgrades: #2036 (globals 15→17), #2037 (Vite 6→7), #2038 (@dnd-kit/sortable 8→9). ESLint 9→10 is blocked by upstream peer dep support. React 18→19 requires its own careful migration.",
+      "- PR #2008: Closing — refresh icons are intentionally static and only animate via conditional `isRefreshing` state. Not a bug.",
+      "- PR #2006: Closing — INVENTORY.md doesn't exist in this repo. False positive from Auto-QA.",
+      "- PR #1999: Test PR — closing with test issue #1997."
     ],
     "best_change_type": "bug_fix",
-    "last_report_date": "2026-03-01"
+    "last_report_date": "2026-03-08"
   },
   "cncf_insights": {
-    "last_scan_date": "2026-03-04",
+    "last_scan_date": "2026-03-11",
     "suggested_checks": [
       {
-        "pattern": "navigation_ux",
-        "count": 6,
-        "added": "2026-03-04",
+        "pattern": "accessibility",
+        "count": 5,
+        "added": "2026-03-11",
+        "priority": "medium"
+      },
+      {
+        "pattern": "data_viz",
+        "count": 10,
+        "added": "2026-03-11",
+        "priority": "medium"
+      },
+      {
+        "pattern": "form_ux",
+        "count": 11,
+        "added": "2026-03-11",
         "priority": "medium"
       },
       {
         "pattern": "realtime_ux",
-        "count": 5,
-        "added": "2026-03-04",
+        "count": 8,
+        "added": "2026-03-11",
         "priority": "medium"
       }
     ]
@@ -220,19 +232,63 @@
       "categories_boosted": [
         "consistency"
       ]
+    },
+    {
+      "date": "2026-03-06",
+      "total_merged": 93,
+      "total_closed": 46,
+      "categories_blocked": [],
+      "categories_boosted": [
+        "consistency"
+      ]
+    },
+    {
+      "date": "2026-03-07",
+      "total_merged": 101,
+      "total_closed": 73,
+      "categories_blocked": [],
+      "categories_boosted": []
+    },
+    {
+      "date": "2026-03-08",
+      "total_merged": 109,
+      "total_closed": 78,
+      "categories_blocked": [],
+      "categories_boosted": []
+    },
+    {
+      "date": "2026-03-10",
+      "total_merged": 112,
+      "total_closed": 89,
+      "categories_blocked": [],
+      "categories_boosted": []
+    },
+    {
+      "date": "2026-03-11",
+      "total_merged": 119,
+      "total_closed": 95,
+      "categories_blocked": [],
+      "categories_boosted": []
+    },
+    {
+      "date": "2026-03-13",
+      "total_merged": 119,
+      "total_closed": 119,
+      "categories_blocked": [],
+      "categories_boosted": []
     }
   ],
   "rotation_weights": {
-    "other": 1.02,
-    "security": 0.96,
-    "resilience": 1.03,
+    "other": 0.72,
+    "security": 0.75,
+    "resilience": 0.75,
     "performance": 1.5,
-    "consistency": 2.0,
-    "dom-errors": 1.5,
-    "a11y": 0.6,
-    "ui-design": 0.57,
-    "testing": 0.75
+    "consistency": 0.92,
+    "dom-errors": 1.2,
+    "a11y": 0.68,
+    "ui-design": 0.45,
+    "testing": 0.71
   },
   "max_issues_override": 3,
-  "pr_guidance": "Changes up to 200 lines (size M) are acceptable. Avoid PRs over 200 lines."
+  "pr_guidance": "Keep PRs small and focused. Smaller PRs have higher acceptance rates."
 }

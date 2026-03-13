@@ -4,6 +4,7 @@ import {
 } from 'lucide-react'
 import { Skeleton } from '../../ui/Skeleton'
 import { CardControls } from '../../ui/CardControls'
+import { StatusBadge } from '../../ui/StatusBadge'
 import { CardSearchInput } from '../../../lib/cards'
 import { Pagination } from '../../ui/Pagination'
 import { useCachedProwJobs } from '../../../hooks/useCachedData'
@@ -54,7 +55,10 @@ export function ProwHistory({ config: _config }: ProwHistoryProps) {
     [jobs]
   )
 
-  const { items, totalItems, currentPage, totalPages, goToPage, needsPagination, itemsPerPage, setItemsPerPage, filters, sorting } = useCardData<ProwJob, SortField>(completedJobs, {
+  const { items, totalItems, currentPage, totalPages, goToPage, needsPagination, itemsPerPage, setItemsPerPage, filters, sorting,
+    containerRef,
+    containerStyle,
+  } = useCardData<ProwJob, SortField>(completedJobs, {
     filter: {
       searchFields: ['name', 'state', 'type', 'duration'] as (keyof ProwJob)[],
     },
@@ -85,9 +89,9 @@ export function ProwHistory({ config: _config }: ProwHistoryProps) {
     <div className="h-full flex flex-col min-h-card">
       {/* Controls */}
       <div className="flex items-center justify-between mb-4">
-        <span className="text-xs px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-400">
+        <StatusBadge color="orange">
           {totalItems} revisions
-        </span>
+        </StatusBadge>
         <div className="flex items-center gap-2">
           <CardControls
             limit={itemsPerPage}
@@ -110,7 +114,7 @@ export function ProwHistory({ config: _config }: ProwHistoryProps) {
       />
 
       {/* Timeline */}
-      <div className="flex-1 overflow-y-auto relative">
+      <div ref={containerRef} className="flex-1 overflow-y-auto relative" style={containerStyle}>
         <div className="absolute left-[7px] top-2 bottom-2 w-0.5 bg-border" />
         <div className="space-y-2">
           {items.map((job) => (
@@ -134,7 +138,7 @@ export function ProwHistory({ config: _config }: ProwHistoryProps) {
                 <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
                   <span>{job.duration}</span>
                   {job.url && (
-                    <a href={job.url} target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:underline flex items-center gap-1">
+                    <a href={job.url} target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:underline flex items-center gap-1 min-h-11 min-w-11">
                       Logs <ExternalLink className="w-3 h-3" />
                     </a>
                   )}
