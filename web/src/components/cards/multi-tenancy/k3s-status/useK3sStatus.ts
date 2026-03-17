@@ -181,6 +181,7 @@ export interface UseK3sStatusResult {
   consecutiveFailures: number
   showSkeleton: boolean
   showEmptyState: boolean
+  isDemoData: boolean
 }
 
 export function useK3sStatus(): UseK3sStatusResult {
@@ -214,5 +215,6 @@ export function useK3sStatus(): UseK3sStatusResult {
     consecutiveFailures,
     showSkeleton,
     showEmptyState,
+    isDemoData: effectiveIsDemoData,
   }
 }

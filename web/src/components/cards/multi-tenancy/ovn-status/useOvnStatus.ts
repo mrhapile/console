@@ -146,6 +146,7 @@ export interface UseOvnStatusResult {
   consecutiveFailures: number
   showSkeleton: boolean
   showEmptyState: boolean
+  isDemoData: boolean
 }
 
 export function useOvnStatus(): UseOvnStatusResult {
@@ -179,5 +180,6 @@ export function useOvnStatus(): UseOvnStatusResult {
     consecutiveFailures,
     showSkeleton,
     showEmptyState,
+    isDemoData: effectiveIsDemoData,
   }
 }

@@ -181,6 +181,7 @@ export interface UseKubevirtStatusResult {
   consecutiveFailures: number
   showSkeleton: boolean
   showEmptyState: boolean
+  isDemoData: boolean
 }
 
 export function useKubevirtStatus(): UseKubevirtStatusResult {
@@ -214,5 +215,6 @@ export function useKubevirtStatus(): UseKubevirtStatusResult {
     consecutiveFailures,
     showSkeleton,
     showEmptyState,
+    isDemoData: effectiveIsDemoData,
   }
 }

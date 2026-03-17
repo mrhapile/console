@@ -148,6 +148,7 @@ export interface UseKubeFlexStatusResult {
   consecutiveFailures: number
   showSkeleton: boolean
   showEmptyState: boolean
+  isDemoData: boolean
 }
 
 export function useKubeFlexStatus(): UseKubeFlexStatusResult {
@@ -181,5 +182,6 @@ export function useKubeFlexStatus(): UseKubeFlexStatusResult {
     consecutiveFailures,
     showSkeleton,
     showEmptyState,
+    isDemoData: effectiveIsDemoData,
   }
 }

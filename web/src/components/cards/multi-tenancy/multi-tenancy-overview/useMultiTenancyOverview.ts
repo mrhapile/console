@@ -55,8 +55,8 @@ export function useMultiTenancyOverview(): MultiTenancyOverviewData {
   const kubevirt = kubevirtResult.data
 
   const isLoading = ovnResult.loading || kubeflexResult.loading || k3sResult.loading || kubevirtResult.loading
-  // Consider demo when no data is detected from any source
-  const isDemoData = !ovn.detected && !kubeflex.detected && !k3s.detected && !kubevirt.detected
+  // Demo when ALL hooks are returning demo fallback data (useCache in demo mode)
+  const isDemoData = ovnResult.isDemoData && kubeflexResult.isDemoData && k3sResult.isDemoData && kubevirtResult.isDemoData
 
   const components: ComponentStatus[] = useMemo(() => [
     { name: 'OVN-K8s', detected: ovn.detected, health: ovn.health, icon: 'network' },
