@@ -13,8 +13,8 @@ import { useDemoMode } from '../../hooks/useDemoMode'
 
 export function ResourceUsage() {
   const { t } = useTranslation(['cards', 'common'])
-  const { isLoading: clustersLoading } = useClusters()
-  const { nodes: allGPUNodes, isDemoFallback } = useCachedGPUNodes()
+  const { isLoading: clustersLoading, isRefreshing: clustersRefreshing } = useClusters()
+  const { nodes: allGPUNodes, isDemoFallback, isRefreshing: gpuRefreshing } = useCachedGPUNodes()
   const { drillToResources } = useDrillDownActions()
   const { isDemoMode } = useDemoMode()
 
@@ -73,9 +73,11 @@ export function ResourceUsage() {
   }
 
   // Report state to CardWrapper for refresh animation
+  const hasData = clusters.length > 0
   const { showSkeleton, showEmptyState } = useCardLoadingState({
-    isLoading: clustersLoading,
-    hasAnyData: clusters.length > 0,
+    isLoading: clustersLoading && !hasData,
+    isRefreshing: clustersRefreshing || gpuRefreshing,
+    hasAnyData: hasData,
     isDemoData: isDemoMode || isDemoFallback,
   })
 
@@ -208,7 +210,12 @@ export function ResourceUsage() {
               <span className="text-sm text-muted-foreground">{accel.label}</span>
             </div>
             {accel.percent > 100 && (
-              <span className="text-2xs text-red-400 mt-0.5">{accel.data.used}/{accel.data.total} overcommitted</span>
+              <span className="text-2xs text-red-400 mt-0.5">
+                {t('resourceUsage.overcommitted', {
+                  used: accel.data.used,
+                  total: accel.data.total,
+                })}
+              </span>
             )}
           </div>
         ))}
