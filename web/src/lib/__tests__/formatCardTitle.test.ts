@@ -39,4 +39,60 @@ describe('formatCardTitle', () => {
   it('handles all-acronym type', () => {
     expect(formatCardTitle('gpu_cpu_ai')).toBe('GPU CPU AI')
   })
+
+  it('handles PVC acronym', () => {
+    expect(formatCardTitle('pvc_status')).toBe('PVC Status')
+  })
+
+  it('handles CRD acronym', () => {
+    expect(formatCardTitle('crd_viewer')).toBe('CRD Viewer')
+  })
+
+  it('handles multiple underscores', () => {
+    expect(formatCardTitle('multi_word_card_title')).toBe('Multi Word Card Title')
+  })
+
+  it('handles IAM acronym', () => {
+    expect(formatCardTitle('iam_policies')).toBe('IAM Policies')
+  })
+
+  it('handles VPC acronym', () => {
+    expect(formatCardTitle('vpc_overview')).toBe('VPC Overview')
+  })
+
+  it('handles EKS acronym', () => {
+    expect(formatCardTitle('eks_clusters')).toBe('EKS Clusters')
+  })
+
+  it('handles GKE acronym', () => {
+    expect(formatCardTitle('gke_status')).toBe('GKE Status')
+  })
+
+  it('handles OLM acronym', () => {
+    expect(formatCardTitle('olm_operators')).toBe('OLM Operators')
+  })
+
+  it('returns custom title for deployment_missions', () => {
+    expect(formatCardTitle('deployment_missions')).toBe('Deployment Missions')
+  })
+
+  it('returns custom title for resource_marshall', () => {
+    expect(formatCardTitle('resource_marshall')).toBe('Resource Marshall')
+  })
+
+  it('returns custom title for llmd_stack_monitor', () => {
+    expect(formatCardTitle('llmd_stack_monitor')).toBe('llm-d Stack Monitor')
+  })
+
+  it('returns custom title for pd_disaggregation', () => {
+    expect(formatCardTitle('pd_disaggregation')).toBe('P/D Disaggregation')
+  })
+
+  it('handles mixed acronyms and regular words', () => {
+    expect(formatCardTitle('gpu_memory_ai_status')).toBe('GPU Memory AI Status')
+  })
+
+  it('lowercases non-acronym words beyond first letter', () => {
+    expect(formatCardTitle('CUSTOM_CARD')).toBe('Custom Card')
+  })
 })
