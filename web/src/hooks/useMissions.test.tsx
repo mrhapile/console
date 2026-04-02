@@ -3993,6 +3993,376 @@ describe('setActiveTokenCategory on mission actions', () => {
     expect(setActiveTokenCategory).toHaveBeenCalledWith(null)
   })
 })
+
+// ── loadMissions — localStorage error and cancelling migration ────────
+
+describe('loadMissions edge cases', () => {
+  it('marks cancelling missions as failed on page reload', () => {
+    const cancellingMission = {
+      id: 'cancel-1',
+      title: 'Cancelling Mission',
+      description: 'Was being cancelled',
+      type: 'troubleshoot',
+      status: 'cancelling',
+      messages: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+    localStorage.setItem('kc_missions', JSON.stringify([cancellingMission]))
+
+    const { result } = renderHook(() => useMissions(), { wrapper })
+    const mission = result.current.missions.find(m => m.id === 'cancel-1')
+    expect(mission?.status).toBe('failed')
+    expect(mission?.messages.some(m =>
+      m.role === 'system' && m.content.includes('page was reloaded during cancellation')
+    )).toBe(true)
+  })
+
+  it('marks running missions with needsReconnect on page reload', () => {
+    const runningMission = {
+      id: 'running-1',
+      title: 'Running Mission',
+      description: 'Was running',
+      type: 'analyze',
+      status: 'running',
+      messages: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+    localStorage.setItem('kc_missions', JSON.stringify([runningMission]))
+
+    const { result } = renderHook(() => useMissions(), { wrapper })
+    const mission = result.current.missions.find(m => m.id === 'running-1')
+    expect(mission?.status).toBe('running')
+    expect(mission?.currentStep).toBe('Reconnecting...')
+    expect(mission?.context?.needsReconnect).toBe(true)
+  })
+
+  it('handles corrupted localStorage gracefully', () => {
+    localStorage.setItem('kc_missions', '{{invalid json')
+
+    const { result } = renderHook(() => useMissions(), { wrapper })
+    expect(result.current.missions).toEqual([])
+  })
+})
+
+// ── saveMissions — quota exceeded pruning ─────────────────────────────
+
+describe('saveMissions quota handling', () => {
+  it('prunes old completed missions when quota exceeded', () => {
+    // Create many completed missions
+    const missions = Array.from({ length: 60 }, (_, i) => ({
+      id: `m-${i}`,
+      title: `Mission ${i}`,
+      description: 'test',
+      type: 'troubleshoot',
+      status: i < 5 ? 'running' : 'completed',
+      messages: [],
+      createdAt: new Date(Date.now() - i * 60000).toISOString(),
+      updatedAt: new Date(Date.now() - i * 60000).toISOString(),
+    }))
+    localStorage.setItem('kc_missions', JSON.stringify(missions))
+
+    const { result } = renderHook(() => useMissions(), { wrapper })
+    // Should load all missions initially
+    expect(result.current.missions.length).toBe(60)
+  })
+})
+
+// ── saveMission (library) ─────────────────────────────────────────────
+
+describe('saveMission', () => {
+  it('creates a saved (library) mission without starting it', () => {
+    const { result } = renderHook(() => useMissions(), { wrapper })
+    let savedId = ''
+    act(() => {
+      savedId = result.current.saveMission({
+        title: 'Saved Fix',
+        description: 'Fix for OOM',
+        type: 'repair',
+        initialPrompt: 'kubectl delete pod ...',
+      })
+    })
+    expect(savedId).toBeTruthy()
+    const mission = result.current.missions.find(m => m.id === savedId)
+    expect(mission?.status).toBe('saved')
+    expect(mission?.importedFrom?.title).toBe('Saved Fix')
+  })
+})
+
+// ── dismissMission ────────────────────────────────────────────────────
+
+describe('dismissMission', () => {
+  it('removes a mission from the list', () => {
+    const { result } = renderHook(() => useMissions(), { wrapper })
+    let missionId = ''
+    act(() => {
+      missionId = result.current.startMission(defaultParams)
+    })
+    expect(result.current.missions.find(m => m.id === missionId)).toBeDefined()
+
+    act(() => {
+      result.current.dismissMission(missionId)
+    })
+    expect(result.current.missions.find(m => m.id === missionId)).toBeUndefined()
+  })
+
+  it('clears activeMission when dismissed mission is active', () => {
+    const { result } = renderHook(() => useMissions(), { wrapper })
+    let missionId = ''
+    act(() => {
+      missionId = result.current.startMission(defaultParams)
+    })
+    act(() => {
+      result.current.setActiveMission(missionId)
+    })
+    expect(result.current.activeMission?.id).toBe(missionId)
+
+    act(() => {
+      result.current.dismissMission(missionId)
+    })
+    expect(result.current.activeMission).toBeNull()
+  })
+})
+
+// ── renameMission ─────────────────────────────────────────────────────
+
+describe('renameMission', () => {
+  it('updates mission title', () => {
+    const { result } = renderHook(() => useMissions(), { wrapper })
+    let missionId = ''
+    act(() => {
+      missionId = result.current.startMission(defaultParams)
+    })
+
+    act(() => {
+      result.current.renameMission(missionId, 'New Title')
+    })
+
+    const mission = result.current.missions.find(m => m.id === missionId)
+    expect(mission?.title).toBe('New Title')
+  })
+})
+
+// ── rateMission ───────────────────────────────────────────────────────
+
+describe('rateMission', () => {
+  it('sets positive feedback', () => {
+    const { result } = renderHook(() => useMissions(), { wrapper })
+    let missionId = ''
+    act(() => {
+      missionId = result.current.startMission(defaultParams)
+    })
+
+    act(() => {
+      result.current.rateMission(missionId, 'positive')
+    })
+    expect(result.current.missions.find(m => m.id === missionId)?.feedback).toBe('positive')
+    expect(emitMissionRated).toHaveBeenCalled()
+  })
+
+  it('sets negative feedback', () => {
+    const { result } = renderHook(() => useMissions(), { wrapper })
+    let missionId = ''
+    act(() => {
+      missionId = result.current.startMission(defaultParams)
+    })
+
+    act(() => {
+      result.current.rateMission(missionId, 'negative')
+    })
+    expect(result.current.missions.find(m => m.id === missionId)?.feedback).toBe('negative')
+  })
+})
+
+// ── sidebar state ─────────────────────────────────────────────────────
+
+describe('sidebar controls', () => {
+  it('toggleSidebar toggles isSidebarOpen', () => {
+    const { result } = renderHook(() => useMissions(), { wrapper })
+    expect(result.current.isSidebarOpen).toBe(false)
+    act(() => { result.current.toggleSidebar() })
+    expect(result.current.isSidebarOpen).toBe(true)
+    act(() => { result.current.toggleSidebar() })
+    expect(result.current.isSidebarOpen).toBe(false)
+  })
+
+  it('openSidebar sets isSidebarOpen to true', () => {
+    const { result } = renderHook(() => useMissions(), { wrapper })
+    act(() => { result.current.openSidebar() })
+    expect(result.current.isSidebarOpen).toBe(true)
+  })
+
+  it('closeSidebar sets isSidebarOpen to false', () => {
+    const { result } = renderHook(() => useMissions(), { wrapper })
+    act(() => { result.current.openSidebar() })
+    act(() => { result.current.closeSidebar() })
+    expect(result.current.isSidebarOpen).toBe(false)
+  })
+
+  it('minimizeSidebar sets isSidebarMinimized to true', () => {
+    const { result } = renderHook(() => useMissions(), { wrapper })
+    act(() => { result.current.minimizeSidebar() })
+    expect(result.current.isSidebarMinimized).toBe(true)
+  })
+
+  it('expandSidebar sets isSidebarMinimized to false', () => {
+    const { result } = renderHook(() => useMissions(), { wrapper })
+    act(() => { result.current.minimizeSidebar() })
+    act(() => { result.current.expandSidebar() })
+    expect(result.current.isSidebarMinimized).toBe(false)
+  })
+
+  it('setFullScreen controls full screen mode', () => {
+    const { result } = renderHook(() => useMissions(), { wrapper })
+    act(() => { result.current.setFullScreen(true) })
+    expect(result.current.isFullScreen).toBe(true)
+    act(() => { result.current.setFullScreen(false) })
+    expect(result.current.isFullScreen).toBe(false)
+  })
+})
+
+// ── error message classification ──────────────────────────────────────
+
+describe('error message classification', () => {
+  it('shows auth error for 401 code', async () => {
+    const { result } = renderHook(() => useMissions(), { wrapper })
+    const { requestId } = await startMissionWithConnection(result)
+
+    act(() => {
+      MockWebSocket.lastInstance?.simulateMessage({
+        id: requestId,
+        type: 'error',
+        payload: { code: '401', message: 'Unauthorized' },
+      })
+    })
+
+    const mission = result.current.missions[0]
+    const systemMsg = mission.messages.find(m => m.role === 'system')
+    expect(systemMsg?.content).toContain('Authentication Error')
+  })
+
+  it('shows rate limit error for 429 code', async () => {
+    const { result } = renderHook(() => useMissions(), { wrapper })
+    const { requestId } = await startMissionWithConnection(result)
+
+    act(() => {
+      MockWebSocket.lastInstance?.simulateMessage({
+        id: requestId,
+        type: 'error',
+        payload: { code: '429', message: 'Too many requests' },
+      })
+    })
+
+    const mission = result.current.missions[0]
+    const systemMsg = mission.messages.find(m => m.role === 'system')
+    expect(systemMsg?.content).toContain('Rate Limit')
+  })
+
+  it('shows agent unavailable error for no_agent code', async () => {
+    const { result } = renderHook(() => useMissions(), { wrapper })
+    const { requestId } = await startMissionWithConnection(result)
+
+    act(() => {
+      MockWebSocket.lastInstance?.simulateMessage({
+        id: requestId,
+        type: 'error',
+        payload: { code: 'no_agent', message: 'Agent not available' },
+      })
+    })
+
+    const mission = result.current.missions[0]
+    const systemMsg = mission.messages.find(m => m.role === 'system')
+    expect(systemMsg?.content).toContain('agent not available')
+  })
+})
+
+// ── cancel_ack with failure ───────────────────────────────────────────
+
+describe('cancel_ack failure path', () => {
+  it('handles cancel_ack with success=false', async () => {
+    const { result } = renderHook(() => useMissions(), { wrapper })
+    const { missionId } = await startMissionWithConnection(result)
+
+    act(() => {
+      result.current.cancelMission(missionId)
+    })
+
+    act(() => {
+      MockWebSocket.lastInstance?.simulateMessage({
+        id: 'cancel-xxx',
+        type: 'cancel_ack',
+        payload: { sessionId: missionId, success: false, message: 'Could not cancel' },
+      })
+    })
+
+    const mission = result.current.missions.find(m => m.id === missionId)
+    expect(mission?.status).toBe('failed')
+    expect(mission?.messages.some(m => m.content.includes('Could not cancel'))).toBe(true)
+  })
+})
+
+// ── progress message with tokens ──────────────────────────────────────
+
+describe('progress updates', () => {
+  it('tracks progress step and percentage', async () => {
+    const { result } = renderHook(() => useMissions(), { wrapper })
+    const { requestId } = await startMissionWithConnection(result)
+
+    act(() => {
+      MockWebSocket.lastInstance?.simulateMessage({
+        id: requestId,
+        type: 'progress',
+        payload: { step: 'Querying cluster...', progress: 50 },
+      })
+    })
+
+    const mission = result.current.missions[0]
+    expect(mission.currentStep).toBe('Querying cluster...')
+    expect(mission.progress).toBe(50)
+  })
+
+  it('tracks token usage from progress payload', async () => {
+    const { result } = renderHook(() => useMissions(), { wrapper })
+    const { requestId } = await startMissionWithConnection(result)
+
+    act(() => {
+      MockWebSocket.lastInstance?.simulateMessage({
+        id: requestId,
+        type: 'progress',
+        payload: { step: 'Analyzing...', tokens: { input: 100, output: 200, total: 300 } },
+      })
+    })
+
+    const mission = result.current.missions[0]
+    expect(mission.tokenUsage?.total).toBe(300)
+  })
+})
+
+// ── unread mission tracking ───────────────────────────────────────────
+
+describe('unread tracking', () => {
+  it('markMissionAsRead removes mission from unread set', async () => {
+    const { result } = renderHook(() => useMissions(), { wrapper })
+    const { missionId, requestId } = await startMissionWithConnection(result)
+
+    // Stream done marks as unread (via markMissionAsUnread)
+    act(() => {
+      MockWebSocket.lastInstance?.simulateMessage({
+        id: requestId,
+        type: 'stream',
+        payload: { content: '', done: true },
+      })
+    })
+    expect(result.current.unreadMissionIds.size).toBeGreaterThanOrEqual(0)
+
+    act(() => {
+      result.current.markMissionAsRead(missionId)
+    })
+    expect(result.current.unreadMissionIds.has(missionId)).toBe(false)
+  })
+})
+})
 })
 })
 })

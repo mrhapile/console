@@ -68,9 +68,9 @@ interface MissionDetailViewProps {
   error?: string | null
   /** Retry callback for re-fetching failed mission content */
   onRetry?: () => void
-  /** GitHub source URL for viewing the file */
+  /** GitHub source URL for the file (e.g. https://github.com/owner/repo/blob/main/file.yaml) */
   githubSourceUrl?: string
-  /** GitHub edit URL for creating a PR */
+  /** GitHub edit URL for creating a PR (e.g. https://github.com/owner/repo/edit/main/file.yaml) */
   githubEditUrl?: string
 }
 

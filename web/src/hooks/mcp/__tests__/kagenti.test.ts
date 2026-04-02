@@ -383,6 +383,7 @@ describe('useKagentiSummary', () => {
       error: null,
       refetch: mockRefetch,
       isDemoData: false,
+      isDemoFallback: false,
       consecutiveFailures: 0,
       isFailed: false,
       lastRefresh: new Date(),
@@ -391,5 +392,214 @@ describe('useKagentiSummary', () => {
     const { result } = renderHook(() => useKagentiSummary())
 
     expect(typeof result.current.refetch).toBe('function')
+  })
+
+  it('returns isDemoData true when any sub-hook is demo', () => {
+    let callCount = 0
+    mockUseCache.mockImplementation(() => {
+      callCount++
+      const isDemo = callCount === 2 // builds are demo
+      return {
+        data: callCount === 1 ? [{ name: 'a1', status: 'Running', readyReplicas: 1, cluster: 'c', framework: 'f' }] : [],
+        isLoading: false, isRefreshing: false, error: null, refetch: vi.fn(),
+        isDemoData: isDemo, isDemoFallback: isDemo,
+        consecutiveFailures: 0, isFailed: false, lastRefresh: new Date(),
+      }
+    })
+
+    const { result } = renderHook(() => useKagentiSummary())
+    expect(result.current.isDemoData).toBe(true)
+  })
+
+  it('returns error from agents sub-hook', () => {
+    let callCount = 0
+    mockUseCache.mockImplementation(() => {
+      callCount++
+      return {
+        data: [],
+        isLoading: false, isRefreshing: false,
+        error: callCount === 1 ? 'Agent error' : null,
+        refetch: vi.fn(),
+        isDemoData: false, isDemoFallback: false,
+        consecutiveFailures: 0, isFailed: false, lastRefresh: new Date(),
+      }
+    })
+
+    const { result } = renderHook(() => useKagentiSummary())
+    expect(result.current.error).toBe('Agent error')
+  })
+
+  it('computes correct framework breakdown', () => {
+    let callCount = 0
+    mockUseCache.mockImplementation(() => {
+      callCount++
+      if (callCount === 1) {
+        return {
+          data: [
+            { name: 'a1', status: 'Running', readyReplicas: 1, cluster: 'c1', framework: 'langgraph' },
+            { name: 'a2', status: 'Running', readyReplicas: 1, cluster: 'c1', framework: 'langgraph' },
+            { name: 'a3', status: 'Running', readyReplicas: 1, cluster: 'c2', framework: 'crewai' },
+          ],
+          isLoading: false, isRefreshing: false, error: null, refetch: vi.fn(),
+          isDemoData: false, isDemoFallback: false,
+          consecutiveFailures: 0, isFailed: false, lastRefresh: new Date(),
+        }
+      }
+      return {
+        data: [],
+        isLoading: false, isRefreshing: false, error: null, refetch: vi.fn(),
+        isDemoData: false, isDemoFallback: false,
+        consecutiveFailures: 0, isFailed: false, lastRefresh: new Date(),
+      }
+    })
+
+    const { result } = renderHook(() => useKagentiSummary())
+    expect(result.current.summary?.frameworks).toEqual({ langgraph: 2, crewai: 1 })
+  })
+
+  it('computes cluster breakdown correctly', () => {
+    let callCount = 0
+    mockUseCache.mockImplementation(() => {
+      callCount++
+      if (callCount === 1) {
+        return {
+          data: [
+            { name: 'a1', status: 'Running', readyReplicas: 1, cluster: 'prod', framework: 'f' },
+            { name: 'a2', status: 'Running', readyReplicas: 1, cluster: 'prod', framework: 'f' },
+            { name: 'a3', status: 'Running', readyReplicas: 0, cluster: 'staging', framework: 'f' },
+          ],
+          isLoading: false, isRefreshing: false, error: null, refetch: vi.fn(),
+          isDemoData: false, isDemoFallback: false,
+          consecutiveFailures: 0, isFailed: false, lastRefresh: new Date(),
+        }
+      }
+      return {
+        data: [],
+        isLoading: false, isRefreshing: false, error: null, refetch: vi.fn(),
+        isDemoData: false, isDemoFallback: false,
+        consecutiveFailures: 0, isFailed: false, lastRefresh: new Date(),
+      }
+    })
+
+    const { result } = renderHook(() => useKagentiSummary())
+    expect(result.current.summary?.clusterBreakdown).toEqual(
+      expect.arrayContaining([
+        { cluster: 'prod', agents: 2 },
+        { cluster: 'staging', agents: 1 },
+      ]),
+    )
+    // readyAgents should only count Running + readyReplicas > 0
+    expect(result.current.summary?.readyAgents).toBe(2)
+  })
+
+  it('counts spiffeBound correctly (excludes none identity)', () => {
+    let callCount = 0
+    mockUseCache.mockImplementation(() => {
+      callCount++
+      if (callCount === 3) {
+        return {
+          data: [
+            { name: 'c1', identityBinding: 'strict' },
+            { name: 'c2', identityBinding: 'permissive' },
+            { name: 'c3', identityBinding: 'none' },
+            { name: 'c4', identityBinding: 'strict' },
+          ],
+          isLoading: false, isRefreshing: false, error: null, refetch: vi.fn(),
+          isDemoData: false, isDemoFallback: false,
+          consecutiveFailures: 0, isFailed: false, lastRefresh: new Date(),
+        }
+      }
+      return {
+        data: callCount === 1
+          ? [{ name: 'a', status: 'Running', readyReplicas: 1, cluster: 'c', framework: 'f' }]
+          : [],
+        isLoading: false, isRefreshing: false, error: null, refetch: vi.fn(),
+        isDemoData: false, isDemoFallback: false,
+        consecutiveFailures: 0, isFailed: false, lastRefresh: new Date(),
+      }
+    })
+
+    const { result } = renderHook(() => useKagentiSummary())
+    expect(result.current.summary?.spiffeBound).toBe(3) // strict + permissive + strict
+    expect(result.current.summary?.spiffeTotal).toBe(4)
+  })
+})
+
+// ===========================================================================
+// useKagentiAgents - additional edge cases
+// ===========================================================================
+
+describe('useKagentiAgents - edge cases', () => {
+  it('sets enabled false when agent is unavailable', () => {
+    mockIsAgentUnavailable.mockReturnValue(true)
+    mockUseCache.mockReturnValue({
+      data: [], isLoading: true, isRefreshing: false, error: null,
+      refetch: vi.fn(), isDemoData: false, isDemoFallback: false,
+      consecutiveFailures: 0, isFailed: false, lastRefresh: null,
+    })
+
+    renderHook(() => useKagentiAgents())
+    expect(mockUseCache).toHaveBeenCalledWith(
+      expect.objectContaining({ enabled: false }),
+    )
+  })
+
+  it('sets enabled true when agent is available', () => {
+    mockIsAgentUnavailable.mockReturnValue(false)
+    mockUseCache.mockReturnValue({
+      data: [], isLoading: true, isRefreshing: false, error: null,
+      refetch: vi.fn(), isDemoData: false, isDemoFallback: false,
+      consecutiveFailures: 0, isFailed: false, lastRefresh: null,
+    })
+
+    renderHook(() => useKagentiAgents())
+    expect(mockUseCache).toHaveBeenCalledWith(
+      expect.objectContaining({ enabled: true }),
+    )
+  })
+
+  it('provides non-empty demoData', () => {
+    mockUseCache.mockReturnValue({
+      data: [], isLoading: false, isRefreshing: false, error: null,
+      refetch: vi.fn(), isDemoData: false, isDemoFallback: false,
+      consecutiveFailures: 0, isFailed: false, lastRefresh: null,
+    })
+
+    renderHook(() => useKagentiAgents())
+    const call = mockUseCache.mock.calls[0][0]
+    expect(call.demoData.length).toBeGreaterThan(0)
+  })
+})
+
+// ===========================================================================
+// useKagentiTools - additional edge cases
+// ===========================================================================
+
+describe('useKagentiTools - edge cases', () => {
+  it('passes namespace filter correctly', () => {
+    mockUseCache.mockReturnValue({
+      data: [], isLoading: true, isRefreshing: false, error: null,
+      refetch: vi.fn(), isDemoData: false, isDemoFallback: false,
+      consecutiveFailures: 0, isFailed: false, lastRefresh: null,
+    })
+
+    renderHook(() => useKagentiTools({ namespace: 'kagenti-system' }))
+    expect(mockUseCache).toHaveBeenCalledWith(
+      expect.objectContaining({
+        key: 'kagenti-tools:all:kagenti-system',
+      }),
+    )
+  })
+
+  it('provides demo tools data', () => {
+    mockUseCache.mockReturnValue({
+      data: [], isLoading: false, isRefreshing: false, error: null,
+      refetch: vi.fn(), isDemoData: false, isDemoFallback: false,
+      consecutiveFailures: 0, isFailed: false, lastRefresh: null,
+    })
+
+    renderHook(() => useKagentiTools())
+    const call = mockUseCache.mock.calls[0][0]
+    expect(call.demoData.length).toBeGreaterThan(0)
   })
 })
