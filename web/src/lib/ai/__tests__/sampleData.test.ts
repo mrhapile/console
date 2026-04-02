@@ -73,7 +73,8 @@ describe('ai/sampleData', () => {
         { field: 'name', label: 'Name' },
       ]
       const data = generateSampleData(columns)
-      expect(data[0]).not.toHaveProperty('')
+      // Empty field name should be skipped - check it's not in the row's keys
+      expect(Object.keys(data[0])).not.toContain('')
       expect(data[0]).toHaveProperty('name')
     })
 

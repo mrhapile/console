@@ -13,6 +13,13 @@ vi.mock('../../lib/constants', async (importOriginal) => {
 import { useKubectl, kubectlService } from '../useKubectl'
 import { getDemoMode } from '../useDemoMode'
 
+/** WebSocket readyState numeric constants (use these instead of WebSocket.OPEN
+ *  etc. because the global WebSocket is replaced by a mock during tests). */
+const WS_CONNECTING = 0
+const WS_OPEN = 1
+const WS_CLOSING = 2
+const WS_CLOSED = 3
+
 /** Helper to build a minimal mock WebSocket */
 function createMockWebSocket() {
   const handlers: Record<string, ((...args: unknown[]) => void) | null> = {
@@ -22,10 +29,10 @@ function createMockWebSocket() {
     onerror: null,
   }
   const ws = {
-    readyState: WebSocket.CONNECTING,
+    readyState: WS_CONNECTING,
     send: vi.fn(),
     close: vi.fn(() => {
-      ws.readyState = WebSocket.CLOSED
+      ws.readyState = WS_CLOSED
       handlers.onclose?.()
     }),
     set onopen(fn: (() => void) | null) { handlers.onopen = fn },
@@ -38,7 +45,7 @@ function createMockWebSocket() {
     get onerror() { return handlers.onerror as (() => void) | null },
     /** Simulate the WS transitioning to OPEN and firing onopen */
     simulateOpen() {
-      ws.readyState = WebSocket.OPEN
+      ws.readyState = WS_OPEN
       handlers.onopen?.()
     },
     /** Simulate receiving a message from the server */
@@ -47,7 +54,7 @@ function createMockWebSocket() {
     },
     /** Simulate the WS closing */
     simulateClose() {
-      ws.readyState = WebSocket.CLOSED
+      ws.readyState = WS_CLOSED
       handlers.onclose?.()
     },
     simulateError() {
@@ -64,7 +71,18 @@ describe('useKubectl', () => {
     vi.clearAllMocks()
     vi.useFakeTimers()
     mockWs = createMockWebSocket()
-    vi.stubGlobal('WebSocket', vi.fn(() => mockWs))
+    // Build a mock constructor that returns our mockWs AND exposes the
+    // standard readyState constants (CONNECTING, OPEN, CLOSING, CLOSED).
+    // Without these, the source code's `WebSocket.OPEN` evaluates to
+    // undefined, breaking readyState checks.
+    const MockCtor = vi.fn(() => mockWs) as unknown as typeof WebSocket
+    Object.defineProperties(MockCtor, {
+      CONNECTING: { value: WS_CONNECTING },
+      OPEN: { value: WS_OPEN },
+      CLOSING: { value: WS_CLOSING },
+      CLOSED: { value: WS_CLOSED },
+    })
+    vi.stubGlobal('WebSocket', MockCtor)
     // Reset getDemoMode to return false
     vi.mocked(getDemoMode).mockReturnValue(false)
   })

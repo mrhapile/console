@@ -213,3 +213,496 @@ describe('getRegistryVersion', () => {
     expect(getRegistryVersion()).toBe(before + 1)
   })
 })
+
+// ---------------------------------------------------------------------------
+// useDataHookRegistryVersion — React hook
+// ---------------------------------------------------------------------------
+
+describe('useDataHookRegistryVersion', () => {
+  it('returns the current registry version', () => {
+    const currentVersion = getRegistryVersion()
+    const { result } = renderHook(() => useDataHookRegistryVersion())
+    expect(result.current).toBe(currentVersion)
+  })
+
+  it('updates when a new hook is registered', () => {
+    const { result } = renderHook(() => useDataHookRegistryVersion())
+    const versionBefore = result.current
+
+    act(() => {
+      const mockHook = vi.fn().mockReturnValue({ data: [], isLoading: false, error: null })
+      registerDataHook('versionUpdateHook', mockHook)
+    })
+
+    expect(result.current).toBe(versionBefore + 1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// useDataSource — hook type
+// ---------------------------------------------------------------------------
+
+describe('useDataSource — hook type', () => {
+  it('returns loading result when hook is not yet registered', () => {
+    const { result } = renderHook(() =>
+      useDataSource({ type: 'hook', hook: 'nonExistentHook_xyz_abc' })
+    )
+
+    expect(result.current.data).toBeUndefined()
+    expect(result.current.isLoading).toBe(true)
+    expect(result.current.error).toBeNull()
+  })
+
+  it('returns data from a registered hook', () => {
+    const testData = [{ id: 1, name: 'test' }]
+    const mockHook = vi.fn().mockReturnValue({
+      data: testData,
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    })
+    registerDataHook('useRegisteredTest', mockHook)
+
+    const { result } = renderHook(() =>
+      useDataSource({ type: 'hook', hook: 'useRegisteredTest' })
+    )
+
+    expect(result.current.data).toEqual(testData)
+    expect(result.current.isLoading).toBe(false)
+    expect(result.current.error).toBeNull()
+  })
+
+  it('passes params to the registered hook', () => {
+    const mockHook = vi.fn().mockReturnValue({
+      data: [],
+      isLoading: false,
+      error: null,
+    })
+    registerDataHook('useParamsTest', mockHook)
+
+    const params = { namespace: 'kube-system', limit: 100 }
+    renderHook(() =>
+      useDataSource({ type: 'hook', hook: 'useParamsTest', params })
+    )
+
+    expect(mockHook).toHaveBeenCalledWith(params)
+  })
+
+  it('provides a no-op refetch when hook does not return refetch', () => {
+    const mockHook = vi.fn().mockReturnValue({
+      data: [1],
+      isLoading: false,
+      error: null,
+      // no refetch property
+    })
+    registerDataHook('useNoRefetchTest', mockHook)
+
+    const { result } = renderHook(() =>
+      useDataSource({ type: 'hook', hook: 'useNoRefetchTest' })
+    )
+
+    expect(typeof result.current.refetch).toBe('function')
+    // Should not throw
+    result.current.refetch()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// useDataSource — static type
+// ---------------------------------------------------------------------------
+
+describe('useDataSource — static type', () => {
+  it('returns static data immediately with no loading', () => {
+    const staticData = [{ id: 1 }, { id: 2 }]
+    const { result } = renderHook(() =>
+      useDataSource({ type: 'static', data: staticData })
+    )
+
+    expect(result.current.data).toEqual(staticData)
+    expect(result.current.isLoading).toBe(false)
+    expect(result.current.error).toBeNull()
+  })
+
+  it('returns EMPTY_RESULT when static data is undefined (optional data)', () => {
+    const { result } = renderHook(() =>
+      useDataSource({ type: 'static' })
+    )
+
+    // data is undefined → config.data ?? null → null → EMPTY_RESULT
+    expect(result.current.data).toBeUndefined()
+    expect(result.current.isLoading).toBe(false)
+    expect(result.current.error).toBeNull()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// useDataSource — context type
+// ---------------------------------------------------------------------------
+
+describe('useDataSource — context type', () => {
+  it('returns error for context data source (not yet implemented)', () => {
+    const { result } = renderHook(() =>
+      useDataSource({ type: 'context', contextKey: 'myContext' })
+    )
+
+    expect(result.current.data).toBeUndefined()
+    expect(result.current.isLoading).toBe(false)
+    expect(result.current.error).toBeInstanceOf(Error)
+    expect(result.current.error?.message).toContain('Context data source not yet implemented')
+    expect(result.current.error?.message).toContain('myContext')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// useDataSource — skip option
+// ---------------------------------------------------------------------------
+
+describe('useDataSource — skip option', () => {
+  it('returns EMPTY_RESULT when skip is true for hook type', () => {
+    const mockHook = vi.fn().mockReturnValue({
+      data: [1, 2, 3],
+      isLoading: false,
+      error: null,
+    })
+    registerDataHook('useSkipTest', mockHook)
+
+    const { result } = renderHook(() =>
+      useDataSource({ type: 'hook', hook: 'useSkipTest' }, { skip: true })
+    )
+
+    expect(result.current.data).toBeUndefined()
+    expect(result.current.isLoading).toBe(false)
+    expect(result.current.error).toBeNull()
+  })
+
+  it('returns EMPTY_RESULT when skip is true for static type', () => {
+    const { result } = renderHook(() =>
+      useDataSource({ type: 'static', data: [1, 2] }, { skip: true })
+    )
+
+    expect(result.current.data).toBeUndefined()
+    expect(result.current.isLoading).toBe(false)
+  })
+
+  it('returns EMPTY_RESULT when skip is true for api type', () => {
+    const { result } = renderHook(() =>
+      useDataSource({ type: 'api', endpoint: '/test' }, { skip: true })
+    )
+
+    expect(result.current.data).toBeUndefined()
+    expect(result.current.isLoading).toBe(false)
+    expect(result.current.error).toBeNull()
+  })
+
+  it('returns EMPTY_RESULT when skip is true for context type', () => {
+    const { result } = renderHook(() =>
+      useDataSource({ type: 'context', contextKey: 'key' }, { skip: true })
+    )
+
+    expect(result.current.data).toBeUndefined()
+    expect(result.current.isLoading).toBe(false)
+    expect(result.current.error).toBeNull()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// useDataSource — api type
+// ---------------------------------------------------------------------------
+
+describe('useDataSource — api type', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn())
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('fetches data from endpoint and returns array response', async () => {
+    const responseData = [{ id: 1 }, { id: 2 }]
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue(responseData),
+    })
+    vi.stubGlobal('fetch', mockFetch)
+
+    const { result } = renderHook(() =>
+      useDataSource({ type: 'api', endpoint: '/api/items' })
+    )
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false)
+    })
+
+    expect(result.current.data).toEqual(responseData)
+    expect(result.current.error).toBeNull()
+    expect(mockFetch).toHaveBeenCalledWith(
+      '/api/items',
+      expect.objectContaining({ method: 'GET' }),
+    )
+  })
+
+  it('extracts data property from non-array JSON response', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({ data: [{ id: 10 }] }),
+    })
+    vi.stubGlobal('fetch', mockFetch)
+
+    const { result } = renderHook(() =>
+      useDataSource({ type: 'api', endpoint: '/api/wrapped' })
+    )
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false)
+    })
+
+    expect(result.current.data).toEqual([{ id: 10 }])
+  })
+
+  it('extracts items property from non-array JSON response', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({ items: [{ id: 20 }] }),
+    })
+    vi.stubGlobal('fetch', mockFetch)
+
+    const { result } = renderHook(() =>
+      useDataSource({ type: 'api', endpoint: '/api/items-wrapped' })
+    )
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false)
+    })
+
+    expect(result.current.data).toEqual([{ id: 20 }])
+  })
+
+  it('sets error on non-ok API response', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      statusText: 'Internal Server Error',
+    })
+    vi.stubGlobal('fetch', mockFetch)
+
+    const { result } = renderHook(() =>
+      useDataSource({ type: 'api', endpoint: '/api/fail' })
+    )
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false)
+    })
+
+    expect(result.current.error).toBeInstanceOf(Error)
+    expect(result.current.error?.message).toContain('500')
+  })
+
+  it('sets error when .json() returns null (invalid JSON)', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue(null),
+    })
+    vi.stubGlobal('fetch', mockFetch)
+
+    const { result } = renderHook(() =>
+      useDataSource({ type: 'api', endpoint: '/api/bad-json' })
+    )
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false)
+    })
+
+    expect(result.current.error).toBeInstanceOf(Error)
+    expect(result.current.error?.message).toContain('Invalid JSON')
+  })
+
+  it('sets error when fetch throws (network error)', async () => {
+    const mockFetch = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'))
+    vi.stubGlobal('fetch', mockFetch)
+
+    const { result } = renderHook(() =>
+      useDataSource({ type: 'api', endpoint: '/api/network-fail' })
+    )
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false)
+    })
+
+    expect(result.current.error).toBeInstanceOf(Error)
+    expect(result.current.error?.message).toContain('Failed to fetch')
+  })
+
+  it('appends query params to URL for GET requests', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue([]),
+    })
+    vi.stubGlobal('fetch', mockFetch)
+
+    renderHook(() =>
+      useDataSource({
+        type: 'api',
+        endpoint: '/api/search',
+        method: 'GET',
+        params: { q: 'test', limit: 10 },
+      })
+    )
+
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalled()
+    })
+
+    const calledUrl = mockFetch.mock.calls[0][0] as string
+    expect(calledUrl).toContain('/api/search?')
+    expect(calledUrl).toContain('q=test')
+    expect(calledUrl).toContain('limit=10')
+  })
+
+  it('sends JSON body for POST requests', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue([]),
+    })
+    vi.stubGlobal('fetch', mockFetch)
+
+    const params = { query: 'test' }
+    renderHook(() =>
+      useDataSource({
+        type: 'api',
+        endpoint: '/api/query',
+        method: 'POST',
+        params,
+      })
+    )
+
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalled()
+    })
+
+    const fetchCall = mockFetch.mock.calls[0]
+    expect(fetchCall[0]).toBe('/api/query')
+    expect(fetchCall[1].method).toBe('POST')
+    expect(fetchCall[1].headers).toEqual({ 'Content-Type': 'application/json' })
+    expect(fetchCall[1].body).toBe(JSON.stringify(params))
+  })
+
+  it('skips undefined and null values in GET query params', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue([]),
+    })
+    vi.stubGlobal('fetch', mockFetch)
+
+    renderHook(() =>
+      useDataSource({
+        type: 'api',
+        endpoint: '/api/filter',
+        method: 'GET',
+        params: { active: 'true', deleted: undefined, archived: null },
+      })
+    )
+
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalled()
+    })
+
+    const calledUrl = mockFetch.mock.calls[0][0] as string
+    expect(calledUrl).toContain('active=true')
+    expect(calledUrl).not.toContain('deleted')
+    expect(calledUrl).not.toContain('archived')
+  })
+
+  it('polls at the specified interval', async () => {
+    vi.useFakeTimers()
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue([{ id: 1 }]),
+    })
+    vi.stubGlobal('fetch', mockFetch)
+
+    const POLL_INTERVAL_MS = 5_000
+    renderHook(() =>
+      useDataSource({
+        type: 'api',
+        endpoint: '/api/poll',
+        pollInterval: POLL_INTERVAL_MS,
+      })
+    )
+
+    // Initial fetch
+    await act(async () => { await vi.runAllTimersAsync() })
+    const initialCallCount = mockFetch.mock.calls.length
+    expect(initialCallCount).toBeGreaterThanOrEqual(1)
+
+    // Advance by poll interval
+    await act(async () => { await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS) })
+    expect(mockFetch.mock.calls.length).toBeGreaterThan(initialCallCount)
+
+    vi.useRealTimers()
+  })
+
+  it('does not poll when pollInterval is 0 or negative', async () => {
+    vi.useFakeTimers()
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue([]),
+    })
+    vi.stubGlobal('fetch', mockFetch)
+
+    renderHook(() =>
+      useDataSource({
+        type: 'api',
+        endpoint: '/api/no-poll',
+        pollInterval: 0,
+      })
+    )
+
+    // Initial fetch
+    await act(async () => { await vi.runAllTimersAsync() })
+    const callCount = mockFetch.mock.calls.length
+
+    // Advance significant time — no additional polls
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_000) })
+    expect(mockFetch.mock.calls.length).toBe(callCount)
+
+    vi.useRealTimers()
+  })
+
+  it('wraps non-Error thrown values in an Error', async () => {
+    const mockFetch = vi.fn().mockRejectedValue('string error')
+    vi.stubGlobal('fetch', mockFetch)
+
+    const { result } = renderHook(() =>
+      useDataSource({ type: 'api', endpoint: '/api/string-err' })
+    )
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false)
+    })
+
+    expect(result.current.error).toBeInstanceOf(Error)
+    expect(result.current.error?.message).toBe('string error')
+  })
+
+  it('returns empty array when response is object without data or items', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({ count: 5, total: 100 }),
+    })
+    vi.stubGlobal('fetch', mockFetch)
+
+    const { result } = renderHook(() =>
+      useDataSource({ type: 'api', endpoint: '/api/no-data-key' })
+    )
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false)
+    })
+
+    // json.data is undefined, json.items is undefined → fallback to []
+    expect(result.current.data).toEqual([])
+  })
+})

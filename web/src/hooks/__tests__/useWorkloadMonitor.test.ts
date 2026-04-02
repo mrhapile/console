@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { renderHook, waitFor, act } from '@testing-library/react'
+import { renderHook, act } from '@testing-library/react'
 
 vi.mock('../../lib/constants', async (importOriginal) => {
   const actual = await importOriginal() as Record<string, unknown>
@@ -97,7 +97,7 @@ describe('useWorkloadMonitor', () => {
 
     renderHook(() => useWorkloadMonitor('cluster-1', 'default', 'my-app', { autoRefreshMs: 0 }))
 
-    await waitFor(() => {
+    await vi.waitFor(() => {
       expect(fetchMock).toHaveBeenCalledTimes(1)
     })
 
@@ -142,7 +142,7 @@ describe('useWorkloadMonitor', () => {
       useWorkloadMonitor('cluster-1', 'default', 'my-app', { autoRefreshMs: 0 })
     )
 
-    await waitFor(() => {
+    await vi.waitFor(() => {
       expect(result.current.overallStatus).toBe('degraded')
     })
 
@@ -165,7 +165,7 @@ describe('useWorkloadMonitor', () => {
       useWorkloadMonitor('cluster-1', 'default', 'my-app', { autoRefreshMs: 0 })
     )
 
-    await waitFor(() => {
+    await vi.waitFor(() => {
       expect(result.current.error).not.toBeNull()
     })
 
@@ -181,18 +181,18 @@ describe('useWorkloadMonitor', () => {
     )
 
     // First failure
-    await waitFor(() => {
+    await vi.waitFor(() => {
       expect(result.current.consecutiveFailures).toBe(1)
     })
 
     // Manually refetch to trigger more failures
     await act(async () => { result.current.refetch() })
-    await waitFor(() => {
+    await vi.waitFor(() => {
       expect(result.current.consecutiveFailures).toBe(2)
     })
 
     await act(async () => { result.current.refetch() })
-    await waitFor(() => {
+    await vi.waitFor(() => {
       expect(result.current.consecutiveFailures).toBe(3)
     })
 
@@ -217,19 +217,19 @@ describe('useWorkloadMonitor', () => {
     )
 
     // First call fails
-    await waitFor(() => {
+    await vi.waitFor(() => {
       expect(result.current.consecutiveFailures).toBe(1)
     })
 
     // Second call fails
     await act(async () => { result.current.refetch() })
-    await waitFor(() => {
+    await vi.waitFor(() => {
       expect(result.current.consecutiveFailures).toBe(2)
     })
 
     // Third call succeeds
     await act(async () => { result.current.refetch() })
-    await waitFor(() => {
+    await vi.waitFor(() => {
       expect(result.current.consecutiveFailures).toBe(0)
     })
   })
@@ -245,14 +245,14 @@ describe('useWorkloadMonitor', () => {
       useWorkloadMonitor('cluster-1', 'default', 'my-app', { autoRefreshMs: refreshMs })
     )
 
-    await waitFor(() => {
+    await vi.waitFor(() => {
       expect(fetchMock).toHaveBeenCalledTimes(1)
     })
 
     // Advance time by refresh interval
     act(() => { vi.advanceTimersByTime(refreshMs) })
 
-    await waitFor(() => {
+    await vi.waitFor(() => {
       expect(fetchMock).toHaveBeenCalledTimes(2)
     })
   })
@@ -267,7 +267,7 @@ describe('useWorkloadMonitor', () => {
       useWorkloadMonitor('cluster-1', 'default', 'my-app', { autoRefreshMs: 0 })
     )
 
-    await waitFor(() => {
+    await vi.waitFor(() => {
       expect(fetchMock).toHaveBeenCalledTimes(1)
     })
 
@@ -289,13 +289,13 @@ describe('useWorkloadMonitor', () => {
       { initialProps: { enabled: true } }
     )
 
-    await waitFor(() => {
+    await vi.waitFor(() => {
       expect(result.current.overallStatus).toBe('healthy')
     })
 
     rerender({ enabled: false })
 
-    await waitFor(() => {
+    await vi.waitFor(() => {
       expect(result.current.overallStatus).toBe('unknown')
       expect(result.current.resources).toEqual([])
       expect(result.current.issues).toEqual([])
@@ -315,7 +315,7 @@ describe('useWorkloadMonitor', () => {
       useWorkloadMonitor('c1', 'ns', 'wl', { autoRefreshMs: 0 })
     )
 
-    await waitFor(() => {
+    await vi.waitFor(() => {
       expect(fetchMock).toHaveBeenCalled()
     })
 
@@ -333,7 +333,7 @@ describe('useWorkloadMonitor', () => {
       useWorkloadMonitor('c1', 'ns', 'wl', { autoRefreshMs: 0 })
     )
 
-    await waitFor(() => {
+    await vi.waitFor(() => {
       expect(fetchMock).toHaveBeenCalled()
     })
 
@@ -351,7 +351,7 @@ describe('useWorkloadMonitor', () => {
       useWorkloadMonitor('my/cluster', 'kube-system', 'my app', { autoRefreshMs: 0 })
     )
 
-    await waitFor(() => {
+    await vi.waitFor(() => {
       expect(fetchMock).toHaveBeenCalled()
     })
 
@@ -372,7 +372,7 @@ describe('useWorkloadMonitor', () => {
       useWorkloadMonitor('c1', 'ns', 'wl', { autoRefreshMs: 0 })
     )
 
-    await waitFor(() => {
+    await vi.waitFor(() => {
       expect(result.current.error).not.toBeNull()
     })
 
@@ -389,7 +389,7 @@ describe('useWorkloadMonitor', () => {
       useWorkloadMonitor('c1', 'ns', 'wl', { autoRefreshMs: 5000 })
     )
 
-    await waitFor(() => {
+    await vi.waitFor(() => {
       expect(fetchMock).toHaveBeenCalledTimes(1)
     })
 
