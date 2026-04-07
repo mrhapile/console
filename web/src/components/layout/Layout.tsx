@@ -90,7 +90,7 @@ interface LayoutProps {
   children?: ReactNode
 }
 
-export function Layout({ children }: LayoutProps) {
+export function Layout(_props: LayoutProps) {
   const { t } = useTranslation()
   const { config } = useSidebarConfig()
   const { isMobile } = useMobile()
