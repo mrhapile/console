@@ -1259,6 +1259,45 @@ describe('AlertsContext', () => {
     expect(gpuAlerts[0].cluster).toBe('gpu-cluster')
   })
 
+  it('evaluateConditions: gpu_usage fires alert when usage exactly equals threshold (boundary)', async () => {
+    const rule: AlertRule = {
+      id: 'gpu-boundary',
+      name: 'GPU Boundary',
+      description: '',
+      enabled: true,
+      condition: { type: 'gpu_usage', threshold: 80 },
+      severity: 'critical',
+      channels: [],
+      aiDiagnose: false,
+      createdAt: '2024-01-01T00:00:00Z',
+      updatedAt: '2024-01-01T00:00:00Z',
+    }
+    localStorage.setItem('kc_alert_rules', JSON.stringify([rule]))
+    localStorage.setItem('kc_alerts', JSON.stringify([]))
+
+    mockMCPData = {
+      gpuNodes: [
+        { cluster: 'gpu-cluster', gpuCount: 10, gpuAllocated: 8 }, // exactly 80%
+      ],
+      podIssues: [],
+      clusters: [{ name: 'gpu-cluster', healthy: true, nodeCount: 1 }],
+      isLoading: false,
+      error: null,
+    }
+
+    const { result } = renderHook(() => useAlertsContext(), { wrapper })
+    await act(async () => { vi.advanceTimersByTime(0) })
+
+    await act(async () => {
+      result.current.evaluateConditions()
+    })
+
+    const gpuAlerts = result.current.alerts.filter(a => a.ruleId === 'gpu-boundary')
+    expect(gpuAlerts.length).toBe(1)
+    expect(gpuAlerts[0].message).toContain('80.0%')
+    expect(gpuAlerts[0].cluster).toBe('gpu-cluster')
+  })
+
   it('evaluateConditions: gpu_usage auto-resolves when usage drops below threshold', async () => {
     const rule: AlertRule = {
       id: 'gpu-resolve',

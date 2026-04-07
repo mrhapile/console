@@ -1035,7 +1035,7 @@ Please provide:
 
         const usagePercent = (allocatedGPUs / totalGPUs) * 100
 
-        if (usagePercent > threshold) {
+        if (usagePercent >= threshold) {
           createAlert(
             rule,
             `GPU usage is ${usagePercent.toFixed(1)}% (${allocatedGPUs}/${totalGPUs} GPUs allocated)`,
