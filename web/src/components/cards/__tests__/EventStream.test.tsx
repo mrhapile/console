@@ -43,11 +43,13 @@ vi.mock('../../../lib/cards/cardHooks', async (importOriginal) => {
 const mockDrillToEvents = vi.fn()
 const mockDrillToPod = vi.fn()
 const mockDrillToDeployment = vi.fn()
+const mockDrillToReplicaSet = vi.fn()
 vi.mock('../../../hooks/useDrillDown', () => ({
   useDrillDownActions: () => ({
     drillToEvents: mockDrillToEvents,
     drillToPod: mockDrillToPod,
     drillToDeployment: mockDrillToDeployment,
+    drillToReplicaSet: mockDrillToReplicaSet,
   }),
 }))
 
@@ -314,13 +316,13 @@ describe('EventStream', () => {
       expect(mockDrillToDeployment).toHaveBeenCalledWith('c1', 'ns1', 'my-deploy', { fromEvent: true })
     })
 
-    it('calls drillToDeployment for ReplicaSet resource type', async () => {
+    it('calls drillToReplicaSet for ReplicaSet resource type', async () => {
       setupDefaults({
         events: [makeEvent({ object: 'ReplicaSet/rs-1', cluster: 'c1', namespace: 'ns1', message: 'RS event' })],
       })
       render(<EventStream />)
       await userEvent.click(screen.getByText('RS event'))
-      expect(mockDrillToDeployment).toHaveBeenCalledWith('c1', 'ns1', 'rs-1', { fromEvent: true })
+      expect(mockDrillToReplicaSet).toHaveBeenCalledWith('c1', 'ns1', 'rs-1', { fromEvent: true })
     })
 
     it('calls drillToEvents for generic resource type', async () => {
