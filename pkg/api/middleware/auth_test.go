@@ -499,3 +499,109 @@ func TestRevocationQueryTokenRejectedOnUnknownPath(t *testing.T) {
 	assert.Equal(t, 401, resp.StatusCode,
 		"query-param token must be rejected on non-allowlisted paths (#6585)")
 }
+
+func TestWebSocketUpgrade(t *testing.T) {
+	app := fiber.New()
+	app.Get("/ws", WebSocketUpgrade(), func(c *fiber.Ctx) error {
+		return c.SendString("upgraded")
+	})
+
+	t.Run("Valid Upgrade", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/ws", nil)
+		req.Header.Set("Upgrade", "websocket")
+		resp, err := app.Test(req)
+		assert.NoError(t, err)
+		assert.Equal(t, 200, resp.StatusCode)
+	})
+
+	t.Run("Missing Upgrade", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/ws", nil)
+		resp, err := app.Test(req)
+		assert.NoError(t, err)
+		assert.Equal(t, 426, resp.StatusCode) // fiber.ErrUpgradeRequired
+	})
+}
+
+func TestRevocationHelpers(t *testing.T) {
+	resetTokenRevocationForTest()
+	t.Cleanup(resetTokenRevocationForTest)
+
+	jti := "help-jti"
+	RevokeToken(jti, time.Now().Add(time.Hour))
+	assert.True(t, IsTokenRevoked(jti))
+	assert.False(t, IsTokenRevoked("other"))
+
+	rev, err := IsTokenRevokedChecked(jti)
+	assert.NoError(t, err)
+	assert.True(t, rev)
+}
+
+func TestValidateJWT_NoID(t *testing.T) {
+	secret := "test-secret"
+	claims := UserClaims{
+		UserID: uuid.New(),
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
+		},
+	}
+	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	signed, _ := tok.SignedString([]byte(secret))
+
+	got, err := ValidateJWT(signed, secret)
+	assert.NoError(t, err)
+	assert.NotNil(t, got)
+	assert.Empty(t, got.ID)
+}
+
+func TestRevocation_Cleanup(t *testing.T) {
+	resetTokenRevocationForTest()
+	t.Cleanup(resetTokenRevocationForTest)
+
+	// Add an expired token and a fresh one
+	now := time.Now()
+	revokedTokens.Revoke("expired", now.Add(-1*time.Hour))
+	revokedTokens.Revoke("fresh", now.Add(1*time.Hour))
+
+	revokedTokens.cleanup()
+
+	assert.True(t, IsTokenRevoked("fresh"))
+	assert.False(t, IsTokenRevoked("expired"))
+}
+
+func TestGetContextHelpers_Empty(t *testing.T) {
+	app := fiber.New()
+	app.Get("/empty", func(c *fiber.Ctx) error {
+		uid := GetUserID(c)
+		login := GetGitHubLogin(c)
+		assert.Equal(t, uuid.Nil, uid)
+		assert.Empty(t, login)
+		return c.SendStatus(200)
+	})
+
+	req := httptest.NewRequest("GET", "/empty", nil)
+	resp, err := app.Test(req)
+	assert.NoError(t, err)
+	assert.Equal(t, 200, resp.StatusCode)
+}
+
+func TestValidateJWT_Revoked(t *testing.T) {
+	resetTokenRevocationForTest()
+	t.Cleanup(resetTokenRevocationForTest)
+
+	secret := "test-secret"
+	jti := "revoked-jti"
+	claims := UserClaims{
+		UserID: uuid.New(),
+		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        jti,
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
+		},
+	}
+	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	signed, _ := tok.SignedString([]byte(secret))
+
+	RevokeToken(jti, time.Now().Add(time.Hour))
+
+	_, err := ValidateJWT(signed, secret)
+	assert.ErrorIs(t, err, ErrTokenRevoked)
+}
