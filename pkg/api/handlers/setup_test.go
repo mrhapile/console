@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"net/http"
 	"path/filepath"
 	"testing"
 
@@ -22,6 +23,13 @@ import (
 // testAdminUserID is the fixed user ID injected by setupTestEnv for RBAC-protected
 // endpoints. The MockStore is configured to return an admin user for this ID.
 var testAdminUserID = uuid.MustParse("00000000-0000-0000-0000-000000000001")
+
+// RoundTripFunc is a helper for mocking http.Client Transport
+type RoundTripFunc func(req *http.Request) *http.Response
+
+func (f RoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req), nil
+}
 
 type testEnv struct {
 	App       *fiber.App
