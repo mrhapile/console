@@ -88,6 +88,7 @@ export function AIAgents() {
           disabled={tab.disabled}
           role="tab"
           aria-selected={activeTab === tab.id}
+          aria-label={tab.label}
           tabIndex={activeTab === tab.id ? 0 : -1}
           className={`rounded-none border-b-2 -mb-px ${
             activeTab === tab.id
@@ -106,6 +107,7 @@ export function AIAgents() {
               rel="noopener noreferrer"
               onClick={e => e.stopPropagation()}
               className="inline-flex items-center gap-0.5 text-xs text-muted-foreground/60 hover:text-muted-foreground ml-1"
+              aria-label={`Install ${tab.label}`}
             >
               Install <ExternalLink className="w-2.5 h-2.5" />
             </a>

@@ -776,6 +776,7 @@ Please proceed step by step and ask for confirmation before making any changes.`
                   handleStartUpgrade(cluster.name, cluster.currentVersion, cluster.targetVersion)
                 }}
                 className="mt-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/20 text-primary hover:bg-primary/30 text-xs font-medium transition-colors w-full justify-center"
+                aria-label={`Start upgrade of ${cluster.name} to ${cluster.targetVersion}`}
               >
                 <Rocket className="w-3 h-3" />
                 Start Upgrade to {cluster.targetVersion}

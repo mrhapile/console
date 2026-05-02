@@ -320,6 +320,8 @@ export function ISO27001Audit({ config }: ISO27001AuditProps) {
                     <button
                       onClick={() => toggleVerify(verifyKey)}
                       className="flex items-center gap-0.5 mt-1 text-[10px] text-blue-400 hover:text-blue-300"
+                      aria-label={`${isVerifyOpen ? 'Hide' : 'Show'} verification command for ${f.category}`}
+                      aria-expanded={isVerifyOpen}
                     >
                       <Terminal className="w-3 h-3" />
                       {isVerifyOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}

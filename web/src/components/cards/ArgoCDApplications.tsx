@@ -333,6 +333,7 @@ function ArgoCDApplicationsInternal({ config }: ArgoCDApplicationsProps) {
                         disabled={isThisAppSyncing}
                         className="flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-orange-500/20 text-orange-400 hover:bg-orange-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         title={t('argoCDApplications.syncNow')}
+                        aria-label={t('argoCDApplications.syncNow') + ': ' + app.name}
                       >
                         {isThisAppSyncing ? (
                           <Loader2 className="w-3 h-3 animate-spin" />

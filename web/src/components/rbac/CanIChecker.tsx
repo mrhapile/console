@@ -467,6 +467,7 @@ export function CanIChecker() {
               size="lg"
               onClick={addCustomUserGroup}
               disabled={!customUserGroup.trim()}
+              aria-label={t('rbac.add')}
             >
               {t('rbac.add')}
             </Button>
@@ -511,6 +512,7 @@ export function CanIChecker() {
             icon={checking ? <Loader2 className="w-4 h-4 animate-spin" /> : <Shield className="w-4 h-4" />}
             className="flex-1"
             data-testid="can-i-check"
+            aria-label={checking ? t('rbac.checking') : t('rbac.checkPermission')}
           >
             {checking ? t('rbac.checking') : t('rbac.checkPermission')}
           </Button>
@@ -520,6 +522,7 @@ export function CanIChecker() {
               size="lg"
               onClick={handleReset}
               data-testid="can-i-reset"
+              aria-label={t('rbac.reset')}
             >
               {t('rbac.reset')}
             </Button>

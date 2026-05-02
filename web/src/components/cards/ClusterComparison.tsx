@@ -202,6 +202,7 @@ function ClusterComparisonInternal({ config }: ClusterComparisonProps) {
                       healthy: c.healthy })}
                     className="flex items-center justify-end w-full hover:text-purple-400 group min-w-0"
                     title={c.name}
+                    aria-label={`View details for cluster ${c.name}`}
                   >
                     <Server className="w-3 h-3 text-muted-foreground shrink-0" />
                     <span className="text-foreground font-medium group-hover:text-purple-400 truncate">{c.name}</span>

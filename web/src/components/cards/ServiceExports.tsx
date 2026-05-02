@@ -137,6 +137,7 @@ function ServiceExportsInternal({ config: _config }: ServiceExportsProps) {
         <button
           onClick={() => refetch()}
           className="px-4 py-2 rounded-lg bg-purple-500 hover:bg-purple-600 text-white text-sm"
+          aria-label={t('common:common.retry')}
         >
           {t('common:common.retry')}
         </button>

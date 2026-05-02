@@ -228,6 +228,8 @@ export function ChangeTimeline({ config: _config }: ChangeTimelineProps) {
                   ? 'bg-primary text-primary-foreground'
                   : 'bg-secondary/50 text-muted-foreground hover:bg-secondary',
               )}
+              aria-label={t(opt.labelKey)}
+              aria-pressed={rangeMs === opt.ms}
             >
               {t(opt.labelKey)}
             </button>

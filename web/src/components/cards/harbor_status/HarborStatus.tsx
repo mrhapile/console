@@ -372,7 +372,7 @@ export function HarborStatus() {
         />
       </div>
 
-      <div className="flex gap-4 mb-3 border-b border-border/40 shrink-0 px-1">
+      <div className="flex gap-4 mb-3 border-b border-border/40 shrink-0 px-1" role="tablist">
         <button
           className={`pb-2 text-sm font-medium transition-colors relative whitespace-nowrap ${
             activeTab === PROJECTS_TAB ? 'text-foreground' : 'text-muted-foreground hover:text-foreground/80'
@@ -381,6 +381,9 @@ export function HarborStatus() {
             setActiveTab(PROJECTS_TAB)
             setSearchTerm('')
           }}
+          aria-label={t('harbor.projectsTab', 'Projects')}
+          aria-selected={activeTab === PROJECTS_TAB}
+          role="tab"
         >
           {t('harbor.projectsTab', 'Projects')}
           <span className="ml-1.5 text-xs bg-secondary px-1.5 rounded-full text-muted-foreground">
@@ -398,6 +401,9 @@ export function HarborStatus() {
             setActiveTab(REPOSITORIES_TAB)
             setSearchTerm('')
           }}
+          aria-label={t('harbor.repositoriesTab', 'Repositories')}
+          aria-selected={activeTab === REPOSITORIES_TAB}
+          role="tab"
         >
           {t('harbor.repositoriesTab', 'Repositories')}
           <span className="ml-1.5 text-xs bg-secondary px-1.5 rounded-full text-muted-foreground">

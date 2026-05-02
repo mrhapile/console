@@ -104,6 +104,8 @@ export function QuotaHeatmap() {
                 isSelected ? 'ring-2 ring-primary scale-105' : 'hover:scale-105'
               }`}
               title={`${ns.namespace} (${ns.cluster}): ${ns.podCount} pods — relative density ${Math.round((ns.podCount / maxPods) * 100)}%`}
+              aria-label={`${ns.namespace} on ${ns.cluster}: ${ns.podCount} pods`}
+              aria-pressed={isSelected}
             >
               <div className="truncate font-medium">{ns.namespace}</div>
               <div className="text-2xs opacity-75">{t('quotaHeatmap.podsCount', { count: ns.podCount })}</div>
