@@ -132,7 +132,10 @@ const SIDEBAR_MAX_WIDTH_PX = 480
 /** Index of the primary (dashboard list) section — "Add more..." button renders after it */
 const PRIMARY_SECTION_INDEX = 0
 
-/** Map sidebar item href to dashboard config ID for card count display */
+/** Map sidebar item href to dashboard config ID for card count display.
+ * NOTE: '/alerts' is intentionally excluded — displaying the card count
+ * next to "Alerts" would be confused with the active alert count shown
+ * in the header badge (#11404). */
 const HREF_TO_DASHBOARD_ID: Record<string, string> = {
   '/': 'main', '/compute': 'compute', '/security': 'security',
   '/gitops': 'gitops', '/storage': 'storage', '/network': 'network',
@@ -140,7 +143,7 @@ const HREF_TO_DASHBOARD_ID: Record<string, string> = {
   '/clusters': 'clusters', '/compliance': 'compliance', '/cost': 'cost',
   '/gpu-reservations': 'gpu', '/nodes': 'nodes', '/deployments': 'deployments',
   '/pods': 'pods', '/services': 'services', '/helm': 'helm',
-  '/alerts': 'alerts', '/ai-ml': 'ai-ml', '/ci-cd': 'ci-cd',
+  '/ai-ml': 'ai-ml', '/ci-cd': 'ci-cd',
   '/logs': 'logs', '/data-compliance': 'data-compliance', '/arcade': 'arcade',
   '/deploy': 'deploy', '/ai-agents': 'ai-agents',
   '/llm-d-benchmarks': 'llm-d-benchmarks', '/cluster-admin': 'cluster-admin',
@@ -667,6 +670,7 @@ export function SidebarShell({
               {t('labels.clusterStatus')}
             </h4>
             <div className="space-y-2">
+              {healthyClusters > 0 && (
               <button
                 onClick={() => handleClusterStatusClick('healthy')}
                 className="w-full flex items-center justify-between hover:bg-secondary/50 rounded px-1 py-0.5 transition-colors"
@@ -680,6 +684,8 @@ export function SidebarShell({
                   title={t('sidebar.healthyClusters', { count: healthyClusters })}
                 >{healthyClusters}</span>
               </button>
+              )}
+              {unhealthyClusters > 0 && (
               <button
                 onClick={() => handleClusterStatusClick('unhealthy')}
                 className="w-full flex items-center justify-between hover:bg-secondary/50 rounded px-1 py-0.5 transition-colors"
@@ -693,6 +699,8 @@ export function SidebarShell({
                   title={t('sidebar.unhealthyClusters', { count: unhealthyClusters })}
                 >{unhealthyClusters}</span>
               </button>
+              )}
+              {unreachableClusters > 0 && (
               <button
                 onClick={() => handleClusterStatusClick('unreachable')}
                 className="w-full flex items-center justify-between hover:bg-secondary/50 rounded px-1 py-0.5 transition-colors"
@@ -706,6 +714,10 @@ export function SidebarShell({
                   title={t('sidebar.unreachableClusters', { count: unreachableClusters })}
                 >{unreachableClusters}</span>
               </button>
+              )}
+              {healthyClusters === 0 && unhealthyClusters === 0 && unreachableClusters === 0 && (
+                <span className="text-xs text-muted-foreground italic">{t('labels.noClusters', 'No clusters configured')}</span>
+              )}
             </div>
           </div>
         )}

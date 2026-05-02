@@ -1212,6 +1212,7 @@
     "monitoring": "Monitoring",
     "deviceDisappearances": "Device Disappearances",
     "noDevicesDetected": "No devices detected",
+    "noDevicesExplanation": "This is normal when no GPU, NIC, NVMe, or InfiniBand devices are configured on this node.",
     "hideSnoozedAlerts": "Hide snoozed alerts",
     "showSnoozedAlerts": "Show snoozed alerts",
     "snoozeAllVisible": "Snooze all visible alerts",

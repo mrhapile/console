@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { CheckCircle, WifiOff, Cpu, Loader2, ExternalLink, AlertTriangle, KeyRound, Server } from 'lucide-react'
 import { RefreshIndicator } from '../ui/RefreshIndicator'
 import { useClusters, ClusterInfo } from '../../hooks/useMCP'
@@ -81,6 +82,7 @@ const CLUSTER_SORT_COMPARATORS = {
 
 export function ClusterHealth() {
   const { t } = useTranslation(['cards', 'common'])
+  const location = useLocation()
   const {
     deduplicatedClusters: rawClusters,
     isLoading: isLoadingHook,
@@ -93,6 +95,10 @@ export function ClusterHealth() {
   const { isDemoMode } = useDemoMode()
   const [selectedCluster, setSelectedCluster] = useState<string | null>(null)
   const federation = useFederationAwareness()
+
+  // Hide the inline stats grid when this card is rendered on the Clusters page,
+  // which already has its own StatsOverview showing the same metrics (#11415).
+  const hideStatsGrid = location.pathname === '/clusters'
 
   // Use shared card data hook for filtering, sorting, and pagination
   const {
@@ -265,7 +271,8 @@ export function ClusterHealth() {
         className="mb-4"
       />
 
-      {/* Stats */}
+      {/* Stats — hidden on /clusters page where StatsOverview already shows these metrics */}
+      {!hideStatsGrid && (
       <div className="grid grid-cols-2 @md:grid-cols-4 gap-2 mb-4">
         <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20 min-w-0 overflow-hidden" title={t('clusterHealth.healthyTooltip', { count: healthyClusters })}>
           <div className="flex items-center gap-1.5 mb-1 min-w-0">
@@ -316,6 +323,7 @@ export function ClusterHealth() {
           )
         })}
       </div>
+      )}
 
       {/* Cluster list */}
       <div ref={containerRef} className="flex-1 space-y-2 overflow-y-auto" style={containerStyle}>

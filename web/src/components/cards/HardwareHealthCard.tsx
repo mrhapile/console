@@ -890,7 +890,10 @@ export function HardwareHealthCard() {
                           <StatusBadge color="green" size="xs">GPU Driver</StatusBadge>
                         )}
                         {getTotalDevices(node.devices) === 0 && (
-                          <span className="text-2xs text-muted-foreground italic">{t('hardwareHealth.noDevicesDetected')}</span>
+                          <span className="text-2xs text-muted-foreground italic" title={t('hardwareHealth.noDevicesExplanation')}>
+                            {t('hardwareHealth.noDevicesDetected')}
+                            <span className="block text-muted-foreground/60 mt-0.5">{t('hardwareHealth.noDevicesExplanation')}</span>
+                          </span>
                         )}
                       </div>
                     </div>
