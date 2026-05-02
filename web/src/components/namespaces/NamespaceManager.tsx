@@ -136,6 +136,8 @@ export function NamespaceManager() {
     const fetchPromises = clustersToFetch.map(async (cluster) => {
       try {
         let clusterNamespaces: NamespaceDetails[] = []
+        let agentFailed = false
+        let apiFailed = false
 
         // Always try local agent first (works without backend auth)
         try {
@@ -158,8 +160,11 @@ export function NamespaceManager() {
                 createdAt: ns.createdAt || new Date().toISOString()
               }))
             }
+          } else {
+            agentFailed = true
           }
         } catch (err: unknown) {
+          agentFailed = true
           if (err instanceof DOMException && err.name === 'AbortError') {
             console.warn(`[NamespaceManager] ${t('namespaces.errors.requestTimedOut')}`, cluster)
           } else if (err instanceof TypeError) {
@@ -177,7 +182,7 @@ export function NamespaceManager() {
 
             // Extract unique namespaces from pods
             const nsSet = new Set<string>()
-            response.data.pods?.forEach(pod => {
+            ;(response.data.pods || []).forEach(pod => {
               if (pod.namespace) nsSet.add(pod.namespace)
             })
 
@@ -190,8 +195,14 @@ export function NamespaceManager() {
               })
             })
           } catch {
+            apiFailed = true
             // API also failed - cluster is likely unreachable
           }
+        }
+
+        // Track as failed if both data sources returned no data due to errors
+        if (clusterNamespaces.length === 0 && agentFailed && apiFailed) {
+          failedClusters.push(cluster)
         }
 
         // Only cache if we got data
@@ -234,7 +245,15 @@ export function NamespaceManager() {
 
     // Only show error if ALL clusters failed (no namespaces at all)
     if (failedClusters.length > 0 && totalCachedNamespaces === 0) {
-      setError(`Unable to connect to clusters. Check that the KC agent is running.`)
+      setError(t('namespaces.errors.unableToConnect', 'Unable to connect to clusters. Check that the KC agent is running.'))
+      // Allow retry on next trigger since all clusters failed
+      hasFetchedRef.current = false
+    } else if (failedClusters.length > 0) {
+      // Some clusters failed but we have partial data - show partial error
+      setError(t('namespaces.errors.someClustersUnavailable', {
+        count: failedClusters.length,
+        defaultValue: '{{count}} cluster(s) could not be reached. Showing cached data for available clusters.'
+      }))
     } else {
       // Clear any previous error since we have data
       setError(null)
@@ -243,7 +262,7 @@ export function NamespaceManager() {
     setLoading(false)
     setLoadingClusters(new Set())
     setLastUpdated(new Date())
-  }, [allClusterNames])
+  }, [allClusterNames, t])
 
   const handleRefreshNamespaces = () => fetchNamespaces(true)
   const { showIndicator, triggerRefresh } = useRefreshIndicator(handleRefreshNamespaces)
@@ -639,7 +658,7 @@ export function NamespaceManager() {
             </>
           )}
 
-          {filteredNamespaces.length === 0 && !loading && loadingClusters.size === 0 && (
+          {filteredNamespaces.length === 0 && !loading && loadingClusters.size === 0 && !error && (
             <div className="flex flex-col items-center justify-center h-40 text-muted-foreground">
               <Folder className="w-12 h-12 mb-3 opacity-50" />
               <p>{t('namespaces.noNamespaces')}</p>
