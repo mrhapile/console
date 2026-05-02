@@ -256,20 +256,26 @@ export function Dashboard() {
     }
   }, [autoRefresh])
 
-  // Auto-refresh interval
+  // Auto-refresh interval. Uses a ref for isLoading to avoid tearing down
+  // and recreating the interval every time loading state toggles, which
+  // caused layout instability and excessive re-renders (#11460).
+  const isLoadingRef = useRef(isLoading)
+  isLoadingRef.current = isLoading
+
   useEffect(() => {
-    if (autoRefresh && !isLoading) {
-      autoRefreshIntervalRef.current = setInterval(() => {
+    if (!autoRefresh) return
+    autoRefreshIntervalRef.current = setInterval(() => {
+      if (!isLoadingRef.current) {
         refetch()
-      }, AUTO_REFRESH_INTERVAL_MS)
-    }
+      }
+    }, AUTO_REFRESH_INTERVAL_MS)
     return () => {
       if (autoRefreshIntervalRef.current) {
         clearInterval(autoRefreshIntervalRef.current)
         autoRefreshIntervalRef.current = null
       }
     }
-  }, [autoRefresh, isLoading, refetch])
+  }, [autoRefresh, refetch])
 
   // Keyboard navigation for accessibility (Phase 2, issue #1151)
   const expandTriggersRef = useRef<Map<string, () => void>>(new Map())
@@ -1085,7 +1091,7 @@ export function Dashboard() {
             data-tour="dashboard"
             role="grid"
             aria-label="Dashboard cards"
-            className={`grid grid-cols-1 md:grid-cols-12 gap-2 auto-rows-min grid-flow-dense min-w-[600px] ${showDragHint ? 'animate-shimmy' : ''}`}
+            className={`grid grid-cols-1 md:grid-cols-12 gap-2 auto-rows-min grid-flow-dense min-w-0 ${showDragHint ? 'animate-shimmy' : ''}`}
           >
             {localCards.map((card, index) => (
               <SortableCard

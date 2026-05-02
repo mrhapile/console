@@ -599,6 +599,15 @@ layer(base);
   backface-visibility: hidden;
 }
 
+/* Main content margin transition: smooth during normal sidebar open/close,
+   disabled during active resize so cards reflow immediately (#11454, #11458). */
+[data-transition-margin] {
+  transition: margin 300ms ease;
+}
+html[data-mission-resizing] [data-transition-margin] {
+  transition: none;
+}
+
 /* Smooth value transitions */
 .value-transition {
   @apply transition-all duration-200 ease-out;

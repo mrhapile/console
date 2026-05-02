@@ -182,6 +182,9 @@ export function MissionSidebar() {
       resizeCleanupRef.current = null
       // Persist final width using ref to avoid state-updater side effects
       try { localStorage.setItem(SIDEBAR_WIDTH_KEY, String(latestWidthRef.current)) } catch { /* ignore */ }
+      // Notify child components (charts, resize observers) to recalculate
+      // their layout after the panel resize completes (#11458).
+      window.dispatchEvent(new Event('resize'))
     }
 
     document.body.style.cursor = 'col-resize'

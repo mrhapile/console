@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, type CSSProperties } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Plus, Layout, RotateCcw, Download, Undo2, Redo2, Palette } from 'lucide-react'
 import { useModalState } from '../../lib/modals'
@@ -117,12 +117,16 @@ export function FloatingDashboardActions({
     // future scrollbar-gutter changes (#8551 follow-up).
     if (!isSidebarOpen) return 'right-16 bottom-20'
     if (isSidebarMinimized) return 'right-[104px] bottom-20'
-    return 'right-[568px] bottom-20'
+    // When expanded, position dynamically using the CSS var so the FAB
+    // tracks the actual resizable sidebar width (#11455).
+    return 'bottom-20'
   }
   const positionClasses = getPositionClasses()
 
-  // Use lower z-index when sidebar is open to prevent overlapping chat input (#11385, #11388)
-  const zIndexClass = isSidebarOpen ? 'z-dropdown' : 'z-sticky'
+  // Dynamic right offset when mission sidebar is expanded (non-minimized)
+  const fabStyle: CSSProperties = (!isMobile && isSidebarOpen && !isSidebarMinimized)
+    ? { right: 'calc(var(--mission-sidebar-width, 480px) + 88px)' }
+    : {}
 
   const handleReset = (mode: ResetMode) => {
     resetDialog.close()
@@ -147,7 +151,7 @@ export function FloatingDashboardActions({
   if (isUnifiedMode) {
     const showActions = canUndo || canRedo || showResetOption
     return (
-      <div className={`fixed ${positionClasses} ${zIndexClass} flex ${isMobile ? 'items-start' : 'items-end'} gap-1.5 transition-all duration-300`}>
+      <div className={`fixed ${positionClasses} z-sticky flex ${isMobile ? 'items-start' : 'items-end'} gap-1.5 transition-all duration-300`} style={fabStyle}>
         {showActions && (
           <div className="flex gap-1 p-1 bg-card border border-border rounded-lg shadow-md animate-in fade-in duration-150 mr-1">
             <button
@@ -199,7 +203,7 @@ export function FloatingDashboardActions({
   // =========================================================================
   return (
     <>
-      <div ref={menuRef} className={`fixed ${positionClasses} ${zIndexClass} flex flex-col ${isMobile ? 'items-start' : 'items-end'} gap-1.5 transition-all duration-300`}>
+      <div ref={menuRef} className={`fixed ${positionClasses} z-sticky flex flex-col ${isMobile ? 'items-start' : 'items-end'} gap-1.5 transition-all duration-300`} style={fabStyle}>
         {menu.isOpen && (
           <div
             role="menu"

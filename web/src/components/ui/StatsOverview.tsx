@@ -259,16 +259,12 @@ const StatBlock = memo(function StatBlock({ block, data, hasData, isLoading, his
         />
       )}
 
-      {/* Header: icon + name. Label uses wrap-break-word + [word-break:break-word]
-          + leading-tight so long single-word labels (e.g. "Namespaces",
-          "Deployments") wrap mid-word instead of being clipped with an
-          ellipsis at narrow card widths.
-          `wrap-break-word` (overflow-wrap) only breaks unbreakable words as
-          a last resort; without `word-break: break-word` some browsers still
-          ellipsis-truncate long single words on the /deployments stats row. */}
+      {/* Header: icon + name. Label uses truncate so short stat labels
+          ("Clusters", "Healthy") never break mid-word at narrow card widths
+          (#11456). The full name is available via title tooltip. */}
       <div className="flex items-start gap-2 mb-2 min-w-0">
         <IconComponent className={`w-5 h-5 shrink-0 mt-0.5 ${isLoading ? 'text-muted-foreground/30' : colorClass}`} />
-        <span className="text-sm text-muted-foreground wrap-break-word [word-break:break-word] leading-tight min-w-0" title={block.name}>{wrapAbbreviations(block.name)}</span>
+        <span className="text-sm text-muted-foreground truncate leading-tight min-w-0" title={block.name}>{wrapAbbreviations(block.name)}</span>
       </div>
 
       {/* Mode-specific content */}
