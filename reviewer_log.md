@@ -1144,3 +1144,52 @@ vllm-d and pok-prod01 deploy correctly on all main-branch pushes; skipped on PR 
 - nightlyPlaywright RED — issue #11675 (scanner owns)
 - nightlyRel: next nightly run (tomorrow 05:00 UTC) expected to pass with PR #11669 arm64 timeout fix
 - Helm chart version frozen at 0.0.0 — not linked to release tags
+
+---
+
+## Reviewer Pass — 2026-05-03T08:45Z
+
+### Hive Pull
+- `git pull /tmp/hive main` — no new commits (hive/main = `87e28bcb4`, already in origin/main)
+
+### GA4
+- Nominal — no anomalies (generated 08:16 UTC)
+
+### Merge-Eligible PRs
+- None (count=0); no merges performed
+
+### RED Indicators
+| Indicator | Status | Action |
+|---|---|---|
+| Playwright Cross-Browser (Nightly) | 🔴 RED | Issue #11675 filed; scanner owns |
+| Nightly UX Journey Tests | 🔴 RED | Issue #11678 filed; scanner owns |
+| Release | 🟡 pre-fix | 3 cancels from arm64 timeout; PR #11669 merged; next nightly run should pass |
+| Coverage | 🟡 89.54% (target 91%) | Addressed below |
+| Nightly Test Suite | ✅ GREEN | 32/32 pass |
+| Build and Deploy KC | ✅ GREEN | vllm-d/pok-prod ✓ on main runs |
+
+### Copilot Comments Fixed (HIGH + MEDIUM from merged PRs)
+
+**HIGH: `STORAGE_KEY_TOKEN` mock mismatch** (PR#11647 on agentLoopbackFailurePaths.test.ts)
+- All `STORAGE_KEY_TOKEN: 'kc-token'` mock overrides changed to `'token'` (real constant value in `lib/constants/storage.ts`)
+- All direct `localStorage.setItem('kc-token', ...)` / `localStorage.removeItem('kc-token')` calls updated to use `'token'`
+- Tests remain self-consistent; now aligned with production constant value
+
+**MEDIUM: workloadSubscriptions subscriber leak** (PR#11676)
+- Exported `_clearSubscribersForTest()` from `workloadSubscriptions.ts`
+- `beforeEach` in `workloadSubscriptions.test.ts` now calls both `setWorkloadsSharedState()` AND `_clearSubscribersForTest()`
+- Fixed misleading comment that claimed subscribers were cleaned in beforeEach
+
+**Coverage: `useIsTablet` untested (useMobile.ts at 56.5%)**
+- Added 6 comprehensive tests for `useIsTablet` hook in `useMobile.test.ts`
+- Covers: default false, default true, correct media query string, change event (desktop→tablet, tablet→desktop), cleanup on unmount
+- Expected impact: useMobile.ts 56.5% → ~95%; improves overall lines coverage
+
+### Commits Pushed
+- `aca0ea053` — 🐛 Fix HIGH copilot comments: align STORAGE_KEY_TOKEN mock, add useIsTablet tests, fix subscriber cleanup
+
+### Remaining Coverage Gap
+- Coverage Suite run 25273940347 reported 89.54% lines (target 91%)
+- useIsTablet tests expected to close ~0.3pp; remaining gap ~1.2pp
+- Uncovered modules: `useMissions.provider.tsx` (21.8%), `DashboardPage.tsx` (63.5%), `DashboardGrid.tsx` (75.5%), `UnifiedDashboard.tsx` (75.7%)
+- Follow-up coverage PRs needed for these larger components (complex React rendering)
